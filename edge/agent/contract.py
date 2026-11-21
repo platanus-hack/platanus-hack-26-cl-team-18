@@ -333,6 +333,8 @@ class AudienceUtterance(_Message):
     text: Annotated[str, Field(max_length=1000)]  # ephemeral: never persisted or logged
     language: Annotated[str, Field(min_length=2, max_length=16)]
     keyterms_hit: list[str] = Field(default_factory=list, max_length=32)
+    is_final: bool = True  # partial corrections may retract earlier keyword hits
+    utterance_id: Annotated[str, Field(min_length=1, max_length=64)] | None = None
 
 
 # ---------------------------------------------------------------- backend -> player
@@ -383,6 +385,17 @@ class PlayerDisplayed(_Message):
     creative_id: EntityId
     seq: Seq
     displayed_at: AwareDatetime
+
+
+class PlayerVoice(_Message):
+    """Actual Web Audio playback, used only for ephemeral echo rejection."""
+
+    type: Literal["player.voice"] = "player.voice"
+    screen_id: ScreenId
+    creative_id: EntityId
+    seq: Seq
+    playing: bool
+    duration_ms: Annotated[int, Field(ge=0, le=120000)]
 
 
 # ---------------------------------------------------------------- backend -> player
@@ -436,6 +449,24 @@ class ConsoleMoment(_Message):
     held_products: list[HeldProductScore] = Field(default_factory=list, max_length=16)
 
 
+class SegmentMatchKind(StrEnum):
+    EXACT = "exact"
+    BROADER = "broader"  # the bid's segment is an ancestor of the moment's
+    NARROWER = "narrower"  # the bid's segment is a descendant of the moment's
+    RELATED = "related"  # a curated same-need pair from the catalog
+
+
+class BidMatch(_Model):
+    """How a bid reached one segment of the moment, and what share of its rate it kept."""
+
+    segment_id: SegmentId  # the moment's segment
+    bid_segment_id: SegmentId  # the segment the brand bid on
+    kind: SegmentMatchKind
+    weight: Score  # affinity: 1.0 exact, less for an approximate match
+    segment_label: Annotated[str, Field(max_length=80)] = ""
+    bid_segment_label: Annotated[str, Field(max_length=80)] = ""
+
+
 class BidLine(_Model):
     campaign_id: EntityId
     brand_name: Annotated[str, Field(max_length=80)]
@@ -444,6 +475,7 @@ class BidLine(_Model):
     value: Annotated[float, Field(ge=0.0)]  # relevance-weighted score, not money
     value_per_s: MoneyDTO | None = None  # the bid's money value per screen-second
     multiplier: Annotated[str, Field(pattern=r"^\d+(\.\d+)?$", max_length=16)] | None = None
+    matches: list[BidMatch] = Field(default_factory=list, max_length=32)
 
 
 class Exclusion(_Model):
@@ -598,15 +630,74 @@ class ErrorMessage(_Message):
     rejected_type: str | None = None
 
 
+# ---------------------------------------------------------------- live switch (station control)
+
+
+class AgentRole(StrEnum):
+    VISION = "vision"
+    SPEECH = "speech"
+
+
+class AgentHello(_Message):
+    """First frame on every agent connection: the screen and sensor it serves.
+
+    The backend answers with that screen's `live.status` and pushes every change,
+    so an agent that reconnects learns the current switch position at once.
+    """
+
+    type: Literal["agent.hello"] = "agent.hello"
+    screen_id: ScreenId
+    role: AgentRole
+    seq: Seq = 0
+
+
+class LiveSet(_Message):
+    """The console's "En vivo" switch (HTTP POST /api/live).
+
+    Absolute values, so a retry is harmless and the last click wins. A field left
+    `None` keeps its value: the master `live` and the `mic` sub-switch are
+    independent axes.
+    """
+
+    type: Literal["live.set"] = "live.set"
+    screen_id: ScreenId
+    live: bool | None = None
+    mic: bool | None = None
+
+
+class LiveStatus(_Message):
+    """Where a screen's live switch stands, pushed to the console, player and agents.
+
+    `sensing`, `listening` and `ai_generation` are derived, never set directly:
+    sensing = live; listening = live and mic and speech_opt_in (ADR 0005);
+    ai_generation = live (warm AI copy, voice-overs, VLM tags and speech topics).
+    """
+
+    type: Literal["live.status"] = "live.status"
+    screen_id: ScreenId
+    revision: Seq
+    live: bool
+    mic: bool
+    speech_opt_in: bool
+    sensing: bool
+    listening: bool
+    ai_generation: bool
+    agents: list[AgentRole] = Field(default_factory=list, max_length=4)
+    changed_at: AwareDatetime
+
+
 # ---------------------------------------------------------------- unions per socket
 
 AgentInbound = Annotated[
-    AudienceSnapshot | AudienceKeyframe | AudienceUtterance | RecognitionSnapshot,
+    AudienceSnapshot | AudienceKeyframe | AudienceUtterance | RecognitionSnapshot | AgentHello,
     Field(discriminator="type"),
 ]
-PlayerInbound = Annotated[PlaybackReport | PlayerDisplayed, Field(discriminator="type")]
+AgentOutbound = Annotated[LiveStatus | ErrorMessage, Field(discriminator="type")]
+PlayerInbound = Annotated[
+    PlaybackReport | PlayerDisplayed | PlayerVoice, Field(discriminator="type")
+]
 PlayerOutbound = Annotated[
-    CreativeReady | CreativeUpgraded | ErrorMessage | ScreenAttention,
+    CreativeReady | CreativeUpgraded | ErrorMessage | ScreenAttention | LiveStatus,
     Field(discriminator="type"),
 ]
 ConsoleOutbound = Annotated[
@@ -619,17 +710,21 @@ ConsoleOutbound = Annotated[
     | ErrorMessage
     | ConsoleBook
     | ConsoleReceipt
-    | ConsoleRedemption,
+    | ConsoleRedemption
+    | LiveStatus,
     Field(discriminator="type"),
 ]
 
 AGENT_INBOUND: TypeAdapter[
-    AudienceSnapshot | AudienceKeyframe | AudienceUtterance | RecognitionSnapshot
+    AudienceSnapshot | AudienceKeyframe | AudienceUtterance | RecognitionSnapshot | AgentHello
 ] = TypeAdapter(AgentInbound)
-PLAYER_INBOUND: TypeAdapter[PlaybackReport | PlayerDisplayed] = TypeAdapter(PlayerInbound)
-PLAYER_OUTBOUND: TypeAdapter[CreativeReady | CreativeUpgraded | ErrorMessage | ScreenAttention] = (
-    TypeAdapter(PlayerOutbound)
+AGENT_OUTBOUND: TypeAdapter[LiveStatus | ErrorMessage] = TypeAdapter(AgentOutbound)
+PLAYER_INBOUND: TypeAdapter[PlaybackReport | PlayerDisplayed | PlayerVoice] = TypeAdapter(
+    PlayerInbound
 )
+PLAYER_OUTBOUND: TypeAdapter[
+    CreativeReady | CreativeUpgraded | ErrorMessage | ScreenAttention | LiveStatus
+] = TypeAdapter(PlayerOutbound)
 CONSOLE_OUTBOUND: TypeAdapter[
     ConsoleMoment
     | ConsoleAuction
@@ -641,6 +736,7 @@ CONSOLE_OUTBOUND: TypeAdapter[
     | ConsoleBook
     | ConsoleReceipt
     | ConsoleRedemption
+    | LiveStatus
 ] = TypeAdapter(ConsoleOutbound)
 
 AnyMessage = (
@@ -661,8 +757,12 @@ AnyMessage = (
     | ConsoleReceipt
     | RecognitionSnapshot
     | PlayerDisplayed
+    | PlayerVoice
     | ScreenAttention
     | ConsoleRedemption
+    | AgentHello
+    | LiveSet
+    | LiveStatus
 )
 
 # Order is the generated TS order; append new messages at the end.
@@ -684,8 +784,12 @@ ALL_MESSAGES: tuple[type[_Message], ...] = (
     ConsoleReceipt,
     RecognitionSnapshot,
     PlayerDisplayed,
+    PlayerVoice,
     ScreenAttention,
     ConsoleRedemption,
+    AgentHello,
+    LiveSet,
+    LiveStatus,
 )
 
 
@@ -740,9 +844,16 @@ ALL_MESSAGES += (CampaignCatalog, CampaignGenerate, CampaignGenerated)
 
 # Socket unions exported to TS, by name.
 SOCKET_UNIONS: dict[str, tuple[type[_Message], ...]] = {
-    "AgentInbound": (AudienceSnapshot, AudienceKeyframe, AudienceUtterance, RecognitionSnapshot),
-    "PlayerInbound": (PlaybackReport, PlayerDisplayed),
-    "PlayerOutbound": (CreativeReady, CreativeUpgraded, ErrorMessage, ScreenAttention),
+    "AgentInbound": (
+        AudienceSnapshot,
+        AudienceKeyframe,
+        AudienceUtterance,
+        RecognitionSnapshot,
+        AgentHello,
+    ),
+    "AgentOutbound": (LiveStatus, ErrorMessage),
+    "PlayerInbound": (PlaybackReport, PlayerDisplayed, PlayerVoice),
+    "PlayerOutbound": (CreativeReady, CreativeUpgraded, ErrorMessage, ScreenAttention, LiveStatus),
     "ConsoleOutbound": (
         ConsoleMoment,
         ConsoleAuction,
@@ -754,5 +865,6 @@ SOCKET_UNIONS: dict[str, tuple[type[_Message], ...]] = {
         ConsoleBook,
         ConsoleReceipt,
         ConsoleRedemption,
+        LiveStatus,
     ),
 }

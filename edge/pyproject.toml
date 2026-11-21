@@ -22,6 +22,11 @@ vision = [
     "opencv-python>=4.10",
     "ultralytics>=8.4,<9",
     "lap>=0.5.12",
+    # YOLOE-26 text prompts (agent/vision/vocabulary.py): Ultralytics would
+    # otherwise pip-install these from git at runtime on the first bake.
+    "clip @ git+https://github.com/ultralytics/CLIP.git",
+    "ftfy>=6.3",
+    "regex>=2024.0",
     "torch==2.6.0; sys_platform == 'win32'",
     "torchvision==0.21.0; sys_platform == 'win32'",
 ]

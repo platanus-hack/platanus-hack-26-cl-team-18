@@ -1,7 +1,8 @@
 """Real YOLO26 on real photos: runs when the `vision` extra is installed, skips otherwise.
 
 Uses the sample images that ship inside the ultralytics package (no camera, no
-clip). The first run downloads the YOLO26 weights (~27 MB) into the cwd;
+clip). The first run downloads the YOLO26 and YOLOE-26 weights into the cwd and
+bakes the object vocabulary once (MobileCLIP, ~250 MB);
 set `YOLO_POSE` / `YOLO_OBJECTS` to point at exported weights instead.
 """
 
@@ -22,6 +23,7 @@ from agent.vision.geometry import is_looking  # noqa: E402
 from agent.vision.pipeline import VisionPipeline  # noqa: E402
 from agent.vision.snapshot import SnapshotBuilder, SnapshotConfig  # noqa: E402
 from agent.vision.tracking import PersonTracker  # noqa: E402
+from agent.vision.vocabulary import OBJECT_LABELS  # noqa: E402
 
 T0 = datetime(2026, 11, 21, 15, tzinfo=UTC)
 
@@ -30,7 +32,7 @@ T0 = datetime(2026, 11, 21, 15, tzinfo=UTC)
 def detector() -> UltralyticsDetector:
     return UltralyticsDetector(
         pose_model=os.environ.get("YOLO_POSE", "yolo26n-pose.pt"),
-        object_model=os.environ.get("YOLO_OBJECTS", "yolo26s.pt"),
+        object_model=os.environ.get("YOLO_OBJECTS", "yoloe-26s-seg.pt"),
         object_every=1,
         device="cpu",
     )
@@ -53,11 +55,10 @@ def test_frontal_faces_count_as_looking(detector: UltralyticsDetector) -> None:
     assert sum(is_looking(p) for p in result.persons) >= 1
 
 
-def test_objects_are_translated_without_people(detector: UltralyticsDetector) -> None:
+def test_objects_come_only_from_the_vocabulary(detector: UltralyticsDetector) -> None:
     image = cv2.imread(str(ASSETS / "bus.jpg"))
     labels = {o.label for o in detector.detect(image, T0).objects}
-    assert "bus" in labels
-    assert "person" not in labels
+    assert labels <= OBJECT_LABELS  # YOLOE only knows the prompts; no "bus", no "person"
 
 
 def test_full_pipeline_on_a_real_photo_produces_a_valid_snapshot(

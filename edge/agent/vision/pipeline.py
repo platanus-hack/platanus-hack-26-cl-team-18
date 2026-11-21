@@ -25,10 +25,11 @@ from agent.sound.sources import SoundSceneSource
 from agent.vision.detector import Detector, Frame
 from agent.vision.geometry import head_box
 from agent.vision.held import HeldProductTracker
-from agent.vision.minor import MinorVote
+from agent.vision.minor import ChildPropVote, MinorVote, strongest
 from agent.vision.snapshot import SnapshotBuilder
 from agent.vision.tracking import PersonTracker
 from agent.vision.types import FrameDetections
+from agent.vision.vocabulary import CHILD_PROP_LABELS
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,7 @@ class VisionPipeline:
         keyframes: KeyframeEncoder | None = None,
         config: VisionConfig | None = None,
         minor: MinorVote | None = None,
+        child_props: ChildPropVote | None = None,
         sound: SoundSceneSource | None = None,
     ) -> None:
         self._screen_id = screen_id
@@ -86,6 +88,7 @@ class VisionPipeline:
         self._keyframes = keyframes
         self._config = config or VisionConfig()
         self._minor = minor or MinorVote()
+        self._child_props = child_props or ChildPropVote(CHILD_PROP_LABELS)
         self._sound = sound
         self._serial = 0
         self._keyframe_seq = 0
@@ -106,7 +109,10 @@ class VisionPipeline:
         # The tracked (near) people of this frame: a refreshed track holds its person's box.
         boxes = [t.box for t in tracks]
         tracked = [p for p in detections.persons if p.box in boxes]
-        minor = self._minor.update(tracked, detections.height)
+        minor = strongest(
+            self._minor.update(tracked, detections.height),
+            self._child_props.update(detections.objects, boxes),
+        )
         sound = self._sound.current(detections.measured_at) if self._sound else ()
         snapshot = self._snapshots.build(
             measured_at=detections.measured_at,

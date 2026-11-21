@@ -44,6 +44,11 @@ pending snapshot; connectivity failures do not stop detection. The backend
 keeps at most 64 screens in memory and expires snapshots after 30 seconds,
 with periodic cleanup. No frame, crop or audio is persisted.
 
+Live mode's objects come from YOLOE-26 (`yoloe-26s-seg.pt`) prompted with
+`agent/vision/vocabulary.py`. Run `make edge-yoloe` from the repo root once
+before the demo: it downloads MobileCLIP and bakes the prompts into
+`yoloe-26s-seg-vocab-<fingerprint>.pt`, so later starts need no network.
+
 The first run downloads Ultralytics `yolo26n.pt`; model warmup runs before the
 playback clock starts, and startup and CPU latency depend on the machine.
 Windows uses PyTorch 2.6 and torchvision 0.21 to avoid a missing
@@ -198,7 +203,7 @@ The audio path, in `agent/speech/`:
   closes after 15 s idle. Errors are classified: fatal ones stop the client
   and mark speech degraded; the rest reconnect with backoff.
 - **Keyterms:** `keyterms.py` matches accent- and word-boundary-aware keyterms
-  on *partial* transcripts and reports each one once per segment, including
+  on *partial* transcripts; a new hit sends all matched terms in the current phrase, including
   Chilean variants. The same catalog is sent to Scribe as keyterm prompts.
 - **Echo guard:** `echo_guard.py` drops our own voice-overs, both inside
   playback windows and by fuzzy match against the line being played.

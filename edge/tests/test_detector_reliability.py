@@ -117,10 +117,14 @@ def test_local_rescans_objects_when_resolution_changes(monkeypatch):
             return [SimpleNamespace(boxes=None, keypoints=None)]
 
     monkeypatch.setitem(sys.modules, "ultralytics", SimpleNamespace(YOLO=Model))
+    monkeypatch.setattr("agent.vision.adapters.load_object_model", Model)
     detector = UltralyticsDetector(object_every=100)
     detector.detect(np.zeros((20, 20, 3)), T0)
     detector.detect(np.zeros((10, 10, 3)), T0 + timedelta(milliseconds=10))
-    assert [shape for name, shape in calls if name == "yolo26s.pt"] == [(20, 20, 3), (10, 10, 3)]
+    assert [shape for name, shape in calls if name == "yoloe-26s-seg.pt"] == [
+        (20, 20, 3),
+        (10, 10, 3),
+    ]
 
 
 def test_marker_composition_preserves_latency_breakdown():

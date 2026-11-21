@@ -336,7 +336,7 @@ def test_objects_away_from_every_person_are_dropped() -> None:
         person(100),
         objects=(
             ObjectDetection("bottle", 0.9, Box(1100, 600, 1150, 700)),  # on the counter
-            ObjectDetection("cup", 0.3, Box(150, 300, 170, 330)),  # below the score floor
+            ObjectDetection("cup", 0.2, Box(150, 300, 170, 330)),  # below the score floor
         ),
     )
     assert snapshot is not None and snapshot.objects == []

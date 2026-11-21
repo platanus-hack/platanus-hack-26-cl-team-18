@@ -23,6 +23,14 @@ def test_matches_variants_accent_and_case_insensitively() -> None:
     assert DEFAULT_KEYTERMS.match("vamos al gimnasio y después un cortado") == ("café", "gym")
 
 
+@pytest.mark.parametrize(
+    "phrase",
+    ["quiero una cerveza", "quiero cervezas", "una cervecita", "unas cervecitas", "una chela"],
+)
+def test_beer_requests_have_the_same_canonical_intent(phrase: str) -> None:
+    assert DEFAULT_KEYTERMS.match(phrase) == ("cerveza",)
+
+
 def test_respects_word_boundaries() -> None:
     catalog = KeytermCatalog.from_mapping({"gym": ()})
     assert catalog.match("la gymkana del colegio") == ()

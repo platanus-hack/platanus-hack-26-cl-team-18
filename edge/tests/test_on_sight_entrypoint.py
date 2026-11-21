@@ -25,4 +25,4 @@ def test_on_sight_backend_selects_pose_pipeline_without_loading_debug_model(monk
     assert args.screen == "north"
     assert args.video == "clip.mp4"
     assert args.pose_model == "yolo26n-pose.pt"
-    assert args.object_model == "yolo26s.pt"
+    assert args.object_model == "yoloe-26s-seg.pt"

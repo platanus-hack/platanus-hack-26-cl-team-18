@@ -189,3 +189,50 @@ async def test_the_aired_offer_line_is_pronounced_as_written() -> None:
         heard
     )
     print(f"\naired line transcribed back as: {' '.join(finals)!r}")
+
+
+async def test_live_transcription_honors_an_explicit_correction():
+    """A real STT segment may contain an old want and its spoken replacement."""
+    line = "Quiero una cerveza, mejor un café."
+    fixture = FIXTURE.with_name("correction_line_pcm16k.raw")
+    if fixture.exists():
+        pcm = fixture.read_bytes()
+    else:
+        pcm = _request(
+            f"/v1/text-to-speech/{_voice_id()}?output_format=pcm_16000",
+            body={"text": line, "model_id": "eleven_flash_v2_5", "language_code": "es"},
+        )
+        fixture.write_bytes(pcm)  # authored synthetic speech, never microphone audio
+    sent: list[AudienceUtterance] = []
+    pipeline: SpeechPipeline | None = None
+    scribe = ScribeRealtime(
+        ScribeConfig(api_key=API_KEY or "", keyterms=DEFAULT_KEYTERMS.prompt_terms()),
+        lambda event: pipeline.on_event(event) if pipeline else None,
+        idle_close_s=None,
+    )
+    pipeline = SpeechPipeline(
+        screen_id="demo-01",
+        gate=SpeechGate(EnergyVad()),
+        transcriber=scribe,
+        keyterms=DEFAULT_KEYTERMS,
+        emit=sent.append,
+    )
+    task = asyncio.create_task(scribe.run())
+    try:
+        await scribe.wait_connected(10)
+        for offset in range(0, len(pcm), FRAME_BYTES):
+            pipeline.on_frame(pcm[offset : offset + FRAME_BYTES].ljust(FRAME_BYTES, b"\0"))
+            await asyncio.sleep(0.032)
+        for _ in range(40):
+            pipeline.on_frame(bytes(FRAME_BYTES))
+            await asyncio.sleep(0.032)
+        pipeline.finish()
+        async with asyncio.timeout(10):
+            while not any(message.is_final for message in sent):
+                await asyncio.sleep(0.02)
+        final = [message for message in sent if message.is_final][-1]
+        assert final.keyterms_hit == ["café"]
+        print(f"\nlive correction: final coffee-only intent; {scribe.stats.sessions} session")
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)

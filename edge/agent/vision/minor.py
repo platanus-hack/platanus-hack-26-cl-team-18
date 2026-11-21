@@ -36,7 +36,7 @@ from collections import deque
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from agent.vision.types import PersonDetection
+from agent.vision.types import Box, ObjectDetection, PersonDetection
 
 # COCO-17 keypoint indexes (agent.vision.types.Kp covers the head and shoulders only).
 _LEFT_EAR, _RIGHT_EAR, _LEFT_SHOULDER, _RIGHT_SHOULDER = 3, 4, 5, 6
@@ -193,3 +193,66 @@ class MinorVote:
 
     def reset(self) -> None:
         self._frames.clear()
+
+
+@dataclass(frozen=True, slots=True)
+class ChildPropConfig:
+    """A child prop (stroller, teddy bear) held by or next to a tracked person.
+
+    Same rule as the pose cues: this may only *block* age-restricted ads. A
+    false positive (an adult carrying a teddy bear) is the safe failure.
+    """
+
+    min_score: float = 0.25
+    person_pad: float = 0.15  # same reach as the snapshot's object/person overlap
+    # In frames. Objects refresh at ~5 fps while frames run faster, so one object
+    # scan repeats over several frames: 10 of 20 needs the prop in two or more scans.
+    window: int = 20
+    min_hits: int = 10
+    confidence: float = 0.7  # a prop is indirect evidence; capped below the pose cap
+
+    def __post_init__(self) -> None:
+        if not 0 < self.min_hits <= self.window:
+            raise ValueError("need 0 < min_hits <= window")
+        if not 0 < self.confidence < 1:
+            raise ValueError("confidence must be in (0, 1): this is a heuristic")
+
+
+class ChildPropVote:
+    """Object detections of child props near tracked people → a voted `MinorReading`.
+
+    Objects only: it reads object labels and boxes, never anything about a person.
+    """
+
+    def __init__(self, labels: frozenset[str], config: ChildPropConfig | None = None) -> None:
+        self._labels = labels
+        self._config = config or ChildPropConfig()
+        self._hits: deque[bool] = deque(maxlen=self._config.window)
+
+    def update(
+        self, objects: Sequence[ObjectDetection], person_boxes: Sequence[Box]
+    ) -> MinorReading:
+        config = self._config
+        reach = [box.expanded(config.person_pad) for box in person_boxes]
+        hit = any(
+            obj.label in self._labels
+            and obj.score >= config.min_score
+            and any(area.iou(obj.box) > 0 or area.contains(obj.box.center) for area in reach)
+            for obj in objects
+        )
+        self._hits.append(hit)
+        hits = sum(self._hits)
+        if hits >= config.min_hits:
+            return MinorReading(True, round(config.confidence * hits / config.window, 2))
+        return NO_READING
+
+    def reset(self) -> None:
+        self._hits.clear()
+
+
+def strongest(*readings: MinorReading) -> MinorReading:
+    """Any positive reading wins (blocking is the safe side); else the most confident clear."""
+    positive = [r for r in readings if r.value]
+    if positive:
+        return max(positive, key=lambda r: r.confidence)
+    return max(readings, key=lambda r: r.confidence, default=NO_READING)

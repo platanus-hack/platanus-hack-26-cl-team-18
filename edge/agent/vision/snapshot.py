@@ -32,28 +32,16 @@ from agent.vision.held import HELD_LABEL_PREFIX, HeldProductView
 from agent.vision.minor import NO_READING, MinorReading
 from agent.vision.tracking import TrackView
 from agent.vision.types import ObjectDetection
+from agent.vision.vocabulary import OBJECT_CONF, OBJECT_LABELS
 
-# Objects the demo and the seed catalog care about (docs/stack.md §3). Others are noise.
-DEMO_OBJECT_LABELS = frozenset(
-    {
-        "bottle",
-        "cup",
-        "wine glass",
-        "backpack",
-        "handbag",
-        "laptop",
-        "cell phone",
-        "dog",
-        "skateboard",
-        "sports ball",
-        "teddy bear",  # kid-related prop for the safety beat; the backend decides what it implies
-    }
-)
+# Objects the demo and the seed catalog care about: exactly the YOLOE vocabulary's
+# labels (agent.vision.vocabulary). Anything else (a model loaded by hand) is noise.
+DEMO_OBJECT_LABELS = OBJECT_LABELS
 
 
 @dataclass(frozen=True, slots=True)
 class SnapshotConfig:
-    min_object_score: float = 0.35
+    min_object_score: float = OBJECT_CONF
     # An object counts only if it overlaps a tracked (near) person, padded by this
     # fraction of the person box: held or carried, not on a shelf behind them.
     object_person_pad: float = 0.15

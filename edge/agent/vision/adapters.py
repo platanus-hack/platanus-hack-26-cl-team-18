@@ -22,24 +22,33 @@ from agent.vision.types import (
     ObjectDetection,
     PersonDetection,
 )
+from agent.vision.vocabulary import (
+    DEFAULT_OBJECT_MODEL,
+    OBJECT_CONF,
+    canonical_label,
+    load_object_model,
+)
 
 
 class UltralyticsDetector:
-    """YOLO26 pose every frame + YOLO26 objects every `object_every` frames (docs/stack.md §3).
+    """YOLO26 pose every frame + YOLOE-26 objects every `object_every` frames (docs/stack.md §3).
 
-    Pass exported weights (TensorRT `.engine`, CoreML `.mlpackage`, OpenVINO
-    dir) for speed; plain `.pt` works everywhere but slower.
+    Objects come from the open-vocabulary YOLOE-26 model prompted with the demo
+    vocabulary, so a coffee cup and an energy-drink can are told apart. Pass
+    exported weights (TensorRT `.engine`, CoreML `.mlpackage`, OpenVINO dir)
+    for speed; plain `.pt` works everywhere but slower.
     """
 
     def __init__(
         self,
         *,
         pose_model: str = "yolo26n-pose.pt",
-        object_model: str | None = "yolo26s.pt",
+        object_model: str | None = DEFAULT_OBJECT_MODEL,
         object_every: int = 6,
         object_interval: timedelta | None = None,
         imgsz: int = 640,
         conf: float = 0.35,
+        object_conf: float = OBJECT_CONF,
         device: str | None = None,
         name: str = "local",
         cpu_threads: int | None = None,
@@ -48,12 +57,13 @@ class UltralyticsDetector:
 
         self._cpu_threads = cpu_threads
         self._pose = YOLO(pose_model)
-        self._objects = YOLO(object_model) if object_model else None
+        self._objects = load_object_model(object_model) if object_model else None
         self._object_every = max(1, object_every)
         self._object_interval = object_interval
         self._objects_at: datetime | None = None
         self._imgsz = imgsz
         self._conf = conf
+        self._object_conf = object_conf
         self._device = device
         self._frame_index = 0
         self._last_objects: tuple[ObjectDetection, ...] = ()
@@ -102,7 +112,12 @@ class UltralyticsDetector:
         due = due or self._object_shape != (height, width)
         if self._objects is not None and due:
             result = self._objects.predict(
-                frame, imgsz=self._imgsz, conf=self._conf, device=self._device, verbose=False
+                frame,
+                imgsz=self._imgsz,
+                conf=self._object_conf,
+                device=self._device,
+                retina_masks=False,
+                verbose=False,
             )[0]
             self._last_objects = tuple(_objects(result))
             self._objects_at = measured_at
@@ -160,7 +175,7 @@ def _objects(result: Any) -> list[ObjectDetection]:
         boxes.cls.cpu().numpy(),
         strict=False,
     ):
-        label = str(names[int(cls)])
+        label = canonical_label(str(names[int(cls)]))
         if label == "person":
             continue
         out.append(

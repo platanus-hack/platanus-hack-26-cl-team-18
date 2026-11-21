@@ -22,6 +22,9 @@ class FakeScribe:
     transcripts: list[str] = field(default_factory=lambda: ["uf, qué hambre"])
     error_after_commits: dict[int, str] = field(default_factory=dict)  # commit n -> error kind
     error_on_connect: str | None = None
+    session_delay_s: float = 0.0
+    withhold_commits: set[int] = field(default_factory=set)
+    supplemental_commits: bool = False
     chunks: list[dict] = field(default_factory=list)  # type: ignore[type-arg]
     audio_bytes: int = 0
     sessions: int = 0
@@ -43,6 +46,8 @@ class FakeScribe:
             await ws.send(json.dumps({"message_type": kind, "error": "injected"}))
             await ws.close()
             return
+        if self.session_delay_s:
+            await asyncio.sleep(self.session_delay_s)
         await ws.send(
             json.dumps(
                 {
@@ -69,13 +74,27 @@ class FakeScribe:
                 await ws.send(json.dumps({"message_type": kind, "error": "injected"}))
                 await ws.close()
                 return
+            if self._commits in self.withhold_commits:
+                continue
             text = self.transcripts[(self._commits - 1) % len(self.transcripts)]
             words = text.split()
             await ws.send(
                 json.dumps({"message_type": "partial_transcript", "text": " ".join(words[:-1])})
             )
-            await ws.send(json.dumps({"message_type": "partial_transcript", "text": text}))
+            # Real Scribe re-sends an unchanged partial while audio keeps arriving.
+            for _ in range(2):
+                await ws.send(json.dumps({"message_type": "partial_transcript", "text": text}))
             await ws.send(json.dumps({"message_type": "committed_transcript", "text": text}))
+            if self.supplemental_commits:
+                await ws.send(
+                    json.dumps(
+                        {
+                            "message_type": "committed_transcript_with_timestamps",
+                            "text": text,
+                            "words": [],
+                        }
+                    )
+                )
 
     async def start(self) -> str:
         self.server = await websockets.serve(self.handler, "127.0.0.1", 0)

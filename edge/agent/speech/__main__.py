@@ -22,7 +22,13 @@ from agent.speech.keyterms import DEFAULT_KEYTERMS
 from agent.speech.pipeline import SpeechPipeline
 from agent.speech.scribe import DEFAULT_URL, ScribeConfig, ScribeFatalError, ScribeRealtime
 from agent.speech.sources import MicSource, WavSource
-from agent.speech.vad import EnergyVad, SileroVad, SpeechGate, VoiceActivityDetector
+from agent.speech.vad import (
+    EnergyVad,
+    ResilientVad,
+    SileroVad,
+    SpeechGate,
+    VoiceActivityDetector,
+)
 
 logger = logging.getLogger("agent.speech")
 
@@ -37,10 +43,16 @@ def _load_dotenv(path: Path) -> None:
 
 
 def _vad(model: Path | None) -> VoiceActivityDetector:
-    if model is not None:
-        return SileroVad(model)
-    logger.warning("no --silero-model given: using the energy VAD (fine for a quiet room only)")
-    return EnergyVad()
+    """Silero behind a volume floor and an adaptive-energy fallback; never crash here."""
+    fallback = EnergyVad(adaptive=True)
+    if model is None:
+        logger.warning("no --silero-model given: using the adaptive energy VAD")
+        return ResilientVad(fallback, fallback)
+    try:
+        return ResilientVad(SileroVad(model), fallback)
+    except Exception as exc:  # missing onnxruntime, corrupt model, wrong version
+        logger.error("Silero VAD failed to load (%s): using the adaptive energy VAD", exc)
+        return ResilientVad(fallback, fallback)
 
 
 async def run(args: argparse.Namespace) -> int:
@@ -70,14 +82,19 @@ async def run(args: argparse.Namespace) -> int:
     print(f"● LISTENING on screen {args.screen} (speech mode on)", file=sys.stderr)
 
     async def feed() -> None:
+        gaps = 0
         async for frame in source.frames():
+            if isinstance(source, MicSource) and source.discontinuities != gaps:
+                gaps = source.discontinuities
+                scribe.reset()  # never interpret the tail of a discontinuous phrase
             pipeline.on_frame(frame)
+        pipeline.finish()
         if args.wav:
             await asyncio.sleep(args.linger)  # let the last transcript arrive
 
     tasks = [asyncio.create_task(link.run()), asyncio.create_task(scribe.run())]
+    feeder = asyncio.create_task(feed())
     try:
-        feeder = asyncio.create_task(feed())
         done, _ = await asyncio.wait([feeder, *tasks], return_when=asyncio.FIRST_COMPLETED)
         for task in done:
             task.result()
@@ -86,7 +103,7 @@ async def run(args: argparse.Namespace) -> int:
         print(f"speech degraded: {exc}", file=sys.stderr)
         return 1
     finally:
-        for task in tasks:
+        for task in [feeder, *tasks]:
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task

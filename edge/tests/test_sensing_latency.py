@@ -164,15 +164,16 @@ def test_local_prewarm_initializes_both_models_and_resets_object_deadline(monkey
             return [SimpleNamespace(boxes=None, keypoints=None)]
 
     monkeypatch.setitem(sys.modules, "ultralytics", SimpleNamespace(YOLO=Model))
+    monkeypatch.setattr("agent.vision.adapters.load_object_model", Model)
     detector = UltralyticsDetector(
         object_interval=__import__("datetime").timedelta(milliseconds=200)
     )
     detector.warmup()
-    assert calls == ["yolo26n-pose.pt", "yolo26s.pt"]
+    assert calls == ["yolo26n-pose.pt", "yoloe-26s-seg.pt"]
     image = np.zeros((10, 10, 3), dtype=np.uint8)
     for t in [0, 50, 190, 200, 350, 450]:
         detector.detect(image, ms(t))
-    assert calls.count("yolo26s.pt") == 4  # warmup + 0, 200, 450
+    assert calls.count("yoloe-26s-seg.pt") == 4  # warmup + 0, 200, 450
 
 
 @pytest.mark.anyio

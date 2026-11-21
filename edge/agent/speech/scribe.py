@@ -10,7 +10,7 @@ Design:
   commit manually at the end of each speech segment (`commit_strategy=manual`).
 - **Keepalive**: the server closes after 15 s without a client message, so a
   short silence chunk goes out after `keepalive_s` of no traffic.
-- **Chunking**: 32 ms VAD frames are batched into ≥96 ms chunks (the API wants
+- **Chunking**: 32 ms VAD frames are batched into ≥128 ms chunks (the API wants
   0.1–1 s); a commit flushes whatever is buffered.
 - **Errors are classified**: fatal ones (bad key, quota, terms) stop the
   client and mark speech degraded; transient ones reconnect with backoff;
@@ -40,7 +40,7 @@ from agent.speech.vad import FRAME_BYTES, SAMPLE_RATE
 logger = logging.getLogger(__name__)
 
 DEFAULT_URL = "wss://api.elevenlabs.io/v1/speech-to-text/realtime"
-MIN_CHUNK_BYTES = 3 * FRAME_BYTES  # 96 ms
+MIN_CHUNK_BYTES = 4 * FRAME_BYTES  # 128 ms: within documented 0.1–1 s range
 MAX_CHUNK_BYTES = SAMPLE_RATE * 2  # 1 s
 KEEPALIVE_S = 5.0
 # Close the session after this long without speech: realtime STT bills session time.
@@ -94,12 +94,14 @@ class SessionStarted:
 @dataclass(frozen=True)
 class PartialTranscript:
     text: str
+    turn_probability: float | None = None
 
 
 @dataclass(frozen=True)
 class CommittedTranscript:
     text: str
     language_code: str | None = None
+    supplemental: bool = False
 
 
 class ErrorClass(StrEnum):
@@ -118,12 +120,12 @@ _ERROR_CLASS: dict[str, ErrorClass] = {
     "session_time_limit_exceeded": ErrorClass.TRANSIENT,
     "transcriber_error": ErrorClass.TRANSIENT,
     "error": ErrorClass.TRANSIENT,
-    "commit_throttled": ErrorClass.IGNORABLE,
+    "commit_throttled": ErrorClass.TRANSIENT,
     "insufficient_audio_activity": ErrorClass.IGNORABLE,
-    # Our bug if these happen; keep the session but say so loudly.
-    "input_error": ErrorClass.IGNORABLE,
-    "invalid_request": ErrorClass.IGNORABLE,
-    "chunk_size_exceeded": ErrorClass.IGNORABLE,
+    # Permanent client/protocol bugs: stop instead of retrying a rejected session.
+    "input_error": ErrorClass.FATAL,
+    "invalid_request": ErrorClass.FATAL,
+    "chunk_size_exceeded": ErrorClass.FATAL,
 }
 
 
@@ -134,7 +136,12 @@ class ScribeError:
     error_class: ErrorClass
 
 
-ScribeEvent = SessionStarted | PartialTranscript | CommittedTranscript | ScribeError
+@dataclass(frozen=True)
+class StreamReset:
+    reason: str  # counts/reason only; no audio or transcript
+
+
+ScribeEvent = SessionStarted | PartialTranscript | CommittedTranscript | ScribeError | StreamReset
 
 
 def parse_event(raw: str | bytes) -> ScribeEvent | None:
@@ -149,11 +156,21 @@ def parse_event(raw: str | bytes) -> ScribeEvent | None:
     if kind == "session_started":
         return SessionStarted(session_id=str(data.get("session_id", "")))
     if kind == "partial_transcript":
-        return PartialTranscript(text=str(data.get("text", "")))
+        probability = data.get("turn_probability")
+        return PartialTranscript(
+            text=str(data.get("text", "")),
+            turn_probability=float(probability)
+            if isinstance(probability, (int, float))
+            and not isinstance(probability, bool)
+            and 0 <= probability <= 1
+            else None,
+        )
     if kind in ("committed_transcript", "committed_transcript_with_timestamps"):
         lang = data.get("language_code")
         return CommittedTranscript(
-            text=str(data.get("text", "")), language_code=lang if isinstance(lang, str) else None
+            text=str(data.get("text", "")),
+            language_code=lang if isinstance(lang, str) else None,
+            supplemental=kind == "committed_transcript_with_timestamps",
         )
     if isinstance(kind, str) and (kind in _ERROR_CLASS or "error" in data):
         detail = data.get("error") or data.get("message") or ""
@@ -193,6 +210,14 @@ class ScribeFatalError(RuntimeError):
     pass
 
 
+@dataclass(frozen=True)
+class _QueuedChunk:
+    message: str
+    size: int
+    commit: bool
+    queued_at: float
+
+
 @dataclass
 class ScribeStats:
     sessions: int = 0
@@ -202,6 +227,7 @@ class ScribeStats:
     transient_errors: int = 0
     dropped_audio_bytes: int = 0
     idle_closes: int = 0
+    stream_resets: int = 0
 
 
 class ScribeRealtime:
@@ -217,6 +243,8 @@ class ScribeRealtime:
         idle_close_s: float | None = IDLE_CLOSE_S,
         backoff: Sequence[float] = (0.5, 1, 2, 4, 8),
         max_buffer_bytes: int = 10 * SAMPLE_RATE * 2,  # 10 s
+        max_audio_age_s: float = 2.0,
+        response_timeout_s: float = 10.0,
     ) -> None:
         self._config = config
         self._on_event = on_event
@@ -227,7 +255,15 @@ class ScribeRealtime:
         self._idle_closed = False
         self._backoff = tuple(backoff)
         self._max_buffer = max_buffer_bytes
-        self._outbox: deque[str] = deque()
+        if max_buffer_bytes < MIN_CHUNK_BYTES or max_audio_age_s <= 0 or response_timeout_s <= 0:
+            raise ValueError("audio buffer and response limits must be positive")
+        self._max_age = max_audio_age_s
+        self._response_timeout = response_timeout_s
+        self._commits_pending: deque[float] = deque()
+        self._queued_bytes = 0
+        self._uncommitted_audio = 0
+        self._generation = 0
+        self._outbox: deque[_QueuedChunk] = deque()
         self._wakeup = asyncio.Event()
         self._pending = bytearray()
         self._connected = asyncio.Event()
@@ -248,30 +284,58 @@ class ScribeRealtime:
     def send_audio(self, pcm: bytes) -> None:
         if self._fatal is not None:
             return
+        if len(pcm) % 2:
+            raise ValueError("PCM16 requires complete two-byte samples")
+        if not pcm:
+            return
         self._last_audio = time.monotonic()
+        self._uncommitted_audio += len(pcm)
         self._pending += pcm
         while len(self._pending) >= MIN_CHUNK_BYTES:
             take = min(len(self._pending), MAX_CHUNK_BYTES)
-            self._enqueue(audio_chunk(bytes(self._pending[:take])))
+            chunk = bytes(self._pending[:take])
             del self._pending[:take]
+            if not self._enqueue(chunk):
+                return
 
     def commit(self) -> None:
         """End of a speech segment: flush the tail and ask for a committed transcript."""
-        if self._fatal is not None:
+        if self._fatal is not None or self._uncommitted_audio == 0:
             return
+        self._uncommitted_audio = 0
         self._last_audio = time.monotonic()
         tail = bytes(self._pending) or KEEPALIVE_CHUNK
         self._pending.clear()
-        self._enqueue(audio_chunk(tail, commit=True))
+        self._enqueue(tail, commit=True)
         self.stats.commits += 1
 
-    def _enqueue(self, message: str) -> None:
-        # Bound memory while offline: drop the oldest audio, never block the mic.
-        while len(self._outbox) * MIN_CHUNK_BYTES >= self._max_buffer:
-            self._outbox.popleft()
-            self.stats.dropped_audio_bytes += MIN_CHUNK_BYTES
-        self._outbox.append(message)
+    def reset(self) -> None:
+        self._discard("capture_gap")
+
+    def _discard(self, reason: str, *, extra_bytes: int = 0) -> None:
+        self.stats.dropped_audio_bytes += self._queued_bytes + len(self._pending) + extra_bytes
+        self._outbox.clear()
+        self._pending.clear()
+        self._commits_pending.clear()
+        self._queued_bytes = 0
+        self._uncommitted_audio = 0
         self._wakeup.set()
+        self._generation += 1
+        self.stats.stream_resets += 1
+        self._on_event(StreamReset(reason))
+
+    def _enqueue(self, pcm: bytes, *, commit: bool = False) -> bool:
+        # Never preserve the tail of a damaged utterance: dropping "no quiero"
+        # while keeping "cerveza" can invert the shopper's meaning.
+        if self._queued_bytes + len(pcm) > self._max_buffer:
+            self._discard("buffer_overflow", extra_bytes=len(pcm))
+            return False
+        self._outbox.append(
+            _QueuedChunk(audio_chunk(pcm, commit=commit), len(pcm), commit, time.monotonic())
+        )
+        self._queued_bytes += len(pcm)
+        self._wakeup.set()
+        return True
 
     async def run(self) -> None:
         """Run until a fatal error (raised) or cancellation.
@@ -297,12 +361,14 @@ class ScribeRealtime:
                 attempt += 1
             finally:
                 self._connected.clear()
+                if not self._idle_closed:
+                    self._discard("session_interrupted")
                 try:
                     await socket.close()
                 except Exception:  # closing a dead socket must never raise
                     pass
             if self._fatal is not None:
-                raise ScribeFatalError(f"{self._fatal.kind}: {self._fatal.detail}")
+                raise ScribeFatalError(f"speech provider rejected session ({self._fatal.kind})")
             if self._idle_closed:
                 self._idle_closed = False
                 attempt = 0
@@ -318,14 +384,32 @@ class ScribeRealtime:
         """Returns True if the session was healthy (reset the backoff)."""
         reader = asyncio.create_task(self._read(socket))
         healthy = False
+        generation = self._generation
+        ready = asyncio.create_task(self._connected.wait())
         try:
+            done, _ = await asyncio.wait(
+                {ready, reader}, timeout=self._response_timeout, return_when=asyncio.FIRST_COMPLETED
+            )
+            if reader in done:
+                return False
+            if ready not in done:
+                self.stats.transient_errors += 1
+                return False
             while True:
+                if generation != self._generation:
+                    return False
+                if (
+                    self._commits_pending
+                    and time.monotonic() - self._commits_pending[0] > self._response_timeout
+                ):
+                    self.stats.transient_errors += 1
+                    return False
                 if not self._outbox:
                     self._wakeup.clear()
                     waiter = asyncio.create_task(self._wakeup.wait())
                     done, _ = await asyncio.wait(
                         {waiter, reader},
-                        timeout=self._keepalive_s,
+                        timeout=min(self._keepalive_s, self._response_timeout),
                         return_when=asyncio.FIRST_COMPLETED,
                     )
                     waiter.cancel()
@@ -342,20 +426,40 @@ class ScribeRealtime:
                     continue
                 if reader.done():
                     return (reader.result() is not False) and healthy
-                await socket.send(self._outbox[0])
-                self._outbox.popleft()  # only after a successful send
+                queued = self._outbox[0]
+                if time.monotonic() - queued.queued_at > self._max_age:
+                    self._discard("stale_audio")
+                    continue
+                await socket.send(queued.message)
+                # Audio capture can discard a damaged queue during the await.
+                if self._outbox and self._outbox[0] is queued:
+                    self._outbox.popleft()
+                    self._queued_bytes -= queued.size
+                if queued.commit:
+                    self._commits_pending.append(time.monotonic())
                 self.stats.chunks_sent += 1
                 healthy = healthy or self.connected
         finally:
+            ready.cancel()
             reader.cancel()
+            await asyncio.gather(ready, reader, return_exceptions=True)
 
     async def _read(self, socket: _Socket) -> bool:
+        generation = self._generation
         while True:
-            event = parse_event(await socket.recv())
+            raw = await socket.recv()
+            if generation != self._generation:
+                return False
+            event = parse_event(raw)
             if event is None:
                 continue
             if isinstance(event, SessionStarted):
                 self._connected.set()
+            elif isinstance(event, CommittedTranscript):
+                if event.supplemental:
+                    continue  # enrichment follows the same stable commit, not a new utterance
+                if self._commits_pending:
+                    self._commits_pending.popleft()
             elif isinstance(event, ScribeError):
                 if event.error_class is ErrorClass.FATAL:
                     self._fatal = event

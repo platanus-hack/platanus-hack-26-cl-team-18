@@ -27,7 +27,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from agent.backend_link import BackendLink
-from agent.vision.adapters import ArucoMarkerDetector, UltralyticsDetector
+from agent.vision.adapters import DEFAULT_OBJECT_MODEL, ArucoMarkerDetector, UltralyticsDetector
 from agent.vision.detector import (
     CompositeDetector,
     Detector,
@@ -217,7 +217,9 @@ def argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--start", type=float, default=0.0, help="record mode: clip offset (s)")
     parser.add_argument("--duration", type=float, default=None, help="record mode: seconds")
     parser.add_argument("--pose-model", default="yolo26n-pose.pt")
-    parser.add_argument("--object-model", default="yolo26s.pt", help="'' disables objects")
+    parser.add_argument(
+        "--object-model", default=DEFAULT_OBJECT_MODEL, help="YOLOE-26 weights; '' disables objects"
+    )
     parser.add_argument(
         "--object-every",
         type=int,
