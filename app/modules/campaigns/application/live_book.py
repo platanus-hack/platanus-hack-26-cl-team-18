@@ -75,12 +75,26 @@ class LiveCampaignBook:
 
     def charge(self, hold_key: str, campaign_id: CampaignId, amount: Money) -> Money:
         """Atomically cap a charge at the budget left and book it (settling the hold)."""
+        return self.charge_many(hold_key, {campaign_id: amount})[campaign_id]
+
+    def charge_many(
+        self, hold_key: str, amounts: dict[CampaignId, Money]
+    ) -> dict[CampaignId, Money]:
+        """Validate and book every basket member together, or leave all balances unchanged."""
         with self._lock:
-            entry = self._entry(campaign_id)
-            if entry.account is None:
-                return amount
-            booked = entry.account.capped_charge(hold_key, amount)
-            self._update(campaign_id, lambda account: account.settle(hold_key, booked))
+            booked: dict[CampaignId, Money] = {}
+            updated: dict[CampaignId, BudgetAccount] = {}
+            for campaign_id, amount in amounts.items():
+                entry = self._entry(campaign_id)
+                if amount.amount < 0:
+                    raise ValueError("Charges cannot be negative")
+                if entry.account is None:
+                    booked[campaign_id] = amount
+                else:
+                    capped = entry.account.capped_charge(hold_key, amount)
+                    booked[campaign_id] = capped
+                    updated[campaign_id] = entry.account.settle(hold_key, capped)
+            self._apply_accounts(updated)
             return booked
 
     def extend_hold(

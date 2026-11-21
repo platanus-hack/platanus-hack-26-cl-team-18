@@ -24,6 +24,8 @@ MAX_OFFERS_REMEMBERED = 2_000
 
 
 class RedemptionLedger(Protocol):
+    """Append idempotently by (code, nonce_hash), including ambiguous retries."""
+
     def append(self, redemption: Redemption) -> None: ...
 
 
@@ -34,6 +36,7 @@ class RedemptionDesk:
         self._lock = Lock()
         self._offers: dict[str, BasketOffer] = {}
         self._redeemed: dict[tuple[str, str], Redemption] = {}
+        self._pending: dict[tuple[str, str], Redemption] = {}
 
     def issue(
         self,
@@ -71,22 +74,28 @@ class RedemptionDesk:
         """Returns (redemption, created). The same device redeeming again is not a new sale."""
         key = (code.upper(), nonce_fingerprint(nonce))
         with self._lock:
-            offer = self._offers.get(key[0])
-            if offer is None:
-                raise UnknownRedemptionCode()
             if (existing := self._redeemed.get(key)) is not None:
                 return existing, False
-            if not offer.is_open(at):
-                raise ExpiredRedemptionCode()
-            redemption = Redemption(
-                redemption_id=RedemptionId.create(self._ids.new_uuid7()),
-                code=offer.code,
-                auction_id=offer.auction_id,
-                screen_id=offer.screen_id,
-                campaign_ids=offer.campaign_ids,
-                nonce_hash=key[1],
-                redeemed_at=at,
-            )
+            redemption = self._pending.get(key)
+            if redemption is None:
+                offer = self._offers.get(key[0])
+                if offer is None:
+                    raise UnknownRedemptionCode()
+                if not offer.is_open(at):
+                    raise ExpiredRedemptionCode()
+                redemption = Redemption(
+                    redemption_id=RedemptionId.create(self._ids.new_uuid7()),
+                    code=offer.code,
+                    auction_id=offer.auction_id,
+                    screen_id=offer.screen_id,
+                    campaign_ids=offer.campaign_ids,
+                    nonce_hash=key[1],
+                    redeemed_at=at,
+                )
+                self._pending[key] = redemption
+            # Keep the same record for a retry, even if append succeeded before
+            # raising. Never acknowledge a sale whose ledger append failed.
+            self._ledger.append(redemption)
             self._redeemed[key] = redemption
-        self._ledger.append(redemption)
+            del self._pending[key]
         return redemption, True

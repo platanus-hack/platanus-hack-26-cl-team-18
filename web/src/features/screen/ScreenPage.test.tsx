@@ -113,6 +113,28 @@ function visibleCopy() {
 }
 
 describe("screen display and voice lifecycle", () => {
+    it.each(["creative.ready", "creative.upgraded"] as const)(
+        "ignores %s for another screen even when the creative id matches",
+        async (type) => {
+            await show("our-ad", null);
+            const alien = message("our-ad", "/other-screen.mp3");
+            alien.screen_id = "other-screen";
+            alien.spec.slots[0]!.copy_text = "OTHER SCREEN OFFER";
+            await act(async () => {
+                harness.receive(
+                    type === "creative.ready" ? alien : { ...alien, type, upgrade_kind: "copy" },
+                );
+                await Promise.resolve();
+            });
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(250);
+            });
+            expect(visibleCopy()).toContain("our-ad");
+            expect(visibleCopy()).not.toContain("OTHER SCREEN OFFER");
+            expect(harness.prepare).not.toHaveBeenCalled();
+        },
+    );
+
     it("shows an ad before slow audio is ready, then plays its late voice", async () => {
         let resolve = () => {};
         const audio = {

@@ -109,6 +109,7 @@ class DeliveryDesk:
         self._lock = Lock()
         self._plays: dict[str, PlayRecord] = {}
         self._billed: dict[str, tuple[str, Receipt]] = {}
+        self._unwritten: set[str] = set()
         # Per creative, the end of the last billed window: a play second bills once.
         self._billed_until: dict[str, datetime] = {}
         self.attention = AttentionLog()
@@ -136,10 +137,17 @@ class DeliveryDesk:
         fingerprint = hashlib.sha256(
             f"{started_at.isoformat()}|{ended_at.isoformat()}".encode()
         ).hexdigest()
+        # Player clocks are untrusted. Never charge time the server has not
+        # observed, or let a future window suppress later legitimate reports.
+        ended_at = min(ended_at, recorded_at)
         with self._lock:
             if (seen := self._billed.get(key)) is not None:
                 if seen[0] != fingerprint:
                     raise ConflictingPlaybackReport()
+                if key in self._unwritten:
+                    self._ledger.append(seen[1].charges)
+                    self._unwritten.remove(key)
+                    return seen[1]
                 return None  # a retry: already billed once
             play = self._plays.get(creative_id)
             if play is None or play.screen_id != screen_id:
@@ -149,13 +157,20 @@ class DeliveryDesk:
             start = max(started_at, play.aired_at, self._billed_until.get(creative_id, started_at))
             if start >= ended_at:
                 return None
-            self._billed_until[creative_id] = ended_at
             attention = measure_attention(
                 self.attention.samples(screen_id), start=start, end=ended_at
             )
+            priced_slots = price_play(play.slots, attention.attention_seconds)
+            charge_ids = tuple(ChargeId.create(self._ids.new_uuid7()) for _ in priced_slots)
+            amounts = {priced.slot.campaign_id: priced.amount for priced in priced_slots}
+            booked_amounts = (
+                amounts
+                if self._budgets is None
+                else self._budgets.charge_many(creative_id, amounts)
+            )
             charges = tuple(
                 Charge(
-                    charge_id=ChargeId.create(self._ids.new_uuid7()),
+                    charge_id=charge_id,
                     dedupe_key=key,
                     auction_id=play.auction_id,
                     creative_id=creative_id,
@@ -170,8 +185,8 @@ class DeliveryDesk:
                     played_to=ended_at,
                     recorded_at=recorded_at,
                 )
-                for priced in price_play(play.slots, attention.attention_seconds)
-                for booked in (self._book(creative_id, priced.slot.campaign_id, priced.amount),)
+                for charge_id, priced in zip(charge_ids, priced_slots, strict=True)
+                for booked in (booked_amounts[priced.slot.campaign_id],)
             )
             played = ended_at - start
             receipt = Receipt(
@@ -181,12 +196,13 @@ class DeliveryDesk:
                 charges=charges,
             )
             self._billed[key] = (fingerprint, receipt)
+            self._billed_until[creative_id] = ended_at
+            self._unwritten.add(key)
+            self._ledger.append(charges)
+            self._unwritten.remove(key)
             while len(self._billed) > MAX_PLAYS_REMEMBERED * 4:
-                self._billed.pop(next(iter(self._billed)))
-        self._ledger.append(charges)
+                oldest = next((key for key in self._billed if key not in self._unwritten), None)
+                if oldest is None:
+                    break
+                self._billed.pop(oldest)
         return receipt
-
-    def _book(self, creative_id: str, campaign_id: CampaignId, amount: Money) -> Money:
-        if self._budgets is None:
-            return amount
-        return self._budgets.charge(creative_id, campaign_id, amount)

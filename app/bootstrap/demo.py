@@ -903,6 +903,11 @@ def register_demo(
             target = current_creative
             if target.creative_id != report.creative_id:
                 return  # a stale report for a creative already replaced
+            if target.trace.displayed_at is not None:
+                return  # reconnects and retries cannot restart a play's display hold
+            displayed_at = min(displayed_at, received.received_at)
+            if target.trace.ready_at is not None:
+                displayed_at = max(displayed_at, target.trace.ready_at)
             trace = target.trace.model_copy(update={"displayed_at": displayed_at})
             current_creative = target.model_copy(update={"trace": trace})
             desk.displayed(displayed_at)  # minimum ad seconds count from what people saw

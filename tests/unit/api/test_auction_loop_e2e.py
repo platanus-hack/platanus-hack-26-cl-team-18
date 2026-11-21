@@ -308,6 +308,9 @@ def played(loop: Loop, creative: CreativeReady, *, seconds: float) -> None:
     """The player reports a finished play window that started at ready_at."""
     assert creative.trace.ready_at is not None
     start = creative.trace.ready_at
+    end = start + timedelta(seconds=seconds)
+    if loop.clock.now_utc() < end:
+        loop.clock.set(end)
     loop.play_seq += 1
     loop.player.send_text(
         PlaybackReport(
@@ -315,7 +318,7 @@ def played(loop: Loop, creative: CreativeReady, *, seconds: float) -> None:
             creative_id=creative.creative_id,
             seq=loop.play_seq,
             started_at=start,
-            ended_at=start + timedelta(seconds=seconds),
+            ended_at=end,
         ).model_dump_json()
     )
 

@@ -46,6 +46,46 @@ safety, quality, latency and cost): `make eval-creative`, documented in
 [`creative-generation.md`](creative-generation.md) §4. It runs inside
 `make check` too (`tests/unit/creative/test_creative_eval.py`).
 
+### Adversarial product checks
+
+`tests/unit/api/test_product_adversarial_flow.py` exercises the real ASGI app
+and sockets. Six two-screen journeys permute bid changes, stock-outs and
+minor safety, then check reconnects, stale audience events, cross-screen
+playback rejection, duplicate billing, concurrent QR redemption, expiry and
+attribution to the original basket. Separate failure-injection cases verify
+same-socket billing retries, skewed player clocks and repeated display acks.
+
+`tests/unit/delivery/test_adversarial_recovery.py` injects failures before and
+after ledger append. Billing and redemption retain the original record for
+retry; append adapters deduplicate by their natural keys. A failed second
+brand charge leaves every budget unchanged. Playback is capped at the server
+receipt time, so future windows cannot bill unseen attention or suppress later
+reports. Pending redemption retries can finish after expiry when the original
+attempt was valid. These are in-process recovery guarantees.
+
+`tests/unit/delivery/test_attention_adversarial_properties.py` adds 350 generated
+examples. An independent half-second oracle checks crowd churn and the minimum
+look; overlapping windows and retries check attention conservation, exact
+agreement between budget spend and ledger charges, and budget caps. Player
+component tests reject both ready messages and upgrades for another screen,
+even when its creative id matches the visible ad.
+
+Run the focused checks with:
+
+```sh
+uv run pytest tests/unit/api/test_product_adversarial_flow.py tests/unit/delivery
+cd web && npm run test -- src/features/screen/ScreenPage.test.tsx
+```
+
+For broader evidence, run the full backend and web checks, `make edge-check`,
+`make test-sandbox`, the Postgres integration tests,
+`make eval ARGS="--soak 500"` and `uv run python -m evals pipeline --dwell 3`.
+The sandbox runs real backend and agent processes against a local provider
+stand-in; it does not validate a live paid provider or camera-to-TV latency.
+Process-crash recovery is also separate: the current write-behind queue and
+pending records are in memory, and a full queue can drop persisted writes.
+Passing these tests does not establish durable recovery across a restart.
+
 ## 2. The scorecard
 
 `make eval` writes `evals/results/latest.md` (also the CI job summary and an

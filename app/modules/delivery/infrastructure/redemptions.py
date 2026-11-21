@@ -20,15 +20,15 @@ ON CONFLICT ON CONSTRAINT redemption_once_per_device DO NOTHING
 class InMemoryRedemptionLedger:
     def __init__(self) -> None:
         self._lock = Lock()
-        self._rows: list[Redemption] = []
+        self._rows: dict[tuple[str, str], Redemption] = {}
 
     def append(self, redemption: Redemption) -> None:
         with self._lock:
-            self._rows.append(redemption)
+            self._rows.setdefault((redemption.code, redemption.nonce_hash), redemption)
 
     def redemptions(self) -> tuple[Redemption, ...]:
         with self._lock:
-            return tuple(self._rows)
+            return tuple(self._rows.values())
 
 
 class PostgresRedemptionLedger:

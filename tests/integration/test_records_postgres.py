@@ -76,6 +76,7 @@ def test_the_live_loop_records_auction_and_charge_rows(db, tmp_path: Path) -> No
         agent.send_text(snapshot_for("fitness", 1, t0).model_dump_json())
         creative = CreativeReady.model_validate(player.receive_json())
         assert creative.auction_id is not None
+        clock.advance(timedelta(seconds=4))
         player.send_text(
             PlaybackReport(
                 screen_id="demo-01",

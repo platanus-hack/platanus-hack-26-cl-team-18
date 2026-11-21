@@ -7,6 +7,8 @@ from app.modules.common.domain.value_objects.money import Money
 
 
 class BudgetGate(Protocol):
-    def charge(self, hold_key: str, campaign_id: CampaignId, amount: Money) -> Money:
-        """Book up to `amount` against the campaign (settling `hold_key`); return what was booked."""
+    def charge_many(
+        self, hold_key: str, amounts: dict[CampaignId, Money]
+    ) -> dict[CampaignId, Money]:
+        """Cap and book all basket charges atomically; return each amount actually booked."""
         ...

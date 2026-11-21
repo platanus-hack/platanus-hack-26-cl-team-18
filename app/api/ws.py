@@ -27,6 +27,7 @@ from app.contract.messages import (
     AudienceSnapshot,
     AudienceUtterance,
     ErrorMessage,
+    PlaybackReport,
     RecognitionSnapshot,
 )
 from app.realtime.mailbox import ConflatingMailbox
@@ -185,7 +186,11 @@ async def screen_socket(ws: WebSocket, screen_id: str) -> None:
                 )
                 continue
             received = Received(received_at=c.clock.now_utc())
-            if gate.admit((report.type, screen_id), report.seq):
+            # Billing owns report identity and conflicts. A transport
+            # high-water mark would discard a retry after a handler failure.
+            if isinstance(report, PlaybackReport) or gate.admit(
+                (report.type, screen_id), report.seq
+            ):
                 await c.router.dispatch(report, received)
     except WebSocketDisconnect:
         pass

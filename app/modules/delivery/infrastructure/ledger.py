@@ -5,6 +5,7 @@ from __future__ import annotations
 from threading import Lock
 from typing import Any
 
+from app.modules.campaigns.domain.book import CampaignId
 from app.modules.common.infrastructure.postgres.write_behind import WriteBehindWriter
 from app.modules.delivery.domain.charge import Charge
 
@@ -21,15 +22,16 @@ ON CONFLICT ON CONSTRAINT charge_dedupe_unique DO NOTHING
 class InMemoryChargeLedger:
     def __init__(self) -> None:
         self._lock = Lock()
-        self._charges: list[Charge] = []
+        self._charges: dict[tuple[str, CampaignId], Charge] = {}
 
     def append(self, charges: tuple[Charge, ...]) -> None:
         with self._lock:
-            self._charges.extend(charges)
+            for charge in charges:
+                self._charges.setdefault((charge.dedupe_key, charge.campaign_id), charge)
 
     def charges(self) -> tuple[Charge, ...]:
         with self._lock:
-            return tuple(self._charges)
+            return tuple(self._charges.values())
 
 
 class PostgresChargeLedger:
