@@ -36,10 +36,15 @@ def create_app(
                 built.recognition.prune(built.clock.now_utc())
 
         expiry_task = asyncio.create_task(expire_recognition())
+        startup_tasks: list[asyncio.Future[None]] = [
+            asyncio.ensure_future(hook()) for hook in built.startup
+        ]
         try:
             yield
         finally:
             expiry_task.cancel()
+            for task in startup_tasks:
+                task.cancel()
             try:
                 await expiry_task
             except asyncio.CancelledError:

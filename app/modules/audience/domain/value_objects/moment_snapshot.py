@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Self
 
+from app.modules.audience.domain.value_objects.evidence import HeldProduct
 from app.modules.audience.domain.value_objects.ids import MomentId
 from app.modules.audience.domain.value_objects.segment import SegmentEstimate
 from app.modules.common.domain.primitives.value_object import ValueObject
@@ -23,6 +24,7 @@ class AudienceMomentSnapshot(ValueObject):
     looking: int
     segments: tuple[SegmentEstimate, ...]
     minor_likely: bool
+    held_products: tuple[HeldProduct, ...] = ()
 
     def __post_init__(self) -> None:
         self._enforce_types()
@@ -40,6 +42,7 @@ class AudienceMomentSnapshot(ValueObject):
         looking: int,
         segments: tuple[SegmentEstimate, ...],
         minor_likely: bool,
+        held_products: tuple[HeldProduct, ...] = (),
     ) -> Self:
         return cls(
             screen_id=screen_id,
@@ -51,6 +54,7 @@ class AudienceMomentSnapshot(ValueObject):
             looking=looking,
             segments=segments,
             minor_likely=minor_likely,
+            held_products=held_products,
         )
 
     def _enforce_types(self) -> None:
@@ -77,3 +81,7 @@ class AudienceMomentSnapshot(ValueObject):
             raise ValueError("segment viewer counts cannot exceed looking")
         if len({segment.segment_id for segment in self.segments}) != len(self.segments):
             raise ValueError("segment IDs must be unique within a moment")
+        if not isinstance(self.held_products, tuple) or any(
+            not isinstance(product, HeldProduct) for product in self.held_products
+        ):
+            raise TypeError("held_products must be a tuple of HeldProduct values")

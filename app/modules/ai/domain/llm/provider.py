@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Self
+from typing import Literal, Self
 
 from app.modules.ai.domain.errors import (
     InvalidInferenceParams,
@@ -12,23 +12,61 @@ from app.modules.ai.domain.errors import (
 from app.modules.ai.domain.llm.enums import ProviderRole
 from app.modules.common.domain.primitives.value_object import ValueObject
 
+ImageMediaType = Literal["image/jpeg", "image/png", "image/webp", "image/gif"]
+_IMAGE_MEDIA_TYPES = frozenset({"image/jpeg", "image/png", "image/webp", "image/gif"})
+MAX_IMAGE_BYTES = 2_000_000
+
+
+@dataclass(frozen=True, slots=True)
+class ImageContent(ValueObject):
+    """An image sent with a user message. Bytes stay in memory: never log them."""
+
+    media_type: ImageMediaType
+    data: bytes
+
+    @classmethod
+    def create(cls, *, media_type: ImageMediaType, data: bytes) -> Self:
+        image = cls(media_type=media_type, data=data)
+        image._enforce_types()
+        return image
+
+    def _enforce_types(self) -> None:
+        if self.media_type not in _IMAGE_MEDIA_TYPES:
+            raise InvalidProviderMessageContent()
+        if not isinstance(self.data, bytes) or not 0 < len(self.data) <= MAX_IMAGE_BYTES:
+            raise InvalidProviderMessageContent()
+
+    def __repr__(self) -> str:  # keep image bytes out of logs and tracebacks
+        return f"ImageContent(media_type={self.media_type!r}, bytes={len(self.data)})"
+
 
 @dataclass(frozen=True, slots=True)
 class ProviderMessage(ValueObject):
     role: ProviderRole
     content: str
-    image_jpeg: bytes | None = field(default=None, repr=False)
+    # Out of repr: even the image metadata stays out of logs and tracebacks.
+    images: tuple[ImageContent, ...] = field(default=(), repr=False)
 
     @classmethod
     def create(
-        cls, role: ProviderRole | str, content: str, *, image_jpeg: bytes | None = None
+        cls,
+        role: ProviderRole | str,
+        content: str,
+        images: tuple[ImageContent, ...] = (),
+        *,
+        image_jpeg: bytes | None = None,
     ) -> Self:
+        """`image_jpeg` is shorthand for one JPEG appended to `images`."""
         try:
             normalized_role = ProviderRole(role)
         except Exception as exc:
             raise InvalidProviderMessageRole(role=role) from exc
 
-        msg = cls(role=normalized_role, content=content, image_jpeg=image_jpeg)
+        if image_jpeg is not None:
+            if not isinstance(images, tuple):
+                raise InvalidProviderMessageContent()
+            images = (*images, ImageContent.create(media_type="image/jpeg", data=image_jpeg))
+        msg = cls(role=normalized_role, content=content, images=images)
         msg._enforce_types()
         return msg
 
@@ -37,11 +75,11 @@ class ProviderMessage(ValueObject):
             raise InvalidProviderMessageRole(role=self.role)
         if not isinstance(self.content, str):
             raise InvalidProviderMessageContent()
-        if self.image_jpeg is not None and (
-            self.role is not ProviderRole.USER
-            or not isinstance(self.image_jpeg, bytes)
-            or not 0 < len(self.image_jpeg) <= 2_000_000
+        if not isinstance(self.images, tuple) or any(
+            not isinstance(image, ImageContent) for image in self.images
         ):
+            raise InvalidProviderMessageContent()
+        if self.images and self.role is not ProviderRole.USER:
             raise InvalidProviderMessageContent()
 
 

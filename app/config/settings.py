@@ -63,6 +63,10 @@ class AppSettings(BaseSettings):
     # Hard cap on TTS characters this install may ever spend (persisted across restarts).
     # The account has ~10k credits: leave headroom for rehearsal and live tests.
     elevenlabs_char_budget: int = Field(default=2000, ge=0)
+    # Synthesize every approved offer line at startup (cold path) so plays are cache hits.
+    # Off by default because it spends credits (~281 for the demo's 7 lines, once; then
+    # cached on disk). Start once with VOICEOVER_PREWARM=true before a rehearsal.
+    voiceover_prewarm: bool = False
     # Outside media_dir on purpose: /media is publicly served.
     elevenlabs_budget_file: Path = Path("var/elevenlabs-budget.json")
     # ------------------------------------------------------------ creative (docs/creative-generation.md)

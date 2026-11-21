@@ -103,7 +103,7 @@ def main() -> int:
     parser.add_argument("--wav", type=Path, help="replay a 16 kHz mono WAV instead of the mic")
     parser.add_argument("--device", default=None, help="sounddevice input device")
     parser.add_argument("--silero-model", type=Path, default=None)
-    parser.add_argument("--model", default="scribe_v2_realtime")
+    parser.add_argument("--model", default="scribe_v3_live")
     parser.add_argument(
         "--scribe-url", default=None, help="override (sandbox); env ELEVENLABS_STT_URL"
     )
