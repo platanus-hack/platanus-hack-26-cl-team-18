@@ -190,13 +190,18 @@ export function ScreenPage() {
                 return (
                     <div
                         key={layer}
-                        className="absolute inset-0 transition-opacity ease-out"
+                        className="absolute inset-0"
                         style={{
-                            transitionDuration: "var(--duration-crossfade)",
                             opacity: isFront || fadingIn ? 1 : 0,
+                            // Runs from 0 on every swap, however fast the preload was.
+                            animation: fadingIn
+                                ? "player-crossfade-in var(--duration-crossfade) ease-out both"
+                                : undefined,
                             zIndex: isFront ? "var(--z-back-layer)" : "var(--z-front-layer)",
                         }}
                         aria-hidden={!isFront}
+                        // Test hook: which creative this layer holds (evals/browser.py).
+                        data-creative-id={creative.creativeId}
                     >
                         <CreativeView
                             spec={creative.spec}

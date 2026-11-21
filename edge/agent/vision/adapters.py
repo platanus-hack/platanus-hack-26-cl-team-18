@@ -57,6 +57,7 @@ class UltralyticsDetector:
         self._device = device
         self._frame_index = 0
         self._last_objects: tuple[ObjectDetection, ...] = ()
+        self._object_shape: tuple[int, int] | None = None
         self.name = name
 
     def warmup(self) -> None:
@@ -69,6 +70,7 @@ class UltralyticsDetector:
         # Warmup must not seed object facts or alter the first live scan deadline.
         self._last_objects = ()
         self._objects_at = None
+        self._object_shape = None
         self._frame_index = 0
         self._set_cpu_threads()
 
@@ -97,12 +99,14 @@ class UltralyticsDetector:
             if self._object_interval is not None
             else self._frame_index % self._object_every == 0
         )
+        due = due or self._object_shape != (height, width)
         if self._objects is not None and due:
             result = self._objects.predict(
                 frame, imgsz=self._imgsz, conf=self._conf, device=self._device, verbose=False
             )[0]
             self._last_objects = tuple(_objects(result))
             self._objects_at = measured_at
+            self._object_shape = (height, width)
         self._set_cpu_threads()
         self._frame_index += 1
         return FrameDetections(

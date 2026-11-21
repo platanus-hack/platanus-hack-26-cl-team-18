@@ -144,4 +144,5 @@ class CompositeDetector:
             markers=found.markers,
             detector=self.active,
             inference_ms=result.inference_ms + found.inference_ms,
+            extras=result.extras,
         )

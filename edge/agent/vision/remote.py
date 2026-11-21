@@ -26,6 +26,7 @@ from __future__ import annotations
 import inspect
 import json
 import logging
+import math
 import socket
 import struct
 import time
@@ -107,6 +108,7 @@ class RemoteGpuDetector:
         self._seq = 0
         self._since_objects: int | None = None  # successful frames since the last object run
         self._last_objects: tuple[ObjectDetection, ...] = ()
+        self._object_shape: tuple[int, int] | None = None
         self.sent = 0
         self.dropped = 0
         self.late = 0
@@ -147,6 +149,7 @@ class RemoteGpuDetector:
             if self._object_interval is not None
             else self._since_objects is None or self._since_objects >= self._object_every - 1
         )
+        want_objects = want_objects or self._object_shape != (height, width)
         header = {
             "seq": seq,
             "measured_at": measured_at.isoformat(),
@@ -166,11 +169,22 @@ class RemoteGpuDetector:
         returned = time.perf_counter()
 
         sx, sy = width / sent_w, height / sent_h
-        persons = tuple(_person(p, sx, sy) for p in reply.get("persons", []))
+        try:
+            if not isinstance(reply["persons"], list) or not isinstance(reply["objects"], list):
+                raise ValueError("detection lists required")
+            persons = tuple(_person(p, sx, sy) for p in reply["persons"])
+            objects = tuple(_object(o, sx, sy) for o in reply["objects"])
+            server_ms = _number(reply.get("server_ms", 0.0), minimum=0)
+            model_ms = _number(reply.get("model_ms", 0.0), minimum=0)
+        except (KeyError, TypeError, ValueError, OverflowError) as exc:
+            self._reset()
+            # Provider payloads never enter logs or exception messages.
+            raise DetectorUnavailable("invalid GPU detection reply") from exc
         if want_objects:
-            self._last_objects = tuple(_object(o, sx, sy) for o in reply.get("objects", []))
+            self._last_objects = objects
             self._since_objects = 0
             self._objects_at = measured_at
+            self._object_shape = (height, width)
         else:
             self._since_objects = (self._since_objects or 0) + 1
         return FrameDetections(
@@ -183,8 +197,8 @@ class RemoteGpuDetector:
             inference_ms=(returned - started) * 1000,
             extras={
                 "round_trip_ms": (returned - sent_at) * 1000,
-                "server_ms": float(reply.get("server_ms", 0.0)),
-                "model_ms": float(reply.get("model_ms", 0.0)),
+                "server_ms": server_ms,
+                "model_ms": model_ms,
                 "encode_ms": (encoded - started) * 1000,
                 "jpeg_kb": len(jpeg) / 1024,
             },
@@ -224,6 +238,10 @@ class RemoteGpuDetector:
     def _reset(self) -> None:
         ws, self._ws = self._ws, None
         self._in_flight.clear()
+        self._last_objects = ()
+        self._since_objects = None
+        self._objects_at = None
+        self._object_shape = None
         if ws is not None:
             try:
                 ws.close()
@@ -282,21 +300,31 @@ class RemoteGpuDetector:
 
 
 def _box(raw: list[float], sx: float, sy: float) -> Box:
-    x1, y1, x2, y2 = (float(v) for v in raw)
+    x1, y1, x2, y2 = (_number(v) for v in raw)
     return Box(x1 * sx, y1 * sy, x2 * sx, y2 * sy)
 
 
 def _person(raw: dict[str, Any], sx: float, sy: float) -> PersonDetection:
     return PersonDetection(
         box=_box(raw["box"], sx, sy),
-        score=float(raw["confidence"]),
+        score=_number(raw["confidence"], minimum=0, maximum=1),
         keypoints=tuple(
-            Keypoint(float(x) * sx, float(y) * sy, float(c)) for x, y, c in raw.get("keypoints", [])
+            Keypoint(_number(x) * sx, _number(y) * sy, _number(c, minimum=0, maximum=1))
+            for x, y, c in raw.get("keypoints", [])
         ),
     )
 
 
 def _object(raw: dict[str, Any], sx: float, sy: float) -> ObjectDetection:
     return ObjectDetection(
-        label=str(raw["label"]), score=float(raw["confidence"]), box=_box(raw["box"], sx, sy)
+        label=str(raw["label"]),
+        score=_number(raw["confidence"], minimum=0, maximum=1),
+        box=_box(raw["box"], sx, sy),
     )
+
+
+def _number(value: Any, *, minimum: float = -math.inf, maximum: float = math.inf) -> float:
+    number = float(value)
+    if not math.isfinite(number) or not minimum <= number <= maximum:
+        raise ValueError("invalid detection number")
+    return number

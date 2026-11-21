@@ -379,15 +379,65 @@ oracles and latency as CI, plus flicker. Compare rehearsals 1 to 5 to see
 whether the demo is getting tighter. The same numbers can close the pitch
 ("during this pitch: 14 moments, 9 baskets…", `docs/demo.md` §7).
 
+### 5.1 Glass-to-glass in a real browser
+
+```sh
+uv run --with playwright playwright install chromium   # once
+make eval-browser                                      # ARGS="--moments 30 --reuse-build"
+```
+
+`evals/browser.py` builds the production web bundle into the gitignored
+results directory, serves it with `vite preview` (proxying `/ws`, `/media`
+and `/api` to a fresh eval backend), and opens the real `/screen` page in
+Chromium at 1920×1080 with GPU rasterization. The eval plays the agent:
+a snapshot stamped `measured_at = now`, then it watches the pixels.
+
+A probe injected before the app loads measures the page independently of the
+player: WebSocket arrival of `creative.ready`, the first animation frame in
+which the new creative is visibly composited, and the first frame it is fully
+visible. It reads each layer through its `data-creative-id` hook and
+multiplies layer opacity by creative opacity. It also counts frames where no
+layer fully covers the screen, frame rate and frame gaps. The player's own
+`player.displayed` (via `console.latency`) is checked against the probe, so
+the number the console shows is verified. Each fully visible ad is
+screenshotted to `evals/results/browser/shots/`.
+
+**Gates:** snapshot → fully visible p50 < 1.5 s and p95 < 500 ms (the
+screen-side budget), the player's `displayed_at` within 50 ms of the pixels
+(p95), 0 uncovered frames, 0 creatives never shown, and **0 hard cuts** (a
+swap fully visible in under 100 ms skipped the crossfade).
+
+**Loop (2026-11-21):**
+
+1. *The 250 ms crossfade was a race (fixed).* The incoming layer mounted at
+   opacity 0 and turned 1 in the same frame whenever its logos were already
+   decoded. A CSS transition needs a painted starting value, so about half
+   the swaps were hard cuts (19 of 21 in one run). The player's
+   `displayed_at`, fired by a 250 ms timer, was then about 250 ms later than
+   the pixels. The fix plays the fade as a keyframe animation (`player-crossfade-in`
+   in `global.css`, applied in `ScreenPage.tsx`), which always starts from 0.
+   Result: 21/21 swaps fade, the report sits within 16 ms of the pixels, and
+   snapshot → fully visible is p50 ~260 ms / p95 ~300 ms (first pixels ~45 ms).
+   Reverting the fix reproduces the failure (19 hard cuts, 248 ms report gap).
+2. *Heavier campaign creatives (open).* After the campaign studio
+   creatives landed (full-screen photo, two `color-mix` gradient overlays, a
+   size container query), first pixels went from ~47 ms to ~93 ms. In the
+   CPU-only headless shell the frame rate halved and the gates failed. No
+   single element is the cause: hiding each one recovers only a few fps.
+   With GPU rasterization (now the default) every gate passes at ~50 fps,
+   with 35 frame gaps over 50 ms per run.
+
+The screen side is now ~0.3 s. True glass-to-glass adds perception (camera
+frame → snapshot: YOLO ~115–200 ms per frame on CPU in the video eval, much
+less on the GPU service, plus the 500 ms debounce). That puts the estimate
+near 1 s p50, inside the 1.5 s target.
+
 ## 6. Next, by value for the demo
 
-1. **Glass-to-glass from the real player.** The backend books
-   `displayed_at = ready_at` (`demo.py`), so the headline latency claim is
-   unmeasured. `playback.report.started_at` already carries the player's
-   real display time. Next: drive the actual web player in headless Chromium
-   (Playwright's Chromium is cached on the dev laptop) from the pipeline
-   journey, and gate `measured_at → started_at` p50 < 1.5 s / p95 < 2.5 s,
-   including image decode and the 250 ms crossfade.
+1. **Run `make eval-browser` on the demo laptop** (§5.1), whose GPU and
+   Chromium are what judges see. Then cut the first-pixel time of the
+   campaign creatives (93 ms against 47 ms before them; 35 frame gaps over
+   50 ms per run) before it eats the crossfade.
 2. **Spend that never airs.** Count LLM/TTS calls whose result was dropped
    as stale, per journey, and gate it in demo mode. Feed it into the ROI
    planner, e.g. skip copy upgrades when expected dwell < p50 copy latency.

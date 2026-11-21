@@ -146,6 +146,19 @@ body {
     }
 }
 
+/* Player: the incoming layer's crossfade. A keyframe animation, not a transition: a
+   transition needs a painted starting value, and when the assets are already decoded
+   the layer mounts at opacity 0 and turns 1 in the same frame, so it popped in
+   (measured in Chromium by evals/browser.py). Keyframes always start from 0. */
+@keyframes player-crossfade-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
 /* Player: each dwell stage's line enters with a short rise (CSS only, docs/stack.md §6). */
 @keyframes stage-in {
     from {

@@ -275,3 +275,34 @@ def test_fake_model_reads_canned_detections(tmp_path: Path) -> None:
     path.write_text(json.dumps(canned))
     out = FakeModel.from_file(str(path)).infer(np.zeros((10, 10, 3), dtype=np.uint8))
     assert out.persons == canned["persons"] and out.objects == []
+
+
+def test_busy_gpu_rejects_other_clients_without_queuing_frames() -> None:
+    import threading
+
+    started, release = threading.Event(), threading.Event()
+
+    class BlockingModel:
+        name = "blocking"
+
+        def infer(self, image: np.ndarray, *, objects: bool = True) -> Inference:
+            started.set()
+            assert release.wait(timeout=5)
+            return Inference()
+
+    with (
+        TestClient(create_app(BlockingModel(), token="")) as c,
+        c.websocket_connect("/infer") as first,
+        c.websocket_connect("/infer") as second,
+    ):
+        first.send_bytes(frame(1))
+        assert started.wait(timeout=2)
+        try:
+            second.send_bytes(frame(2))
+            busy = json.loads(second.receive_text())
+        finally:
+            release.set()
+        assert busy == {"seq": 2, "error": "inference busy; frame dropped"}
+        assert json.loads(first.receive_text())["seq"] == 1
+        second.send_bytes(frame(3))
+        assert "error" not in json.loads(second.receive_text())
