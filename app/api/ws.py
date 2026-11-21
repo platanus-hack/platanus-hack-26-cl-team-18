@@ -222,9 +222,10 @@ async def agent_socket(ws: WebSocket) -> None:
                     pending_keyframe = message  # bytes follow; the gate applies to them
                     continue
                 if isinstance(message, DevPerception):
-                    # Debug geometry for `/dev` only: relayed as is, never routed or stored.
-                    if c.settings.dev_console_enabled and c.live.sensing(message.screen_id):
-                        await c.hub.broadcast_dev(message)
+                    # Anonymous boxes only (no image): relayed to the station console's
+                    # camera panel and `/dev`, never routed or stored. Works in prod too.
+                    if c.live.sensing(message.screen_id):
+                        await c.hub.broadcast_perception(message)
                     continue
                 if not _admitted_live(c, message):
                     c.live.dropped += 1

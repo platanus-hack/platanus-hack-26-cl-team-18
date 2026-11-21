@@ -1,11 +1,5 @@
-import {
-    ConsoleOutboundSchema,
-    DevOutboundSchema,
-    type ConsoleOutbound,
-    type DevOutbound,
-} from "@/contract";
+import { ConsoleOutboundSchema, type ConsoleOutbound } from "@/contract";
 import { backendWsUrl } from "@/lib/config";
-import { demoKey, rememberedDemoKey } from "@/lib/demo";
 import { createStore, useStore } from "@/lib/store";
 import { TypedSocket } from "@/lib/ws/typed-socket";
 import { Badge } from "@/shared/ui/badge";
@@ -19,13 +13,11 @@ import { SessionPanel, Timeline } from "./station-panels";
 import { StationBar } from "./StationBar";
 
 const SCREEN_ID = /^[A-Za-z0-9_.:-]{1,64}$/;
-// dev.keyframe frames can be large; this socket only reads the detection boxes.
-const DEV_MAX_FRAME_BYTES = 3_000_000;
 
 /**
  * The station's home: what the camera sees and why, what people see and what is
- * next, the auction, then the session. Two sockets: the console stream, and (with
- * the demo key) the dev stream for the camera's detection boxes.
+ * next, the auction, then the session. One socket: the console stream, which also
+ * carries the camera's anonymous detection boxes (`dev.perception`, no image).
  */
 export function ConsolePage() {
     const [store] = useState(() => createStore(consoleReducer, initialConsoleState));
@@ -36,35 +28,24 @@ export function ConsolePage() {
                 url: `${backendWsUrl}/ws/console?live=1`,
                 schema: ConsoleOutboundSchema,
                 onMessage: (message) => {
-                    store.dispatch({ type: "message", message, at: Date.now() });
+                    const at = Date.now();
+                    store.dispatch(
+                        message.type === "dev.perception"
+                            ? { type: "perception", message, at }
+                            : { type: "message", message, at },
+                    );
                 },
                 onStateChange: (state) => {
                     store.dispatch({ type: "connection", state });
                 },
             }),
     );
-    const [camera] = useState(() => {
-        const key = demoKey() ?? rememberedDemoKey();
-        if (key === null) return null;
-        return new TypedSocket<DevOutbound>({
-            url: `${backendWsUrl}/ws/dev?key=${encodeURIComponent(key)}`,
-            schema: DevOutboundSchema,
-            maxFrameBytes: DEV_MAX_FRAME_BYTES,
-            onMessage: (message) => {
-                if (message.type === "dev.perception") {
-                    store.dispatch({ type: "perception", message, at: Date.now() });
-                }
-            },
-        });
-    });
     useEffect(() => {
         socket.start();
-        camera?.start();
         return () => {
             socket.stop();
-            camera?.stop();
         };
-    }, [socket, camera]);
+    }, [socket]);
 
     const connection = useStore(store, (s) => s.connection);
     const screens = useStore(store, (s) => s.screens);

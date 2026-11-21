@@ -913,7 +913,7 @@ export type PlayerInbound = z.infer<typeof PlayerInboundSchema>;
 export const PlayerOutboundSchema = z.discriminatedUnion("type", [CreativeReadySchema, CreativeUpgradedSchema, ErrorMessageSchema, ScreenAttentionSchema, LiveStatusSchema]);
 export type PlayerOutbound = z.infer<typeof PlayerOutboundSchema>;
 
-export const ConsoleOutboundSchema = z.discriminatedUnion("type", [ConsoleMomentSchema, ConsoleAuctionSchema, ConsoleLatencySchema, ConsoleDegradationSchema, CreativeReadySchema, CreativeUpgradedSchema, ErrorMessageSchema, ConsoleBookSchema, ConsoleReceiptSchema, ConsoleRedemptionSchema, LiveStatusSchema, ConsoleNextSchema]);
+export const ConsoleOutboundSchema = z.discriminatedUnion("type", [ConsoleMomentSchema, ConsoleAuctionSchema, ConsoleLatencySchema, ConsoleDegradationSchema, CreativeReadySchema, CreativeUpgradedSchema, ErrorMessageSchema, ConsoleBookSchema, ConsoleReceiptSchema, ConsoleRedemptionSchema, LiveStatusSchema, ConsoleNextSchema, DevPerceptionSchema]);
 export type ConsoleOutbound = z.infer<typeof ConsoleOutboundSchema>;
 
 export const DevOutboundSchema = z.discriminatedUnion("type", [ConsoleMomentSchema, ConsoleAuctionSchema, ConsoleLatencySchema, ConsoleDegradationSchema, CreativeReadySchema, CreativeUpgradedSchema, ErrorMessageSchema, ConsoleBookSchema, ConsoleReceiptSchema, ConsoleRedemptionSchema, LiveStatusSchema, ConsoleNextSchema, DevPerceptionSchema, DevVlmSchema, DevSpeechSchema, DevJobSchema, DevCreativeSchema, DevPlayerSchema, DevKeyframeSchema]);

@@ -979,7 +979,8 @@ ConsoleOutbound = Annotated[
     | ConsoleReceipt
     | ConsoleRedemption
     | LiveStatus
-    | ConsoleNext,
+    | ConsoleNext
+    | DevPerception,
     Field(discriminator="type"),
 ]
 DevMessage = DevPerception | DevVlm | DevSpeech | DevJob | DevCreative | DevPlayer | DevKeyframe
@@ -1034,6 +1035,7 @@ CONSOLE_OUTBOUND: TypeAdapter[
     | ConsoleRedemption
     | LiveStatus
     | ConsoleNext
+    | DevPerception
 ] = TypeAdapter(ConsoleOutbound)
 
 AnyMessage = (
@@ -1183,6 +1185,7 @@ SOCKET_UNIONS: dict[str, tuple[type[_Message], ...]] = {
         ConsoleRedemption,
         LiveStatus,
         ConsoleNext,
+        DevPerception,
     ),
     "DevOutbound": (
         ConsoleMoment,

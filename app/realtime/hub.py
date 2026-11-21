@@ -34,6 +34,7 @@ from app.contract.messages import (
     CreativeReady,
     CreativeUpgraded,
     DevMessage,
+    DevPerception,
     ErrorMessage,
     LiveStatus,
     ScreenAttention,
@@ -202,6 +203,13 @@ class ConnectionHub:
         if not recipients:
             return
         await self._fan_out(recipients, tuple(message.model_dump_json() for message in messages))
+
+    async def broadcast_perception(self, message: DevPerception) -> None:
+        """The camera's anonymous boxes (no image) to station consoles and `/dev`."""
+        recipients = (self._consoles & self._live) | self._devs
+        if not recipients:
+            return
+        await self._fan_out(recipients, (message.model_dump_json(),))
 
     def has_station_consoles(self) -> bool:
         """Emitters check this first: station extras cost nothing when nobody watches."""

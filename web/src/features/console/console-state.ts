@@ -43,7 +43,7 @@ export interface ScreenView {
     readonly events: readonly StationEvent[];
     /** The creative waiting out the on-air one's minimum time (a held swap). */
     readonly next: ConsoleNext | null;
-    /** The camera's latest detections (from /ws/dev, demo key only) and when they came. */
+    /** The camera's latest detections (boxes only, from the console socket) and when they came. */
     readonly perception: { readonly message: DevPerception; readonly at: number } | null;
 }
 
@@ -223,5 +223,7 @@ export function consoleReducer(state: ConsoleState, event: ConsoleEvent): Consol
             return { ...state, lastError: `${m.code}: ${m.message}` };
         case "live.status":
             return state; // the live switch is shown by LiveInputStatus, which polls /health
+        case "dev.perception":
+            return update(state, m.screen_id, (v) => ({ ...v, perception: { message: m, at } }));
     }
 }

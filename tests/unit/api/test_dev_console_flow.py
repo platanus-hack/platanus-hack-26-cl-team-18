@@ -88,3 +88,29 @@ def test_dev_sees_perception_decision_build_and_display(tmp_path) -> None:
         )
         shown = _until(dev, "dev.player")
         assert (shown["event"], shown["creative_id"]) == ("displayed", built.creative_id)
+
+
+def test_station_console_gets_camera_boxes_without_dev_or_key(tmp_path) -> None:
+    """The console's camera panel works where `/dev` is off (prod): boxes only, no key."""
+    clock = FixedClock(T0)
+    settings = AppSettings(app_env="test", dev_console=False, media_dir=tmp_path)
+    container = build_container(settings, clock=clock)
+    with (
+        TestClient(create_app(container=container)) as client,
+        client.websocket_connect("/ws/console?live=1") as console,
+        client.websocket_connect("/ws/agent") as agent,
+    ):
+        agent.send_text(
+            DevPerception(
+                screen_id="demo-01",
+                seq=1,
+                measured_at=clock.now_utc(),
+                frame_w=1280,
+                frame_h=720,
+                detector="local",
+                inference_ms=9.0,
+                raw_people=1,
+            ).model_dump_json()
+        )
+        perception = _until(console, "dev.perception")
+        assert perception["detector"] == "local"
