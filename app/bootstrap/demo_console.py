@@ -8,6 +8,7 @@ from app.contract.messages import (
     ConsoleAuction,
     ConsoleLatency,
     ConsoleMoment,
+    CreativeOffer,
     Exclusion,
     ExclusionReason,
     HeldProductScore,
@@ -47,6 +48,7 @@ def decision_messages(
     creative_id: str | None,
     trigger: str,
     swap: str,
+    offer: CreativeOffer | None = None,
 ) -> tuple[ConsoleMoment, ConsoleAuction] | tuple[ConsoleMoment, ConsoleAuction, ConsoleLatency]:
     screen_id = snapshot.screen_id
     by_campaign = {bidder.campaign_id: bidder for bidder in bidders}
@@ -144,6 +146,7 @@ def decision_messages(
                 )
                 for winner in result.winners
             ],
+            offer=offer,
             bundle_value=_money(result.bundle_value),
             single_brand_value=_money(result.single_brand_value),
             coverage=float(result.coverage),

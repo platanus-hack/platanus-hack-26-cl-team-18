@@ -134,21 +134,13 @@ export function CreativeView({
                             {stage.copy_text}
                         </p>
                         <div className="creative-action">
-                            {stage.name === "offer" && spec.offer && (
-                                <span
-                                    className="creative-price"
-                                    style={{
-                                        background:
-                                            spec.slots[0]?.accent_color ?? "var(--color-accent)",
-                                    }}
-                                >
-                                    {spec.offer.party_size > 1
-                                        ? `Para ${spec.offer.party_size} · `
-                                        : ""}
-                                    ${Number(spec.offer.price.amount).toLocaleString("es-CL")}
-                                </span>
+                            {stage.name === "offer" && <OfferPrice spec={spec} />}
+                            {stage.name === "close" && (
+                                <CloseCall
+                                    spec={spec}
+                                    mentionsValidity={stage.copy_text.includes("válido 10 min")}
+                                />
                             )}
-                            {stage.name === "close" && <CloseCall spec={spec} />}
                         </div>
                     </div>
                     <div className="creative-footer">
@@ -163,8 +155,22 @@ export function CreativeView({
     );
 }
 
+function OfferPrice({ spec }: { spec: CreativeSpec }) {
+    const offer = spec.offer;
+    if (offer === null) return null;
+    return (
+        <span
+            className="creative-price"
+            style={{ background: spec.slots[0]?.accent_color ?? "var(--color-accent)" }}
+        >
+            {offer.party_size > 1 ? `Para ${offer.party_size} · ` : ""}$
+            {Number(offer.price.amount).toLocaleString("es-CL")}
+        </span>
+    );
+}
+
 /** The close stage: a scannable QR (about 1.5 m on a TV) with its code, or text only. */
-function CloseCall({ spec }: { spec: CreativeSpec }) {
+function CloseCall({ spec, mentionsValidity }: { spec: CreativeSpec; mentionsValidity: boolean }) {
     if (spec.qr_url === null) {
         return <span className="creative-close-note">El QR se emite al activar la campaña.</span>;
     }
@@ -179,10 +185,11 @@ function CloseCall({ spec }: { spec: CreativeSpec }) {
                 />
             </div>
             <div className="flex flex-col items-start gap-2 text-left">
+                <OfferPrice spec={spec} />
                 {spec.redemption_code && (
                     <span className="creative-code">{spec.redemption_code}</span>
                 )}
-                <span className="creative-close-note">válido 10 min</span>
+                {!mentionsValidity && <span className="creative-close-note">válido 10 min</span>}
             </div>
         </div>
     );

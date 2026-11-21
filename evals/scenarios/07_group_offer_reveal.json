@@ -1,0 +1,98 @@
+{
+  "name": "group-offer-reveal",
+  "beat": "The third viewer changes the price, then the cup changes the pitch",
+  "description": "The basket keeps both brands as the party grows and as a Café Patio cup is picked up. Cup confidence keeps the seeded solo counterfactual comparable to the original basket scenario.",
+  "steps": [
+    {
+      "scene": {
+        "people": 2,
+        "objects": [
+          {
+            "label": "bottle",
+            "score": 1
+          },
+          {
+            "label": "cup",
+            "score": 0.65
+          },
+          {
+            "label": "cup",
+            "score": 0.65
+          }
+        ]
+      },
+      "expect": {
+        "brands": [
+          "Voltio",
+          "Café Patio"
+        ],
+        "copy_contains": "$5.990",
+        "min_coverage": 1
+      }
+    },
+    {
+      "scene": {
+        "people": 3,
+        "objects": [
+          {
+            "label": "bottle",
+            "score": 1
+          },
+          {
+            "label": "cup",
+            "score": 0.65
+          },
+          {
+            "label": "cup",
+            "score": 0.65
+          }
+        ]
+      },
+      "expect": {
+        "brands": [
+          "Voltio",
+          "Café Patio"
+        ],
+        "copy_contains": "$8.490",
+        "min_coverage": 1
+      }
+    },
+    {
+      "scene": {
+        "people": 3,
+        "objects": [
+          {
+            "label": "bottle",
+            "score": 1
+          },
+          {
+            "label": "cup",
+            "score": 0.65
+          },
+          {
+            "label": "cup",
+            "score": 0.65
+          },
+          {
+            "label": "product:cafe-patio",
+            "score": 0.95
+          }
+        ]
+      },
+      "expect": {
+        "brands": [
+          "Voltio",
+          "Café Patio"
+        ],
+        "copy_contains": "Tu Café Patio pide Voltio",
+        "min_coverage": 1
+      }
+    },
+    {
+      "scene": "empty",
+      "expect": {
+        "brands": []
+      }
+    }
+  ]
+}

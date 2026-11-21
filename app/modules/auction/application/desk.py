@@ -7,6 +7,7 @@ wiring holds its lock). Time is passed in, so tests drive it with a fake clock.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import datetime
 
@@ -54,7 +55,14 @@ class AuctionDesk:
     def on_air(self) -> OnAir | None:
         return self._on_air
 
-    def run(self, opportunity: AdOpportunity, trigger: Trigger, *, now: datetime) -> DeskOutcome:
+    def run(
+        self,
+        opportunity: AdOpportunity,
+        trigger: Trigger,
+        *,
+        now: datetime,
+        needs_creative_refresh: Callable[[AuctionResult], bool] | None = None,
+    ) -> DeskOutcome:
         on_air = self._on_air
         incumbent = None if on_air is None or on_air.is_house_ad else on_air.campaign_ids
         # A bid or stock change during a new group's hold is still that new group's
@@ -76,9 +84,23 @@ class AuctionDesk:
                 )
                 return DeskOutcome(result=fallback, action=SwapAction.SWAP, swap_now=True)
             return DeskOutcome(result=None, action=SwapAction.UNCHANGED)
+        creative_changed = (
+            needs_creative_refresh is not None
+            and on_air is not None
+            and result.filled
+            and result.winner_ids == on_air.campaign_ids
+            and result.layout is not None
+            and result.layout.name == on_air.layout_name
+            and needs_creative_refresh(result)
+        )
         plan = self._policy.apply(
             SwapInput(
-                result=result, opportunity=opportunity, trigger=trigger, on_air=on_air, now=now
+                result=result,
+                opportunity=opportunity,
+                trigger=trigger,
+                on_air=on_air,
+                now=now,
+                creative_changed=creative_changed,
             )
         )
         if plan.action is not SwapAction.SWAP or plan.not_before is None:

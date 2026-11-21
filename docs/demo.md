@@ -22,7 +22,8 @@
   - **Clerk tablet** on `/clerk` (stock toggles).
   - **"Checkout":** a USB thermal printer (if we have one) that prints the
     moment receipt on redemption.
-- **Two phones for judges** on `/advertiser`, joined by a QR on the console.
+- **Judge controls:** open `/advertiser` on the presenter laptop for the bid
+  sliders. Put the judge's phone on the same network for checkout.
 - **Backend on the laptop** (localhost) and a phone hotspot. Render hosts the
   public URL.
 - **Lighting check** at the venue: webcam exposure matters more than model
@@ -39,7 +40,7 @@
 │ group size · dwell        │   partner                    │ basket offer "Trío $X"  │
 │ segments w/ confidence    │ winning basket + VCG prices  │ "why this ad" chips     │
 ├───────────────────────────┴──────────────────────────────┴─────────────────────────┤
-│ HELD: Café Patio cup → boosts Miga · STOCK: Miga ✓ · CONTEXT: weekday morning     │
+│ HELD: Café Patio cup → boosts Voltio · STOCK: Voltio ✓                           │
 │ KPIs: coverage 83% (solo 41%) · revenue/h $X vs single-brand $Y (+Z%)              │
 │       attention-seconds · charged $0 when nobody looked · redemptions 3 (both      │
 │       brands credited) · glass-to-glass p50 1.2 s / p95 1.9 s                      │
@@ -58,9 +59,9 @@ complementary products sold at that counter.
 | t | Beat | What happens | What judges should feel |
 |---|---|---|---|
 | 0:00 | **1. Scene hook** | *"You're in line at a gas station with two friends. The screen above the register shows a car-insurance ad. Three hungry people, a coffee machine two meters away, and the screen has no idea."* Point at the static screen, then: *"Store screens are still blind. Watch ours."* | Recognition |
-| 0:20 | **2. Basket ad** | Three people walk up (a gym bottle, a laptop, empty hands). In about 1 s: **"Combo post-entreno · Voltio + Café Patio por $3.490"**, sized to the group. Teaser, then offer as they keep looking. **Coverage 40 % → 90 %** (the live headline, ADR 0008 D5); chip: Rayo ✗ competitor. | The core insight: N people, several brands, one offer sized to the group |
-| 0:55 | **3. Complete the basket** | A judge picks up the **Café Patio cup** (marker). Within about 1 s: *"Tu Café Patio pide una Miga. A 2 minutos, $1.990."* Console: `HELD: Café Patio → boosts Miga`. | "It sees what I'm holding, not who I am" |
-| 1:25 | **4. Bidding war** | Two judges on phones: one is **Voltio**, the other is its competitor **Rayo**. They push their bid sliders for the moment in front of the screen; the room watches the winner flip live. Competitor rule: they never share a basket. | "It's a real market, and I'm in it" |
+| 0:20 | **2. Basket ad** | Start with two people looking and the gym bottle and two coffee cups visible. Let **Dúo post-entreno $5.990** appear, then bring in a third person. The same two brands switch to **Trío post-entreno $8.490**. Point to the live estimated coverage and single-brand comparison on the console. | The core insight: N people, several brands, one offer sized to the group |
+| 0:55 | **3. Complete the basket** | The judge faces the **Café Patio cup** marker toward the camera. The next creative opens with *"Tu Café Patio pide Voltio"* and keeps the approved Trío price. The console shows the held Café Patio cup. | "The product in my hand changes the pitch" |
+| 1:25 | **4. Bidding war** | Let a judge raise **Rayo**'s bid from `/advertiser`. The room watches Rayo challenge Voltio for the slot. Competitor rule: they never share a basket. | "It's a real market, and I'm in it" |
 | 2:00 | **5. Close → receipt → $0** | The ad reaches **close**: QR + "valid 10 min". A judge scans and redeems, the **receipt prints**: *"Voltio $114 · Café Patio $86 · 7,4 s de atención"*. Everyone walks away; console: **"charged $0: nobody looked"**. Closing line: *"We don't sell screen slots, we sell moments. Brands pay only when people look, and the receipt proves the sale. We start with convenience-store counters."* | Proof, fairness, investable |
 
 **Backup moments** (swap one in if a beat fails, or use if time allows; never
@@ -68,7 +69,7 @@ add a sixth beat):
 
 | Moment | What happens |
 |---|---|
-| **Stock-out re-basket** | The "clerk" taps "Miga out of stock" on `/clerk`; the basket re-forms instantly without Miga |
+| **Stock-out re-basket** | The clerk marks Voltio out of stock on `/clerk` and the active ad drops it. |
 | **"It heard me"** (speech mode) | Someone says "uf, qué hambre"; the burger bid jumps, with a voice-over |
 | **Context switch** | The console toggles "hot afternoon"; cold-drink bids rise and the basket changes |
 | **Safety** | A judge holds a toy stroller; the beer brand's top bid is blocked (✗ minor-safe chip) |
@@ -82,14 +83,13 @@ own company win a basket slot is memorable.
 **Brands: the seed is the source of truth** (`app/bootstrap/demo.py`, ADR 0008
 D9): Voltio (energy), Café Patio (coffee), Malta Sur (beer, age-restricted)
 and Rayo (energy, Voltio's competitor). Approved baskets today: Voltio + Café
-Patio, Rayo + Café Patio. **Seed additions the script needs:** Miga (pastry,
-partner of Café Patio, for beat 3), each kit's stable **slug** (`voltio`,
-`cafe-patio`, `rayo`, `miga`, `malta-sur`) for the prop markers, and offers for
-1, 2 and 3+ people. Search every name before the demo to make sure it isn't a
-real brand; real logos only with permission or clearly marked as a mock.
+Patio, Rayo + Café Patio. The seed uses distinct fictional marks from
+[`assets/campaigns/logos`](../assets/campaigns/logos).
 
 **Prop markers:** `edge/props/markers.json` maps marker id → brand slug. Print
-each marker at least 4 × 4 cm on the prop, facing the camera when held.
+the [Café Patio marker](../edge/props/cafe-patio-marker.svg) at 100% scale. It
+prints with a 4.2 × 4.2 cm code and a white border. Face it toward the camera
+only when the judge picks up the cup.
 
 **Group-size offers in the seed data:** each basket defines offers by party
 size (Voltio + Café Patio: Combo $3.490 · Dúo $5.990 · Trío $8.490 · Pack x4
@@ -97,11 +97,48 @@ $10.990), and the copy names the group ("Para los 3 · Trío post-entreno…").
 With three people in beat 2 the screen shows the **Trío** price, not the
 single combo. Copy rules and evals: [`creative-generation.md`](creative-generation.md).
 
-**Video note:** every approved demo basket has a pre-generated AI video loop,
-approved by both brands, so the creative is full-motion from the first frame.
-If a judge asks "is that generated?", say yes: generated for this brand
-pairing and approved before the demo, then composed live for this group (offer,
-copy, voice, QR).
+**Video note:** the local demo composes the offer, timing and QR live. It can
+play stock campaign media and any installed, approved bundle loops. Use
+`make live-preflight` before rehearsing with live model providers.
+
+### Laptop and phone walkthrough
+
+Install the backend and web dependencies as in the
+[audience replay runbook](simulator.md). Use a Wi-Fi network where the phone
+and laptop can reach each other. Set `DEMO_LAN_IP` to the laptop's current
+Wi-Fi IPv4 address in the relay and backend terminals.
+
+```bash
+# Relay terminal
+uv run python -m scripts.demo_phone --host "$DEMO_LAN_IP" --port 8022
+# Backend terminal
+APP_ENV=local PUBLIC_BASE_URL="http://$DEMO_LAN_IP:8022" uv run uvicorn app.main:app --host 127.0.0.1 --port 8018
+# Web terminal, from web/
+BACKEND_URL=http://127.0.0.1:8018 npm run dev
+```
+
+Open `/screen?id=demo-01` and `/console?screen=demo-01` on the web player
+origin. Start the physical camera agent from `edge/`:
+
+```bash
+.venv/bin/python -m agent.vision --screen demo-01 --backend ws://127.0.0.1:8018/ws/agent --camera 0 --markers props/markers.json
+```
+
+For a repeatable rehearsal, use a separate screen ID and open
+`/screen?id=rehearsal` and `/console?screen=rehearsal`:
+
+```bash
+uv run python -m scripts.rehearse_demo duo --screen rehearsal --seconds 5
+uv run python -m scripts.rehearse_demo trio --screen rehearsal --seconds 5
+uv run python -m scripts.rehearse_demo held --screen rehearsal --seconds 12
+uv run python -m scripts.rehearse_demo empty --screen rehearsal --seconds 4
+```
+
+Scan the QR during the close stage and tap **Canjear en caja**. The phone
+shows the approved price and confirmation, and the console credits both
+brands. If venue Wi-Fi isolates clients, run the phone and laptop on a
+hotspot. For mobile data, point a tunnel at the redemption relay and use that
+HTTPS URL for `PUBLIC_BASE_URL`.
 
 ## 4. Demo insurance (build these, they save demos)
 
@@ -126,16 +163,11 @@ slice with co-brand, minor-safety and no-fill scenes.
 7. **Speech in a noisy room:** use a directional or lapel mic for the
    presenter, and keyterm-prompt the exact demo phrases. The console has a
    "simulate utterance" button that sends the same `audience.utterance`.
-8. **QR redemption fallback:** the offer page is served by the backend on the
-   laptop's hotspot IP, and the console has a "simulate redemption" button in
-   case the judge's phone can't reach it.
-9. **Held product not recognized:** markers make this rare (ADR 0008 D2); the
-   console still has a "simulate held product" button per prop.
-10. **Bidding war phones and QR redemptions go through a tunnel** (ADR 0008
-    D3): `cloudflared tunnel --url http://127.0.0.1:8000` exposes `/advertiser`
-    and `/r/{code}` publicly, so judges use mobile data, not the isolated
-    hotspot. The console shows the tunnel URL as a QR. If a phone fails, the
-    console has the same sliders.
+8. **QR redemption fallback:** open the URL from the ad on the laptop and
+   redeem in a separate browser tab.
+9. **Held product fallback:** use the `held` rehearsal scene above.
+10. **Bidding war controls:** keep the `/advertiser` sliders open on the
+    presenter laptop.
 11. **Two laptops** (ADR 0008 D7): the screen laptop runs the agent, the
     backend and the player; the console runs on a second laptop over the
     network.

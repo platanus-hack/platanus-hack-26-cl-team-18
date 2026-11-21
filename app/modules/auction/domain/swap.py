@@ -77,6 +77,7 @@ class SwapInput:
     trigger: Trigger
     on_air: OnAir | None
     now: datetime
+    creative_changed: bool = False
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -97,14 +98,18 @@ class MinAdTimePolicy(Policy[SwapInput, SwapPlan]):
                 return SwapPlan(action=SwapAction.SWAP, not_before=now)
             return SwapPlan(action=SwapAction.UNCHANGED)
         layout_name = result.layout.name if result.layout else None
-        if result.winner_ids == on_air.campaign_ids and layout_name == on_air.layout_name:
-            return SwapPlan(action=SwapAction.UNCHANGED)
+        same_winners = (
+            result.winner_ids == on_air.campaign_ids and layout_name == on_air.layout_name
+        )
         # Safety and stock-outs are never held (invariant 2, D5.1/D5.2).
         if self._unsafe_on_air(on_air, input):
             return SwapPlan(action=SwapAction.SWAP, not_before=now)
+        if same_winners and not input.creative_changed:
+            return SwapPlan(action=SwapAction.UNCHANGED)
         timings = self.timings
         if (
             input.trigger in SAME_MOMENT_TRIGGERS
+            and not same_winners
             and result.filled
             and result.incumbent_value is not None
             and result.bundle_value.amount

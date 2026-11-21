@@ -408,10 +408,16 @@ describe("glass-to-glass and attention-driven stages", () => {
         expect(visibleCopy()).toContain("El QR se emite al activar la campaña.");
     });
 
-    it("renders the scannable QR and its code at the close stage", async () => {
+    it("renders the scannable QR, approved price, and code at the close stage", async () => {
         const spec = {
             ...HOUSE_AD.spec,
             stages: [{ name: "close" as const, copy_text: "Escanea" }],
+            offer: {
+                label: "Trío post-entreno",
+                text: "Voltio + Café Patio x3",
+                price: { amount: "8490", currency: "CLP" },
+                party_size: 3,
+            },
             qr_url: "data:image/svg+xml;base64,PHN2Zy8+",
             redemption_code: "AB12CD",
         };
@@ -421,6 +427,9 @@ describe("glass-to-glass and attention-driven stages", () => {
         });
         const qr = host.querySelector<HTMLImageElement>('img[alt="QR para canjear la oferta"]');
         expect(qr?.src).toBe(spec.qr_url);
+        expect(host.querySelector(".creative-close .creative-price")?.textContent).toContain(
+            "Para 3 · $8.490",
+        );
         expect(host.textContent).toContain("AB12CD");
         expect(host.textContent).toContain("válido 10 min");
     });

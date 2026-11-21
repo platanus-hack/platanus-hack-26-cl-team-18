@@ -207,7 +207,10 @@ def _check(source: str, step: int, expect: Expect, d: Decision) -> list[Check]:
         got = d.creative.spec.layout_id
         checks.append(check("layout", got == expect.layout, f"got {got}, want {expect.layout}"))
     if expect.copy_contains is not None:
-        text = " ".join(slot.copy_text for slot in d.creative.spec.slots)
+        spec = d.creative.spec
+        text = " ".join(
+            [*(stage.copy_text for stage in spec.stages), *(slot.copy_text for slot in spec.slots)]
+        )
         checks.append(check("copy", expect.copy_contains in text, f"copy was {text!r}"))
     if d.auction is not None:
         names = {bid.campaign_id: bid.brand_name for bid in d.auction.bids}

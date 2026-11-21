@@ -464,6 +464,7 @@ class ConsoleAuction(_Message):
     bids: list[BidLine]
     exclusions: list[Exclusion]
     winners: list[Winner]  # empty = no fill (house ad)
+    offer: CreativeOffer | None = None  # approved offer on the corresponding creative
     bundle_value: MoneyDTO
     single_brand_value: MoneyDTO  # the single-brand counterfactual
     coverage: Score  # est. share of looking viewers a winner matches (upper bound)

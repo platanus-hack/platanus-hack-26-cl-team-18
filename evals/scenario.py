@@ -26,7 +26,7 @@ class Scene:
     name: str
     people: int
     looking: int
-    objects: dict[str, float] = field(default_factory=dict)
+    objects: tuple[DetectedObject, ...] = ()
     sound: dict[str, float] = field(default_factory=dict)
     minor: bool = False
 
@@ -37,7 +37,7 @@ class Scene:
             measured_at=measured_at,
             people=self.people,
             looking=self.looking,
-            objects=[DetectedObject(label=k, score=v) for k, v in sorted(self.objects.items())],
+            objects=list(self.objects),
             sound_scene=[SoundScene(label=k, score=v) for k, v in sorted(self.sound.items())],
             minor_likely=MinorLikely(value=self.minor, confidence=1),
         )
@@ -122,11 +122,14 @@ def parse_scenario(raw: dict[str, Any], scenes: dict[str, Scene]) -> Scenario:
 
 
 def _scene(name: str, body: dict[str, Any]) -> Scene:
+    objects = body.get("objects", {})
+    if isinstance(objects, dict):
+        objects = [{"label": label, "score": score} for label, score in sorted(objects.items())]
     return Scene(
         name=body.get("name", name),
         people=int(body["people"]),
         looking=int(body.get("looking", body["people"])),
-        objects={str(k): float(v) for k, v in body.get("objects", {}).items()},
+        objects=tuple(DetectedObject.model_validate(obj) for obj in objects),
         sound={str(k): float(v) for k, v in body.get("sound", {}).items()},
         minor=bool(body.get("minor", False)),
     )

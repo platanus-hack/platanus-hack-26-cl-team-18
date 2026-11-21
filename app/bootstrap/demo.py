@@ -81,7 +81,7 @@ from app.modules.common.domain.value_objects.money_rate import MoneyRate
 from app.modules.common.domain.value_objects.percentage import Percentage
 from app.modules.common.domain.value_objects.rounding_policy import RoundingPolicy
 from app.modules.common.domain.value_objects.utc_timestamp import UtcTimestamp
-from app.modules.creative.application.briefing import CreativeCatalog, build_brief
+from app.modules.creative.application.briefing import CreativeCatalog, MomentContext, build_brief
 from app.modules.creative.application.campaigns import CampaignMedia, apply_campaign_media
 from app.modules.creative.application.loops import BundleLoopLibrary
 from app.modules.creative.application.ports.copywriter import CopyWriter
@@ -153,6 +153,7 @@ class LiveMarket:
     redemptions: RedemptionDesk
     lock: RLock
     campaign_media: dict[str, CampaignMedia]
+    house_logo_url: str
 
 
 def seed_market(
@@ -163,7 +164,8 @@ def seed_market(
     ledger: ChargeLedger | None = None,
     redemption_ledger: RedemptionLedger | None = None,
 ) -> LiveMarket:
-    # Reuse the existing project mark for these fictional fixture brands.
+    # Keep the project mark on the house ad. The fictional brands have fixed
+    # mock marks included with their kits.
     logo = Path(__file__).resolve().parents[2].joinpath("project-logo.png").read_bytes()
     logo_url = "data:image/png;base64," + b64encode(logo).decode("ascii")
 
@@ -176,7 +178,7 @@ def seed_market(
         BrandKit(
             brand_id=BrandId.create(ids.new_uuid7()),
             name=name,
-            logo_url=logo_url,
+            logo_url=f"/campaign-assets/logos/{_slug(name)}.svg",
             stock_copy=copy,
             accent_color=color,
         )
@@ -255,6 +257,7 @@ def seed_market(
         redemptions=RedemptionDesk(ids=ids, ledger=redemption_ledger or InMemoryRedemptionLedger()),
         lock=RLock(),
         campaign_media=load_campaign_media(),
+        house_logo_url=logo_url,
     )
 
 
@@ -296,7 +299,6 @@ def register_demo(
     )
     kits, bidders, offer_book = market.kits, market.bidders, market.offers
     kits_by_id = {kit.brand_id: kit for kit in kits}
-    logo_url = kits[0].logo_url
     slug_of = {kit.brand_id: _slug(kit.name) for kit in kits}
     brand_by_slug = {slug: brand for brand, slug in slug_of.items()}
     fitness, coffee, beer, food = (SegmentId.create(key) for key in ("408", "977", "369", "1404"))
@@ -368,7 +370,7 @@ def register_demo(
             BrandKit(
                 brand_id=BrandId.create(ids.new_uuid7()),
                 name="team18",
-                logo_url=logo_url,
+                logo_url=market.house_logo_url,
                 stock_copy="team18 · Acércate a la pantalla.",
                 accent_color="#c6f26b",
             ),
@@ -506,6 +508,23 @@ def register_demo(
         if needs_voice is not None:
             request_voiceover(needs_voice)
 
+    def brief_for(moment: AudienceMomentSnapshot, result: AuctionResult) -> CreativeBrief | None:
+        held = (
+            frozenset(
+                brand_by_slug[product.brand_ref]
+                for product in moment.held_products
+                if product.brand_ref is not None and product.brand_ref in brand_by_slug
+            )
+            if len(result.winners) > 1
+            else frozenset()
+        )
+        return build_brief(
+            moment=moment,
+            result=result,
+            catalog=catalog,
+            context=MomentContext(held_brand_ids=held),
+        )
+
     def run_auction(
         snapshot: AudienceSnapshot,
         moment: AudienceMomentSnapshot,
@@ -515,6 +534,22 @@ def register_demo(
     ) -> CreativeReady | None:
         """Clear `moment` against the live book and stock. Caller holds the lock."""
         nonlocal current_moment, latest_console
+
+        def needs_creative_refresh(result: AuctionResult) -> bool:
+            new_brief = brief_for(moment, result)
+            return (
+                new_brief is not None
+                and current_brief is not None
+                and (
+                    current_brief.offer != new_brief.offer
+                    or (
+                        new_brief.offer is not None
+                        and current_brief.addressed_party != new_brief.addressed_party
+                    )
+                    or current_brief.held_brand != new_brief.held_brand
+                )
+            )
+
         # The on-air play's own hold doesn't count against a re-auction it is part of.
         bidders = book.snapshot(excluding_hold=current_creative.creative_id)
         if out_of_budget:
@@ -545,6 +580,7 @@ def register_demo(
             ),
             trigger,
             now=clock.now_utc(),
+            needs_creative_refresh=needs_creative_refresh,
         )
         cleared_at = clock.now_utc()
         if outcome.result is None:
@@ -623,6 +659,9 @@ def register_demo(
             creative_id=creative_id,
             trigger=decision.trigger.value,
             swap=swap,
+            offer=current_creative.spec.offer
+            if creative_id is not None or swap == "unchanged"
+            else None,
         )
 
     def publish(decision: _Decision, *, swap: str) -> CreativeReady | None:
@@ -634,7 +673,7 @@ def register_demo(
         nonlocal current_creative, latest_console, current_brief
         result = decision.result
         spec = house_spec
-        brief = build_brief(moment=decision.moment, result=result, catalog=catalog)
+        brief = brief_for(decision.moment, result)
         if brief is not None:
             composed = studio.compose(brief)
             if composed.score.verdict.passed:
@@ -647,7 +686,7 @@ def register_demo(
         creative_id = str(ids.new_uuid7())
         if result.winners and spec is not house_spec:
             spec = with_basket_extras(
-                spec, result, decision.auction_id, creative_id, clock.now_utc()
+                spec, result, decision.auction_id, creative_id, clock.now_utc(), brief=brief
             )
         # Includes redemption, QR encoding and loop lookup in the decision budget.
         ready_at = clock.now_utc()
@@ -864,6 +903,8 @@ def register_demo(
         auction_id: str,
         creative_id: str,
         at: datetime,
+        *,
+        brief: CreativeBrief | None,
     ) -> CreativeSpec:
         """Add the basket's redemption code + QR and its pre-generated loop (if any)."""
         brands = [winner.bidder.brand_id for winner in result.winners]
@@ -876,7 +917,9 @@ def register_demo(
             screen_id=wire_screen_id,
             campaign_ids=[winner.campaign_id for winner in result.winners],
             brand_names=[kits_by_id[brand].name for brand in brands],
-            offer_text=spec.offer.text if spec.offer is not None else None,
+            offer_text=(
+                brief.offer.headline if brief is not None and brief.offer is not None else None
+            ),
             at=at,
         )
         redeem_url = f"{public_base_url.rstrip('/')}/r/{offer.code}"

@@ -17,6 +17,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from scripts.rehearse_demo import demo_snapshot
 from scripts.replay_audience import paid_brands, snapshot_for
 
 from app.bootstrap.container import build_container
@@ -127,6 +128,32 @@ def test_first_paid_ad_replaces_the_house_ad_at_once(loop: Loop) -> None:
     assert paid_brands(creative) == ("Voltio",)
     assert creative.trace.measured_at == sent and creative.trace.ready_at == sent
     assert loop.scheduler.fire_due() == 0  # no swap is waiting (only the 15 s lease timer)
+
+
+def test_same_brands_refresh_the_offer_and_held_product_copy(loop: Loop) -> None:
+    def send_fixture(scene: str, seq: int, delay: float) -> ConsoleAuction:
+        at = loop.clock.advance(timedelta(seconds=delay))
+        snapshot = demo_snapshot(scene, "demo-01", seq, 1.0)
+        loop.agent.send_text(snapshot.model_copy(update={"measured_at": at}).model_dump_json())
+        return loop.auction()
+
+    assert send_fixture("duo", 1, 0.1).swap == "swap"
+    duo = loop.creative()
+    assert duo.spec.offer is not None and duo.spec.offer.price.amount == "5990"
+    assert send_fixture("trio", 2, 0.5).swap == "held"
+    loop.clock.advance(timedelta(seconds=1))
+    assert loop.scheduler.fire_due() == 1
+    assert loop.auction().swap == "released"
+    trio = loop.creative()
+    assert set(paid_brands(trio)) == set(paid_brands(duo))
+    assert trio.spec.offer is not None and trio.spec.offer.price.amount == "8490"
+    held_auction = send_fixture("held", 3, 3.1)
+    assert held_auction.swap == "swap"
+    held = loop.creative()
+    assert set(paid_brands(held)) == set(paid_brands(duo)), held_auction.model_dump()
+    assert held.spec.angle == "complete_basket"
+    assert "Tu Café Patio pide Voltio" in held.spec.stages[0].copy_text
+    assert held.spec.offer == trio.spec.offer
 
 
 def test_new_group_is_held_to_the_floor_then_released(loop: Loop) -> None:

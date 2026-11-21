@@ -285,6 +285,7 @@ export const ConsoleAuctionSchema = z.strictObject({
   bids: z.array(BidLineSchema),
   exclusions: z.array(ExclusionSchema),
   winners: z.array(WinnerSchema),
+  offer: CreativeOfferSchema.nullable(),
   bundle_value: MoneyDTOSchema,
   single_brand_value: MoneyDTOSchema,
   coverage: z.number().gte(0.0).lte(1.0),

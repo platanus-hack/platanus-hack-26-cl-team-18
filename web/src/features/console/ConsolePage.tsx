@@ -34,6 +34,13 @@ const EXCLUSION_LABEL: Record<ExclusionReason, string> = {
 const fmtMs = (value: number | null) =>
     value === null ? "—" : value === 0 ? "<1 ms" : `${Math.round(value)} ms`;
 
+const DEMO_BRANDS: Readonly<Record<string, string>> = {
+    "cafe-patio": "Café Patio",
+    voltio: "Voltio",
+    rayo: "Rayo",
+    "malta-sur": "Malta Sur",
+};
+
 export function ConsolePage() {
     const [store] = useState(() => createStore(consoleReducer, initialConsoleState));
     const [socket] = useState(
@@ -60,6 +67,10 @@ export function ConsolePage() {
     const screens = useStore(store, (s) => s.screens);
     const lastError = useStore(store, (s) => s.lastError);
     const { tone, label } = CONNECTION[connection.status];
+    const screenFilter = new URLSearchParams(window.location.search).get("screen");
+    const shownScreens = Object.entries(screens).filter(
+        ([screenId]) => screenFilter === null || screenId === screenFilter,
+    );
 
     return (
         <div className="paper-theme">
@@ -78,7 +89,7 @@ export function ConsolePage() {
                         <StatusBadge tone={tone} label={label} />
                     </div>
                 </header>
-                {Object.keys(screens).length === 0 ? (
+                {shownScreens.length === 0 ? (
                     <Panel title="Waiting for screens">
                         <div className="flex flex-col items-center gap-4 py-14 text-center">
                             <span className="workspace-mark">
@@ -101,7 +112,7 @@ export function ConsolePage() {
                         </div>
                     </Panel>
                 ) : (
-                    Object.entries(screens).map(([screenId, view]) => (
+                    shownScreens.map(([screenId, view]) => (
                         <ScreenRow key={screenId} screenId={screenId} view={view} />
                     ))
                 )}
@@ -111,8 +122,38 @@ export function ConsolePage() {
 }
 
 function ScreenRow({ screenId, view }: { screenId: string; view: ScreenView }) {
+    const moment = view.moment;
+    const auction = view.auction?.moment_id === moment?.moment_id ? view.auction : null;
+    const redemption = view.redemptions[0];
     return (
         <div className="grid gap-4 lg:grid-cols-[1fr_1.4fr_1fr]">
+            {moment && (
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-container border border-border bg-surface p-4 text-section lg:col-span-3">
+                    <strong>{moment.looking} mirando</strong>
+                    {auction && (
+                        <>
+                            <span aria-hidden>→</span>
+                            <span>
+                                {auction.swap === "held" ? "Próximo: " : ""}
+                                {auction.winners.map((winner) => winner.brand_name).join(" + ") ||
+                                    "Anuncio de la tienda"}
+                            </span>
+                            {auction.offer && (
+                                <strong className="tabular-nums">
+                                    {auction.offer.label} · $
+                                    {Number(auction.offer.price.amount).toLocaleString("es-CL")}
+                                </strong>
+                            )}
+                        </>
+                    )}
+                    {redemption && (
+                        <StatusBadge
+                            tone="success"
+                            label={`Último canje · ${redemption.brands.length} marcas acreditadas · ${redemption.code}`}
+                        />
+                    )}
+                </div>
+            )}
             <MomentPanel screenId={screenId} view={view} />
             <AuctionPanel view={view} />
             <LatencyPanel view={view} />
@@ -146,6 +187,14 @@ function MomentPanel({ screenId, view }: { screenId: string; view: ScreenView })
                 <Empty>No moment yet.</Empty>
             ) : (
                 <ul className="flex flex-col gap-2">
+                    {m.held_products.map((product) => (
+                        <li key={`${product.brand_ref ?? ""}:${product.category}`}>
+                            <StatusBadge
+                                tone="info"
+                                label={`En mano · ${(product.brand_ref && DEMO_BRANDS[product.brand_ref]) || product.brand_ref || product.category}`}
+                            />
+                        </li>
+                    ))}
                     {m.minor_likely.value && (
                         <li>
                             <StatusBadge
