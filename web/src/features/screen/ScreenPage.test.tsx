@@ -401,7 +401,7 @@ describe("glass-to-glass and attention-driven stages", () => {
             await vi.advanceTimersByTimeAsync(200);
         });
         expect(visibleCopy()).toContain("close");
-        expect(visibleCopy()).toContain("QR · válido 10 min"); // no qr_url: text-only
+        expect(visibleCopy()).toContain("El QR se emite al activar la campaña.");
     });
 
     it("renders the scannable QR and its code at the close stage", async () => {

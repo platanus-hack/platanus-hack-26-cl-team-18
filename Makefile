@@ -8,7 +8,7 @@ LOCAL_DATABASE_URL := postgresql://team18:team18@localhost:5432/team18
 
 .PHONY: help install edge-install edge-check test-live test-sandbox dev web-install web-dev web-check contract contract-check lint format typecheck test check migrate migrate-status db-up db-down db-reset \
         live-preflight bundle-loops \
-        eval eval-baseline eval-creative eval-creative-baseline eval-replay eval-perception eval-record eval-rehearsal eval-video-fetch eval-video eval-pipeline demo-warmup \
+        eval eval-baseline eval-creative eval-creative-baseline eval-campaigns eval-replay eval-perception eval-record eval-rehearsal eval-video-fetch eval-video eval-pipeline demo-warmup \
         tf-init tf-fmt tf-fmt-check tf-validate tf-test tf-check tf-plan tf-apply tf-output tf-lock
 
 help: ## Show this help
@@ -87,6 +87,9 @@ eval-creative: ## Creative generation eval: targeting, safety, quality, latency,
 
 eval-creative-baseline: ## Lock improved creative ratchets into evals/creative/baseline.json
 	uv run python -m evals creative --update-baseline $(ARGS)
+
+eval-campaigns: ## Approved campaign variants: co-brand safety, offers, photos/video and latency
+	uv run python -m evals campaigns
 
 eval-replay: ## Real-video perception recording -> live backend (REC=path.jsonl [SPEED=1])
 	uv run python -m evals replay $(REC) --speed $(or $(SPEED),1)

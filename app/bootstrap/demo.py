@@ -82,6 +82,7 @@ from app.modules.common.domain.value_objects.percentage import Percentage
 from app.modules.common.domain.value_objects.rounding_policy import RoundingPolicy
 from app.modules.common.domain.value_objects.utc_timestamp import UtcTimestamp
 from app.modules.creative.application.briefing import CreativeCatalog, build_brief
+from app.modules.creative.application.campaigns import CampaignMedia, apply_campaign_media
 from app.modules.creative.application.loops import BundleLoopLibrary
 from app.modules.creative.application.ports.copywriter import CopyWriter
 from app.modules.creative.application.rendering import render_copy_upgrade, render_spec
@@ -94,6 +95,7 @@ from app.modules.creative.domain.brief import CreativeBrief
 from app.modules.creative.domain.cost import GenerationBudget, GenerationKind, UsdCost
 from app.modules.creative.domain.draft import CopyDraft, CopySource
 from app.modules.creative.domain.offer import BasketOffer, OfferBook
+from app.modules.creative.infrastructure.campaign_assets import load_campaign_media
 from app.modules.delivery.application.billing import DeliveryDesk, PlayRecord, Receipt
 from app.modules.delivery.application.ports.ledger import ChargeLedger
 from app.modules.delivery.application.redemptions import RedemptionDesk, RedemptionLedger
@@ -150,6 +152,7 @@ class LiveMarket:
     delivery: DeliveryDesk
     redemptions: RedemptionDesk
     lock: RLock
+    campaign_media: dict[str, CampaignMedia]
 
 
 def seed_market(
@@ -251,6 +254,7 @@ def seed_market(
         delivery=DeliveryDesk(ledger=ledger or InMemoryChargeLedger(), ids=ids, budgets=book),
         redemptions=RedemptionDesk(ids=ids, ledger=redemption_ledger or InMemoryRedemptionLedger()),
         lock=RLock(),
+        campaign_media=load_campaign_media(),
     )
 
 
@@ -859,6 +863,9 @@ def register_demo(
     ) -> CreativeSpec:
         """Add the basket's redemption code + QR and its pre-generated loop (if any)."""
         brands = [winner.bidder.brand_id for winner in result.winners]
+        spec = apply_campaign_media(
+            spec, market.campaign_media.get("+".join(sorted(slug_of[brand] for brand in brands)))
+        )
         offer = redemptions.issue(
             auction_id=auction_id,
             creative_id=creative_id,
@@ -874,8 +881,10 @@ def register_demo(
             "redeem_url": redeem_url,
             "qr_url": qr_data_url(redeem_url),
         }
-        if loops is not None and spec.video_url is None:
-            update["video_url"] = loops.url_for([slug_of[brand] for brand in brands])
+        if loops is not None:
+            update["video_url"] = (
+                loops.url_for([slug_of[brand] for brand in brands]) or spec.video_url
+            )
         return spec.model_copy(update=update)
 
     def redeem(code: str, nonce: str) -> tuple[ConsoleRedemption, bool]:

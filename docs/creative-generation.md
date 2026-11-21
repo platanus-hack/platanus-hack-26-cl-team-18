@@ -77,7 +77,8 @@ price, never a competitor name, never a blank screen, never an uncapped bill.
 
 Backlog (good, but not before the demo works): an LLM judge for quality on
 live runs (port is in place: `QualityJudge`), a bandit over variants rewarded
-by attention-seconds and redemptions, distance-aware layouts, hero images.
+by attention-seconds and redemptions, distance-aware layouts, warm hero-image variants.
+Bundled product photography and campaign drafting are implemented in §11.
 
 ## 3. Pipeline
 
@@ -392,3 +393,64 @@ speech/voice sandbox scenarios. The pipeline run completed copy+voice at
 1055 ms p95 in generation mode and 13 ms p95 after warm-up (socket delivery,
 recorded copy timing and sandbox TTS). Product ratchets did not change, so the
 existing baselines remain valid.
+
+## 11. Campaign studio, photography and media evaluation
+
+`/campaigns` drafts creative packs from the **same live seed catalog** as the
+auction. Three starter campaigns cover a post-workout group, a coffee break
+and completing a held coffee purchase. Operators select one or two brands,
+party size, moment, minor protection and photo/video. Only mutual partners
+with an approved offer can form a pair; competitors, duplicate/unknown brands
+and age-restricted campaigns with a minor are rejected. Completing a basket
+requires a pair. Prices remain the approved offer tier, including the generic
+group wording when the tier does not cover the exact group size.
+
+`GET /api/campaigns/catalog` returns the available kits and approved pairs.
+`POST /api/campaigns/generate` reuses `assemble_brief`, `CreativeStudio`, the
+copy guard, scorer and renderer. Composition is synchronous, memoized with a
+128-entry bound and independent of model providers and file IO. Reordered
+brand selections share the same cached draft. Responses include the spec,
+quality score, checks and composition timing. Export downloads a JSON draft;
+it does not activate campaigns, spend a budget or issue a live QR.
+
+The player and studio share `CreativeView`. Staged ads now show product
+photography behind editable brand, copy, approved-price and QR overlays. The
+layout uses container units so the 16:9 preview scales with its frame. Optional
+video reveals only when playable and leaves the photo underneath on failure;
+existing required-logo readiness and in-place upgrade rules are unchanged.
+
+Four illustrative product photographs (energy, coffee, energy + coffee, beer)
+and four 6-second 720p H.264 photo-motion loops live in `assets/campaigns/`.
+The built-in imagegen tool produced the unbranded scenery; no logo, price,
+claim or QR was generated. Exact prompts and provenance are in
+`assets/campaigns/prompts.json`. Images are 1600×900 WebP; the local ffmpeg
+build adds a subtle periodic zoom, not synthesized product motion. Regenerate
+those loops with `uv run python scripts/build_campaign_media.py` (or pass
+`--ffmpeg /path/to/ffmpeg`). Hosted fal video generation remains available
+through `scripts/generate_loops.py` with its explicit cost and budget caps.
+
+The asset manifest is loaded at market construction, then looked up in memory.
+Bundled assets are served from `/campaign-assets`; a venue's existing generated
+loop in `/media/loops` takes precedence. The same media is attached to live
+creatives, while stock or cached copy remains immediately ready. Generated
+imagery is demo scenery, not a representation of an actual advertiser SKU.
+Production brands still review the exported draft and supply their real kits.
+
+`make eval-campaigns` now runs in CI. It exercises **576 valid combinations**
+and **156 expected rejections**, combining group sizes 1/2/3/4/6/12, five
+moments, minor protection, both media modes and every supported solo/pair.
+It checks co-brand attribution, original kit logos, exact approved prices,
+guarded quality ≥0.6, repeat-cache consistency, local photos/video and no live
+redemption in a draft. Photos must be 16:9 and at least 1280 px wide, under
+400 KB; videos must be H.264 MP4 under 1 MB. Composition p95 must be ≤5 ms.
+The unit version excludes this wall-clock gate; the CLI/CI run enforces it.
+
+Observed locally: 100% repeat-cache hits, mean copy score 0.9927, minimum
+0.9639, composition p95 1.85 ms, four photos and four valid loops. These are
+catalog/guard/readability measurements, not a claim of human-rated artistry.
+The normal live scenario/300-decision soak and creative eval also passed with
+unchanged product ratchets. Browser checks covered desktop and 390 px mobile
+layouts, real 1280×720 video decoding, template selection, media switching,
+JSON export and stage previews; no uncaught browser errors were observed.
+Camera-to-TV latency and live-provider generation latency remain separate
+hardware/provider measurements.

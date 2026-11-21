@@ -653,6 +653,53 @@ ALL_MESSAGES: tuple[type[_Message], ...] = (
     ConsoleRedemption,
 )
 
+
+class CampaignBrand(_Model):
+    slug: str
+    name: str
+    category: str
+    accent_color: str
+    logo_url: str
+    photo_url: str | None = None
+    partners: list[str]
+    age_restricted: bool
+
+
+class CampaignCatalog(_Message):
+    type: Literal["campaign.catalog"] = "campaign.catalog"
+    brands: list[CampaignBrand]
+    approved_baskets: list[list[str]]
+
+
+class CampaignGenerate(_Message):
+    type: Literal["campaign.generate"] = "campaign.generate"
+    brands: Annotated[list[str], Field(min_length=1, max_length=2)]
+    party_size: Annotated[int, Field(ge=1, le=12)] = 2
+    moment: Literal["post_workout", "coffee_break", "hunger", "queue", "complete_basket"] = (
+        "post_workout"
+    )
+    minor_likely: bool = False
+    media: Literal["photo", "video"] = "video"
+
+
+class CampaignGenerated(_Message):
+    type: Literal["campaign.generated"] = "campaign.generated"
+    campaign_key: str
+    title: str
+    brands: list[str]
+    party_size: int
+    moment: str
+    status: Literal["draft"] = "draft"
+    spec: CreativeSpec
+    quality_score: str
+    checks: list[str]
+    compose_ms: Annotated[float, Field(ge=0)]
+    cache_hit: bool
+
+
+# HTTP messages share the generated schemas without joining any socket union.
+ALL_MESSAGES += (CampaignCatalog, CampaignGenerate, CampaignGenerated)
+
 # Socket unions exported to TS, by name.
 SOCKET_UNIONS: dict[str, tuple[type[_Message], ...]] = {
     "AgentInbound": (AudienceSnapshot, AudienceKeyframe, AudienceUtterance, RecognitionSnapshot),

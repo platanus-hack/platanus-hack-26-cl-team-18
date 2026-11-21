@@ -1,6 +1,7 @@
 import { ScanLine } from "lucide-react";
 
 const links = [
+    { href: "/campaigns", label: "Campañas" },
     { href: "/console", label: "Console" },
     { href: "/advertiser", label: "Anunciantes" },
     { href: "/clerk", label: "Tienda" },

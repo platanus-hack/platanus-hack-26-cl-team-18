@@ -120,6 +120,101 @@ export const BookLineSchema = z.strictObject({
 });
 export type BookLine = z.infer<typeof BookLineSchema>;
 
+export const CampaignBrandSchema = z.strictObject({
+  slug: z.string(),
+  name: z.string(),
+  category: z.string(),
+  accent_color: z.string(),
+  logo_url: z.string(),
+  photo_url: z.string().nullable(),
+  partners: z.array(z.string()),
+  age_restricted: z.boolean(),
+});
+export type CampaignBrand = z.infer<typeof CampaignBrandSchema>;
+
+export const CampaignCatalogSchema = z.strictObject({
+  v: z.literal(1),
+  type: z.literal("campaign.catalog"),
+  brands: z.array(CampaignBrandSchema),
+  approved_baskets: z.array(z.array(z.string())),
+});
+export type CampaignCatalog = z.infer<typeof CampaignCatalogSchema>;
+
+export const CampaignGenerateSchema = z.strictObject({
+  v: z.literal(1),
+  type: z.literal("campaign.generate"),
+  brands: z.array(z.string()).min(1).max(2),
+  party_size: z.number().int().gte(1).lte(12),
+  moment: z.enum(["post_workout", "coffee_break", "hunger", "queue", "complete_basket"]),
+  minor_likely: z.boolean(),
+  media: z.enum(["photo", "video"]),
+});
+export type CampaignGenerate = z.infer<typeof CampaignGenerateSchema>;
+
+export const CopySourceKindSchema = z.enum(["stock", "ai", "cache"]);
+export type CopySourceKind = z.infer<typeof CopySourceKindSchema>;
+
+// The approved basket offer the creative is sized to (price never AI-written).
+export const CreativeOfferSchema = z.strictObject({
+  label: z.string().min(1).max(80),
+  text: z.string().min(1).max(160),
+  price: MoneyDTOSchema,
+  party_size: z.number().int().gte(1).lte(12),
+});
+export type CreativeOffer = z.infer<typeof CreativeOfferSchema>;
+
+export const CreativeSlotSchema = z.strictObject({
+  brand_id: z.string().min(1).max(64),
+  brand_name: z.string().min(1).max(80),
+  logo_url: z.string(),
+  copy_text: z.string().max(280),
+  accent_color: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable(),
+  hero_image_url: z.string().nullable(),
+});
+export type CreativeSlot = z.infer<typeof CreativeSlotSchema>;
+
+export const CreativeStageNameSchema = z.enum(["teaser", "offer", "close"]);
+export type CreativeStageName = z.infer<typeof CreativeStageNameSchema>;
+
+export const CreativeStageSchema = z.strictObject({
+  name: CreativeStageNameSchema,
+  copy_text: z.string().min(1).max(280),
+});
+export type CreativeStage = z.infer<typeof CreativeStageSchema>;
+
+export const CreativeSpecSchema = z.strictObject({
+  layout_id: z.string().min(1).max(64),
+  slots: z.array(CreativeSlotSchema).min(1).max(3),
+  duration_ms: z.number().int().gte(1000).lte(60000),
+  video_url: z.string().nullable(),
+  voiceover_url: z.string().nullable(),
+  qr_url: z.string().nullable(),
+  stages: z.array(CreativeStageSchema).max(3),
+  offer: CreativeOfferSchema.nullable(),
+  angle: z.string().max(32).nullable(),
+  copy_source: CopySourceKindSchema.nullable(),
+  redemption_code: z.string().regex(/^[A-Z0-9]{4,12}$/).nullable(),
+  redeem_url: z.string().max(500).nullable(),
+});
+export type CreativeSpec = z.infer<typeof CreativeSpecSchema>;
+
+export const CampaignGeneratedSchema = z.strictObject({
+  v: z.literal(1),
+  type: z.literal("campaign.generated"),
+  campaign_key: z.string(),
+  title: z.string(),
+  brands: z.array(z.string()),
+  party_size: z.number().int(),
+  moment: z.string(),
+  status: z.literal("draft"),
+  spec: CreativeSpecSchema,
+  quality_score: z.string(),
+  checks: z.array(z.string()),
+  compose_ms: z.number().gte(0),
+  cache_hit: z.boolean(),
+});
+export type CampaignGenerated = z.infer<typeof CampaignGeneratedSchema>;
+
 export const ChargeReasonSchema = z.enum(["attention", "no_attention", "budget_cap"]);
 export type ChargeReason = z.infer<typeof ChargeReasonSchema>;
 
@@ -275,53 +370,6 @@ export const ConsoleRedemptionSchema = z.strictObject({
   redeemed_at: z.iso.datetime({ offset: true }),
 });
 export type ConsoleRedemption = z.infer<typeof ConsoleRedemptionSchema>;
-
-export const CopySourceKindSchema = z.enum(["stock", "ai", "cache"]);
-export type CopySourceKind = z.infer<typeof CopySourceKindSchema>;
-
-// The approved basket offer the creative is sized to (price never AI-written).
-export const CreativeOfferSchema = z.strictObject({
-  label: z.string().min(1).max(80),
-  text: z.string().min(1).max(160),
-  price: MoneyDTOSchema,
-  party_size: z.number().int().gte(1).lte(12),
-});
-export type CreativeOffer = z.infer<typeof CreativeOfferSchema>;
-
-export const CreativeSlotSchema = z.strictObject({
-  brand_id: z.string().min(1).max(64),
-  brand_name: z.string().min(1).max(80),
-  logo_url: z.string(),
-  copy_text: z.string().max(280),
-  accent_color: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable(),
-  hero_image_url: z.string().nullable(),
-});
-export type CreativeSlot = z.infer<typeof CreativeSlotSchema>;
-
-export const CreativeStageNameSchema = z.enum(["teaser", "offer", "close"]);
-export type CreativeStageName = z.infer<typeof CreativeStageNameSchema>;
-
-export const CreativeStageSchema = z.strictObject({
-  name: CreativeStageNameSchema,
-  copy_text: z.string().min(1).max(280),
-});
-export type CreativeStage = z.infer<typeof CreativeStageSchema>;
-
-export const CreativeSpecSchema = z.strictObject({
-  layout_id: z.string().min(1).max(64),
-  slots: z.array(CreativeSlotSchema).min(1).max(3),
-  duration_ms: z.number().int().gte(1000).lte(60000),
-  video_url: z.string().nullable(),
-  voiceover_url: z.string().nullable(),
-  qr_url: z.string().nullable(),
-  stages: z.array(CreativeStageSchema).max(3),
-  offer: CreativeOfferSchema.nullable(),
-  angle: z.string().max(32).nullable(),
-  copy_source: CopySourceKindSchema.nullable(),
-  redemption_code: z.string().regex(/^[A-Z0-9]{4,12}$/).nullable(),
-  redeem_url: z.string().max(500).nullable(),
-});
-export type CreativeSpec = z.infer<typeof CreativeSpecSchema>;
 
 export const CreativeReadySchema = z.strictObject({
   v: z.literal(1),
@@ -497,6 +545,6 @@ export type PlayerOutbound = z.infer<typeof PlayerOutboundSchema>;
 export const ConsoleOutboundSchema = z.discriminatedUnion("type", [ConsoleMomentSchema, ConsoleAuctionSchema, ConsoleLatencySchema, ConsoleDegradationSchema, CreativeReadySchema, CreativeUpgradedSchema, ErrorMessageSchema, ConsoleBookSchema, ConsoleReceiptSchema, ConsoleRedemptionSchema]);
 export type ConsoleOutbound = z.infer<typeof ConsoleOutboundSchema>;
 
-export const MESSAGE_TYPES = ["audience.snapshot", "audience.keyframe", "audience.utterance", "creative.ready", "creative.upgraded", "playback.report", "console.moment", "console.auction", "console.latency", "console.degradation", "system.error", "advertiser.bid_multiplier", "stock.set", "console.book", "console.receipt", "recognition.snapshot", "player.displayed", "screen.attention", "console.redemption"] as const;
+export const MESSAGE_TYPES = ["audience.snapshot", "audience.keyframe", "audience.utterance", "creative.ready", "creative.upgraded", "playback.report", "console.moment", "console.auction", "console.latency", "console.degradation", "system.error", "advertiser.bid_multiplier", "stock.set", "console.book", "console.receipt", "recognition.snapshot", "player.displayed", "screen.attention", "console.redemption", "campaign.catalog", "campaign.generate", "campaign.generated"] as const;
 
 export type MessageType = (typeof MESSAGE_TYPES)[number];

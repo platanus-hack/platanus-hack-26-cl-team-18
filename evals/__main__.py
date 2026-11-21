@@ -72,6 +72,7 @@ def main(argv: list[str] | None = None) -> int:
     creative.add_argument("--writer", choices=["stock", "recorded", "claude"], default="recorded")
     creative.add_argument("--record", action="store_true", help="live: overwrite recordings.json")
     creative.add_argument("--update-baseline", dest="creative_baseline", action="store_true")
+    sub.add_parser("campaigns", help="campaign catalog, media, safety, quality and latency")
 
     pipeline = sub.add_parser(
         "pipeline", help="end-to-end ad pipeline journeys: stage waterfall + bottleneck"
@@ -89,6 +90,10 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     command = args.command or "suite"
+    if command == "campaigns":
+        from evals.campaigns import main as campaign_eval
+
+        return campaign_eval(args.out)
     if command == "suite":
         return _run_suite(args)
     if command == "pipeline":

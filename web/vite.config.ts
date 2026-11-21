@@ -19,6 +19,7 @@ export default defineConfig({
             "/ws": { target: backend.replace(/^http/, "ws"), ws: true },
             "/health": backend,
             "/media": backend,
+            "/campaign-assets": backend,
             "/dev": backend,
             "/api": backend,
             "/r": backend,

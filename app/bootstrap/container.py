@@ -29,6 +29,7 @@ from app.modules.audience.infrastructure.tagging.claude import ClaudeAudienceTag
 from app.modules.common.application.clock import BaseClock
 from app.modules.common.infrastructure.clock.system_clock import SystemClock
 from app.modules.common.infrastructure.postgres.write_behind import WriteBehindWriter
+from app.modules.creative.application.campaigns import CampaignGenerator
 from app.modules.creative.application.ports.copywriter import CopyWriter
 from app.modules.creative.application.ports.voice import VoiceSynthesizer
 from app.modules.creative.application.voiceover import VoiceoverService, VoiceProfile
@@ -81,6 +82,7 @@ class Container:
     redemption_ledger: Any = None  # RedemptionLedger; in memory unless DATABASE_URL is set
     topic_extractor: TopicExtractor | None = None  # speech topics (AUDIENCE_AI)
     loop_keys: tuple[str, ...] = ()
+    campaign_generator: CampaignGenerator | None = None
     # Async cleanups run at shutdown (HTTP clients, ...).
     closers: list[Callable[[], Awaitable[None]]] = field(default_factory=list)
 

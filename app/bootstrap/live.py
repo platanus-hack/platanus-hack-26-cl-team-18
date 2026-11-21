@@ -17,6 +17,7 @@ from app.contract.messages import (
     StockSet,
 )
 from app.modules.campaigns.application.live_book import MultiplierOutcome
+from app.modules.creative.application.campaigns import CampaignGenerator
 from app.modules.creative.application.loops import bundle_key
 from app.realtime.hub import Sink
 from app.realtime.router import Inbound, InboundRouter, Received
@@ -48,6 +49,14 @@ def register_live_market(container: Container) -> DemoControls:
         redemption_ledger=container.redemption_ledger,
     )
     slugs = {kit.brand_id: _slug(kit.name) for kit in market.kits}
+    container.campaign_generator = CampaignGenerator(
+        kits=market.kits,
+        bidders=market.bidders,
+        offers=market.offers,
+        slugs=slugs,
+        media=market.campaign_media,
+        clock=container.clock,
+    )
     container.loop_keys = tuple(
         sorted(
             {bundle_key([slug]) for slug in slugs.values()}

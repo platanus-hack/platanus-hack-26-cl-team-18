@@ -1,6 +1,7 @@
 import type { CreativeSpec } from "@/contract";
 import { assetUrl } from "@/lib/config";
 import { useState } from "react";
+import "./creative.css";
 import { useDwellStage, type AttentionSample } from "./stages";
 
 /** Reveal the actual mounted video only after it can play; overlays stay ready. */
@@ -39,13 +40,17 @@ export function CreativeView({
     spec,
     playKey,
     readAttention,
+    previewStage,
 }: {
     spec: CreativeSpec;
     playKey: string;
     /** The latest screen.attention; omitted, stages follow time on air. */
     readAttention?: () => AttentionSample | null;
+    previewStage?: "teaser" | "offer" | "close";
 }) {
-    const stage = useDwellStage(playKey, spec.stages, readAttention);
+    const dwellStage = useDwellStage(playKey, spec.stages, readAttention);
+    const stage = spec.stages.find((item) => item.name === previewStage) ?? dwellStage;
+    const photo = spec.slots.find((slot) => slot.hero_image_url)?.hero_image_url;
     const columns =
         spec.slots.length === 1
             ? "grid-cols-1"
@@ -53,8 +58,10 @@ export function CreativeView({
               ? "grid-cols-2"
               : "grid-cols-3";
     return (
-        <div className="relative h-full w-full overflow-hidden bg-canvas">
+        <div className="creative-canvas relative h-full w-full overflow-hidden bg-canvas">
+            {photo && <img className="creative-photo" src={assetUrl(photo)} alt="" />}
             {spec.video_url && <VideoLoop key={spec.video_url} url={spec.video_url} />}
+            {(photo || spec.video_url) && <div className="creative-shade" />}
             {stage === null ? (
                 <div className={`relative grid h-full ${columns} gap-8 p-16`}>
                     {spec.slots.map((slot) => (
@@ -86,47 +93,69 @@ export function CreativeView({
                     ))}
                 </div>
             ) : (
-                <div className="relative flex h-full flex-col items-center justify-between gap-10 p-16 text-center">
-                    <div className="flex items-center justify-center gap-16">
+                <div className="creative-composition">
+                    <div className="creative-brands">
                         {spec.slots.map((slot) => (
-                            <img
+                            <div
+                                className="creative-brand"
                                 key={slot.brand_id}
-                                className="h-[16vh] max-w-[30vw] object-contain"
-                                src={assetUrl(slot.logo_url)}
-                                alt={slot.brand_name}
-                                style={
-                                    slot.accent_color
-                                        ? {
-                                              filter: `drop-shadow(0 0 2.5rem ${slot.accent_color}55)`,
-                                          }
-                                        : undefined
-                                }
-                            />
-                        ))}
-                    </div>
-                    <p
-                        key={`${stage.name}:${stage.copy_text}`}
-                        className="max-w-[80vw] text-[6vw] leading-tight font-semibold text-balance"
-                        style={{ animation: "stage-in var(--duration-crossfade) ease-out both" }}
-                    >
-                        {stage.copy_text}
-                    </p>
-                    <div className="flex min-h-[12vh] items-center justify-center">
-                        {stage.name === "offer" && spec.offer && (
-                            <span
-                                className="rounded-container px-10 py-4 text-[3vw] font-bold text-canvas"
-                                style={{
-                                    background:
-                                        spec.slots[0]?.accent_color ?? "var(--color-accent)",
-                                }}
+                                style={{ borderColor: slot.accent_color ?? "var(--color-accent)" }}
                             >
-                                {spec.offer.party_size > 1
-                                    ? `Para ${spec.offer.party_size} · `
-                                    : ""}
-                                ${Number(spec.offer.price.amount).toLocaleString("es-CL")}
-                            </span>
+                                <img
+                                    className="creative-brand-logo"
+                                    src={assetUrl(slot.logo_url)}
+                                    alt={slot.brand_name}
+                                    style={
+                                        slot.accent_color
+                                            ? {
+                                                  filter: `drop-shadow(0 0 2.5rem ${slot.accent_color}55)`,
+                                              }
+                                            : undefined
+                                    }
+                                />
+                                <span>{slot.brand_name}</span>
+                            </div>
+                        ))}
+                        {spec.slots.length > 1 && (
+                            <span className="creative-partnership">JUNTOS EN ESTE MOMENTO</span>
                         )}
-                        {stage.name === "close" && <CloseCall spec={spec} />}
+                    </div>
+                    <div className="creative-story">
+                        <span className="creative-eyebrow">
+                            {spec.offer?.label ?? "Tu próxima pausa empieza aquí"}
+                        </span>
+                        <p
+                            key={`${stage.name}:${stage.copy_text}`}
+                            className="creative-headline"
+                            style={{
+                                animation: "stage-in var(--duration-crossfade) ease-out both",
+                            }}
+                        >
+                            {stage.copy_text}
+                        </p>
+                        <div className="creative-action">
+                            {stage.name === "offer" && spec.offer && (
+                                <span
+                                    className="creative-price"
+                                    style={{
+                                        background:
+                                            spec.slots[0]?.accent_color ?? "var(--color-accent)",
+                                    }}
+                                >
+                                    {spec.offer.party_size > 1
+                                        ? `Para ${spec.offer.party_size} · `
+                                        : ""}
+                                    ${Number(spec.offer.price.amount).toLocaleString("es-CL")}
+                                </span>
+                            )}
+                            {stage.name === "close" && <CloseCall spec={spec} />}
+                        </div>
+                    </div>
+                    <div className="creative-footer">
+                        <span>UNA OFERTA PARA TU MOMENTO</span>
+                        <span>
+                            {spec.slots.length > 1 ? "DOS MARCAS · UN SOLO COMBO" : "AQUÍ AL LADO"}
+                        </span>
                     </div>
                 </div>
             )}
@@ -137,13 +166,13 @@ export function CreativeView({
 /** The close stage: a scannable QR (about 1.5 m on a TV) with its code, or text only. */
 function CloseCall({ spec }: { spec: CreativeSpec }) {
     if (spec.qr_url === null) {
-        return <span className="text-[2.5vw] text-muted">QR · válido 10 min</span>;
+        return <span className="creative-close-note">El QR se emite al activar la campaña.</span>;
     }
     return (
-        <div className="flex items-center gap-10">
-            <div className="rounded-container bg-fg p-[2vh]">
+        <div className="creative-close">
+            <div className="creative-qr">
                 <img
-                    className="block aspect-square h-[28vh]"
+                    className="creative-qr-image"
                     src={assetUrl(spec.qr_url)}
                     alt="QR para canjear la oferta"
                     style={{ imageRendering: "pixelated" }}
@@ -151,11 +180,9 @@ function CloseCall({ spec }: { spec: CreativeSpec }) {
             </div>
             <div className="flex flex-col items-start gap-2 text-left">
                 {spec.redemption_code && (
-                    <span className="font-mono text-[3vw] font-bold tracking-widest tabular-nums">
-                        {spec.redemption_code}
-                    </span>
+                    <span className="creative-code">{spec.redemption_code}</span>
                 )}
-                <span className="text-[2.5vw] text-muted">válido 10 min</span>
+                <span className="creative-close-note">válido 10 min</span>
             </div>
         </div>
     );

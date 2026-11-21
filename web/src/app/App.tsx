@@ -12,12 +12,16 @@ const AdvertiserPage = lazy(() =>
     import("@/features/advertiser").then((m) => ({ default: m.AdvertiserPage })),
 );
 const ClerkPage = lazy(() => import("@/features/clerk").then((m) => ({ default: m.ClerkPage })));
+const CampaignsPage = lazy(() =>
+    import("@/features/campaigns").then((m) => ({ default: m.CampaignsPage })),
+);
 
 const ROUTES: Record<string, () => React.JSX.Element> = {
     "/screen": () => <ScreenPage />,
     "/console": () => <ConsolePage />,
     "/advertiser": () => <AdvertiserPage />,
     "/clerk": () => <ClerkPage />,
+    "/campaigns": () => <CampaignsPage />,
 };
 
 const TOOLS = [

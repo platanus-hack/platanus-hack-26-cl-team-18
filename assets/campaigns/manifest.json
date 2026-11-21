@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "provenance": "AI-generated illustrative product scenery; existing brand marks and approved offers remain separate overlays. Videos are local photo-motion loops, not generated product motion.",
+  "campaigns": {
+    "voltio": {"photo": "energy", "video": "energy"},
+    "rayo": {"photo": "energy", "video": "energy"},
+    "cafe-patio": {"photo": "coffee", "video": "coffee"},
+    "malta-sur": {"photo": "beer", "video": "beer"},
+    "cafe-patio+voltio": {"photo": "energy-coffee", "video": "energy-coffee"},
+    "cafe-patio+rayo": {"photo": "energy-coffee", "video": "energy-coffee"}
+  }
+}
