@@ -121,6 +121,12 @@ class MinorLikely(_Model):
 class LatencyTrace(_Model):
     """Every decision carries one; add a field when you add a step to the loop."""
 
+    # Device-clock boundaries: candidate includes track confirmation; measured_at
+    # remains the latest frame used for the published facts. Synchronize device,
+    # backend and player clocks before comparing timestamps across machines.
+    candidate_at: AwareDatetime | None = None
+    detected_at: AwareDatetime | None = None
+    published_at: AwareDatetime | None = None
     measured_at: AwareDatetime | None = None
     received_at: AwareDatetime | None = None
     moment_changed_at: AwareDatetime | None = None
@@ -194,6 +200,12 @@ class AudienceSnapshot(_Message):
     screen_id: ScreenId
     seq: Seq
     measured_at: AwareDatetime
+    # Device-clock boundaries: candidate includes track confirmation; measured_at
+    # remains the latest frame used for the published facts. Synchronize device,
+    # backend and player clocks before comparing timestamps across machines.
+    candidate_at: AwareDatetime | None = None
+    detected_at: AwareDatetime | None = None
+    published_at: AwareDatetime | None = None
     people: Annotated[int, Field(ge=0)]
     looking: Annotated[int, Field(ge=0)]
     tracklets: list[Tracklet] = Field(default_factory=list, max_length=64)

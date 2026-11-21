@@ -561,6 +561,9 @@ def register_demo(
             )
         )
         trace = LatencyTrace(
+            candidate_at=snapshot.candidate_at,
+            detected_at=snapshot.detected_at,
+            published_at=snapshot.published_at,
             measured_at=moment.measured_at.value,
             received_at=moment.received_at.value,
             moment_changed_at=moment.moment_changed_at.value,

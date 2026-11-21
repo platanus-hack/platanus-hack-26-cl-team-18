@@ -14,12 +14,18 @@ const MAX_BUFFERS = 16;
 const OUTPUT_GAIN = 0.85;
 
 type AudioContextFactory = () => AudioContext;
+type PendingVoice = {
+    controller: AbortController;
+    promise: Promise<void>;
+    users: number;
+};
 
 export class VoicePlayer {
     private context: AudioContext | null = null;
     private gain: GainNode | null = null;
     private readonly buffers = new Map<string, AudioBuffer>();
     private readonly played = new Set<string>();
+    private readonly pending = new Map<string, PendingVoice>();
     private current: AudioBufferSourceNode | null = null;
 
     constructor(
@@ -43,12 +49,52 @@ export class VoicePlayer {
 
     /** Fetch + decode; callers handle optional audio failures. */
     async prepare(url: string, signal: AbortSignal): Promise<void> {
+        signal.throwIfAborted();
         if (this.buffers.has(url)) return;
+        let request = this.pending.get(url);
+        if (request === undefined || request.controller.signal.aborted) {
+            const controller = new AbortController();
+            const fresh: PendingVoice = { controller, users: 0, promise: Promise.resolve() };
+            fresh.promise = this.load(url, controller.signal).finally(() => {
+                if (this.pending.get(url) === fresh) this.pending.delete(url);
+            });
+            request = fresh;
+            this.pending.set(url, request);
+        }
+        const shared = request;
+        shared.users++;
+        return new Promise<void>((resolve, reject) => {
+            const abort = () => {
+                reject(new DOMException("Voice preparation cancelled", "AbortError"));
+            };
+            signal.addEventListener("abort", abort, { once: true });
+            shared.promise.then(
+                () => {
+                    signal.removeEventListener("abort", abort);
+                    resolve();
+                },
+                (error: unknown) => {
+                    signal.removeEventListener("abort", abort);
+                    reject(error instanceof Error ? error : new Error("Voice preparation failed"));
+                },
+            );
+        }).finally(() => {
+            // The last consumer cancels the request. Defer one microtask so the
+            // back → front effect handoff reuses an in-flight decode or fetch.
+            shared.users--;
+            queueMicrotask(() => {
+                if (shared.users === 0) shared.controller.abort();
+            });
+        });
+    }
+
+    private async load(url: string, signal: AbortSignal): Promise<void> {
         const response = await this.fetcher(assetUrl(url), { signal });
         if (!response.ok) throw new Error(`voice-over HTTP ${response.status}`);
         const bytes = await response.arrayBuffer();
         const { context } = this.ensureContext();
         const buffer = await context.decodeAudioData(bytes);
+        signal.throwIfAborted();
         if (this.buffers.size >= MAX_BUFFERS) {
             const oldest = this.buffers.keys().next().value;
             if (oldest !== undefined) this.buffers.delete(oldest);

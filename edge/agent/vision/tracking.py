@@ -34,6 +34,7 @@ class TrackerConfig:
     max_gap: timedelta = timedelta(milliseconds=800)
     # Looking is smoothed: a track counts as looking if it looked within this window.
     looking_hold: timedelta = timedelta(milliseconds=500)
+    presence_hold: timedelta = timedelta(milliseconds=300)
 
 
 @dataclass(slots=True)
@@ -46,6 +47,9 @@ class Track:
     looking_seconds: float = 0.0
     distance: DistanceBand = DistanceBand.MID
     hits: int = 0
+    missing_since: datetime | None = None
+    attention_candidate_at: datetime | None = None
+    raw_looking: bool | None = None
     _last_update: datetime | None = field(default=None, repr=False)
 
     def dwell_s(self, now: datetime) -> float:
@@ -64,6 +68,9 @@ class TrackView:
     dwell_s: float
     looking: bool
     distance: DistanceBand
+    first_seen: datetime | None = None
+    missing_since: datetime | None = None
+    attention_candidate_at: datetime | None = None
 
 
 class PersonTracker:
@@ -91,6 +98,9 @@ class PersonTracker:
             if not any(person is p for p, _ in matched):
                 self._refresh(self._new_track(person, now), person, frame)
         self._expire(now)
+        for track in self._tracks.values():
+            if track.last_seen < now and track.missing_since is None:
+                track.missing_since = now
         return [
             TrackView(
                 id=t.id,
@@ -98,9 +108,12 @@ class PersonTracker:
                 dwell_s=round(t.dwell_s(now), 2),
                 looking=t.looking(now, self._config.looking_hold),
                 distance=t.distance,
+                first_seen=t.first_seen,
+                missing_since=t.missing_since,
+                attention_candidate_at=t.attention_candidate_at,
             )
             for t in sorted(self._tracks.values(), key=lambda t: t.first_seen)
-            if t.hits >= self._config.min_hits
+            if t.hits >= self._config.min_hits and now - t.last_seen <= self._config.presence_hold
         ]
 
     def reset(self) -> None:
@@ -142,6 +155,10 @@ class PersonTracker:
     def _refresh(self, track: Track, person: PersonDetection, frame: FrameDetections) -> None:
         now = frame.measured_at
         looking = is_looking(person, self._geometry)
+        if track.raw_looking != looking:
+            track.attention_candidate_at = now
+            track.raw_looking = looking
+        track.missing_since = None
         if (
             looking
             and track._last_update is not None

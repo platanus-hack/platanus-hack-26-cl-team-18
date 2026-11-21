@@ -86,6 +86,9 @@ function message(
             voiceover_url: voice,
         },
         trace: {
+            candidate_at: null,
+            detected_at: null,
+            published_at: null,
             measured_at: new Date().toISOString(),
             received_at: new Date().toISOString(),
             cleared_at: null,
@@ -420,4 +423,19 @@ describe("glass-to-glass and attention-driven stages", () => {
         expect(host.textContent).toContain("AB12CD");
         expect(host.textContent).toContain("válido 10 min");
     });
+});
+
+it("starts optional voice preparation before the visual crossfade finishes", async () => {
+    harness.prepare.mockReturnValue(new Promise<void>(() => {}));
+    await act(async () => {
+        harness.receive(message("prefetched", "/prefetched.mp3"));
+        await Promise.resolve();
+    });
+    expect(harness.prepare).toHaveBeenCalledWith("/prefetched.mp3", expect.any(AbortSignal));
+    expect(visibleCopy()).not.toContain("prefetched");
+    expect(harness.play).not.toHaveBeenCalled();
+    await act(async () => {
+        await vi.advanceTimersByTimeAsync(250);
+    });
+    expect(visibleCopy()).toContain("prefetched");
 });

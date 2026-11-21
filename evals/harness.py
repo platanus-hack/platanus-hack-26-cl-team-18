@@ -287,12 +287,16 @@ def replay_recording(path: Path, *, speed: float = 1.0) -> RunRecord:
                     time.sleep(delay)
                 original = AudienceSnapshot.model_validate(line["snapshot"])
                 session.seq += 1
+                # Rebase every device boundary together, preserving sensing
+                # duration without leaving historical candidate timestamps behind.
+                shift = datetime.now(UTC) - (original.published_at or original.measured_at)
+                instants = {
+                    field: value + shift if value is not None else None
+                    for field in ("measured_at", "candidate_at", "detected_at", "published_at")
+                    for value in (getattr(original, field),)
+                }
                 snapshot = original.model_copy(
-                    update={
-                        "screen_id": DEMO_SCREEN,
-                        "seq": session.seq,
-                        "measured_at": datetime.now(UTC),
-                    }
+                    update={"screen_id": DEMO_SCREEN, "seq": session.seq, **instants}
                 )
                 sent = session.send(snapshot)
                 seen = session.observe(sent, quiet=True)

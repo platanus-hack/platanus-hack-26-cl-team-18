@@ -182,7 +182,7 @@ def _pipeline(link: Link) -> VisionPipeline:
     )
 
 
-def test_minor_likely_goes_through_the_debounce_and_leaves_only_a_bool_and_confidence() -> None:
+def test_minor_likely_publishes_after_the_safety_vote_without_a_second_debounce() -> None:
     link = Link()
     pipeline = _pipeline(link)
     for i in range(10):  # 1 s of adults
@@ -194,8 +194,8 @@ def test_minor_likely_goes_through_the_debounce_and_leaves_only_a_bool_and_confi
     snapshots = [m for m in link.sent if isinstance(m, AudienceSnapshot)]
     flagged = [s for s in snapshots if s.minor_likely.value]
     assert flagged, "the child should be flagged once the vote and the debounce agree"
-    # 7-frame vote (0.6 s) + 500 ms debounce: never earlier than ~1.1 s after the child arrives.
-    assert flagged[0].measured_at - child_from >= timedelta(milliseconds=1100)
+    # Keep the seven-frame vote; only remove the redundant 500 ms fact debounce.
+    assert flagged[0].measured_at - child_from == timedelta(milliseconds=600)
     assert 0 < flagged[-1].minor_likely.confidence < 1
     # The count (3) is published first; the flag flips later on its own (it is in Facts.key).
     first_three = next(s for s in snapshots if s.people == 3)

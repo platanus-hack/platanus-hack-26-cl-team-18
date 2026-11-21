@@ -195,3 +195,35 @@ asserts the keyterms. It needs a key and spends credits.
 
 `agent/contract.py` is a verbatim copy of `app/contract/messages.py`, written
 by `make contract`. Never edit it here.
+
+### Sensing latency and readiness
+
+The canonical CLI warms both local predictors on an in-memory synthetic 720p
+frame before live detection, including when the remote GPU is primary. It also
+opens the GPU connection before the loop; a failed handshake starts on the warm
+local fallback and waits for the normal recovery probe. No warmup image is sent
+to a third-party model. Local inference defaults to at most four CPU threads;
+`--cpu-threads N` overrides this venue-dependent budget. Benchmark with the mic
+and keyframe encoder active before deploying a different device.
+
+Objects run on a 200 ms capture-time deadline (at most one scan per processed
+frame), rather than every sixth frame. `--object-every N` explicitly restores
+frame-count scheduling. Offline record mode still scans every sampled frame.
+Keyframe encoding runs off the event loop, independent of snapshot heartbeats,
+with one active encode and no raw-frame queue. Overdue frames are dropped;
+face blurring still happens before a keyframe can leave the encoder.
+
+The 500 ms arrival/object debounce stays in place. Current presence tolerates
+300 ms without a detection while ID association survives 800 ms. Looking uses
+its existing 500 ms tracker hold without another fact debounce when the people
+count is unchanged. A positive seven-of-twelve minor-safety vote blocks at the
+next rate-limited publication; clearing still requires the usual stable-negative
+debounce. These changes do not reduce the evidence required to protect minors.
+
+Snapshots expose `candidate_at`, `detected_at` and `published_at` in addition to
+the latest frame's `measured_at`. Candidate time includes track confirmation,
+attention holding and presence holding where observed; it is not camera exposure
+time. Backend/player traces retain these boundaries. Synchronize clocks across
+devices before interpreting cross-device differences. Reconnects retain the
+latest pending state per screen/type with a 1.5 s queue-residence deadline;
+events retain their ordering, and keyframe headers and bytes stay paired.

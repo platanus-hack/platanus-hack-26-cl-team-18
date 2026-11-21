@@ -104,6 +104,8 @@ def loop(tmp_path: Path) -> Iterator[Loop]:
         app_env="test", demo_simulator=True, media_dir=tmp_path, auction_swap_holds=True
     )
     container = build_container(settings, clock=clock, scheduler=scheduler)
+    console_ready = threading.Event()
+    container.router.on_console_connected(lambda _sink: console_ready.set())
     app = create_app(container=container)
     with (
         TestClient(app) as client,
@@ -112,6 +114,7 @@ def loop(tmp_path: Path) -> Iterator[Loop]:
         client.websocket_connect("/ws/agent") as agent,
     ):
         harness = Loop(client, clock, scheduler, player, console, agent, container)
+        assert console_ready.wait(2), "console replay must finish before live decisions start"
         assert paid_brands(harness.creative()) == ()  # the house ad: never blank
         yield harness
 
@@ -657,3 +660,19 @@ def test_a_brand_that_cannot_cover_its_next_lease_comes_down_and_is_capped(
         name = "Voltio" if str(charge.campaign_id) == voltio_campaign else "other"
         totals[name] = totals.get(name, 0) + int(charge.amount.amount)
     assert totals["Voltio"] <= 200
+
+
+def test_sensing_boundaries_survive_the_agent_to_player_path(loop: Loop) -> None:
+    now = loop.clock.advance(timedelta(seconds=1))
+    snapshot = snapshot_for("fitness", 1, now).model_copy(
+        update={
+            "candidate_at": now - timedelta(milliseconds=600),
+            "detected_at": now,
+            "published_at": now,
+        }
+    )
+    loop.agent.send_text(snapshot.model_dump_json())
+    trace = loop.creative().trace
+    assert trace.candidate_at == snapshot.candidate_at
+    assert trace.measured_at == now
+    assert trace.detected_at == trace.published_at == now

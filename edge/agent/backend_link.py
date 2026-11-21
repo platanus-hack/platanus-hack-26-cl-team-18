@@ -1,8 +1,9 @@
 """The agent's single connection to the backend (`/ws/agent`, docs/architecture.md §10).
 
 - Reconnects forever with capped exponential backoff + jitter.
-- Bounded outbox: while disconnected, the oldest messages are dropped first,
-  so reconnecting never floods the backend with stale observations.
+- Latest pending state per (type, screen), with a monotonic freshness deadline.
+  Events keep their order; a keyframe header and its binary stay one item.
+- Bounded outbox: when full, drop the oldest pending item.
 - Rejected frames come back as `system.error`; they are logged and counted,
   never retried (a bad frame stays bad).
 """
@@ -13,6 +14,7 @@ import asyncio
 import json
 import logging
 import random
+import time
 from collections import deque
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -37,6 +39,14 @@ async def _default_connect(url: str) -> _Socket:
     return await websockets.connect(url, max_size=2**20, ping_interval=10, ping_timeout=10)  # type: ignore[return-value]
 
 
+@dataclass(eq=False)
+class _Pending:
+    text: str
+    binary: bytes | None
+    key: tuple[str, str] | None
+    queued_at: float
+
+
 @dataclass
 class LinkStats:
     sent: int = 0
@@ -54,10 +64,16 @@ class BackendLink:
         max_pending: int = 64,
         backoff_base_s: float = 0.25,
         backoff_max_s: float = 5.0,
+        state_max_age_s: float = 1.5,
+        monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         self._url = url
         self._connect = connect
-        self._pending: deque[tuple[str, bytes | None]] = deque()
+        self._pending: deque[_Pending] = deque()
+        self._now = monotonic
+        self._state_max_age_s = state_max_age_s
+        if max_pending < 1 or state_max_age_s <= 0:
+            raise ValueError("outbox capacity and state lifetime must be positive")
         self._max_pending = max_pending
         self._wakeup = asyncio.Event()
         self._backoff = (backoff_base_s, backoff_max_s)
@@ -70,10 +86,21 @@ class BackendLink:
 
     def send(self, message: BaseModel, *, binary: bytes | None = None) -> None:
         """Queue a contract message (and an optional binary frame right after it)."""
+        kind = getattr(message, "type", "")
+        key = (
+            (kind, str(getattr(message, "screen_id", "")))
+            if kind in {"audience.snapshot", "audience.keyframe", "recognition.snapshot"}
+            else None
+        )
+        if key is not None:
+            for old in list(self._pending):
+                if old.key == key:
+                    self._pending.remove(old)
+                    self.stats.dropped += 1
         if len(self._pending) >= self._max_pending:
             self._pending.popleft()
             self.stats.dropped += 1
-        self._pending.append((message.model_dump_json(), binary))
+        self._pending.append(_Pending(message.model_dump_json(), binary, key, self._now()))
         self._wakeup.set()
 
     async def wait_connected(self, timeout: float) -> None:
@@ -116,14 +143,35 @@ class BackendLink:
                         reader.result()  # re-raise the disconnect
                         return
                     continue
-                text, binary = self._pending[0]
-                await socket.send(text)
-                if binary is not None:
-                    await socket.send(binary)
-                self._pending.popleft()
+                # Remove before yielding: concurrent send() may replace pending state,
+                # but must never evict a different message after this send completes.
+                item = self._pending.popleft()
+                if self._expired(item):
+                    self.stats.dropped += 1
+                    continue
+                try:
+                    await socket.send(item.text)
+                    if item.binary is not None:
+                        await socket.send(item.binary)
+                except (OSError, websockets.WebSocketException):
+                    superseded = item.key is not None and any(
+                        p.key == item.key for p in self._pending
+                    )
+                    if (
+                        not superseded
+                        and not self._expired(item)
+                        and len(self._pending) < self._max_pending
+                    ):
+                        self._pending.appendleft(item)
+                    else:
+                        self.stats.dropped += 1
+                    raise
                 self.stats.sent += 1
         finally:
             reader.cancel()
+
+    def _expired(self, item: _Pending) -> bool:
+        return item.key is not None and self._now() - item.queued_at > self._state_max_age_s
 
     async def _read(self, socket: _Socket) -> None:
         while True:

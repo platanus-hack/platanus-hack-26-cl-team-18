@@ -98,6 +98,18 @@ export function ScreenPage() {
         };
     }, [preloading, store]);
 
+    // Fetch while the back layer loads/fades. Visual readiness never awaits it.
+    const back = state.layers[state.front === "a" ? "b" : "a"];
+    const nextVoice = state.phase.kind === "showing" ? null : (back?.spec.voiceover_url ?? null);
+    useEffect(() => {
+        if (nextVoice === null) return;
+        const controller = new AbortController();
+        void voice.prepare(nextVoice, controller.signal).catch(() => {});
+        return () => {
+            controller.abort();
+        };
+    }, [nextVoice, voice]);
+
     // Prepare voice independently of visual readiness; late audio may still play
     // while its creative is on air. A replacement cancels the old line.
     const onAir = frontCreative(state);

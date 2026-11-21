@@ -12,9 +12,10 @@ Two jobs, both deterministic (time comes from `measured_at`, never the clock):
 2. **Rate-limit the sends.** A snapshot goes out at once when the published
    facts change, otherwise as a heartbeat, never faster than `max_rate_hz`.
 
-Counts, objects, held products, `minor_likely` and the sound scene in a
-snapshot are the **published** (debounced) facts: they all live in `Facts.key`,
-so none of them bypasses the debounce or the crowd vote. Tracklets are the
+Counts, objects, held products and the sound scene use the fact debounce.
+Looking already has the tracker's 500 ms hold; do not debounce it twice when
+person count is unchanged. A positive minor-safety vote restricts immediately;
+clearing still needs stable negative evidence through the debounce. Tracklets are the
 **live** per-person samples of the current frame, because the backend joins
 them with the playback window to measure attention.
 """
@@ -22,7 +23,7 @@ them with the playback window to measure attention.
 from __future__ import annotations
 
 from collections import Counter, deque
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 
 from agent.contract import AudienceSnapshot, DetectedObject, MinorLikely, SoundScene, Tracklet
@@ -122,6 +123,11 @@ class SnapshotBuilder:
         self._screen_id = screen_id
         self._config = config or SnapshotConfig()
         self._seq = 0
+        self._candidate_at: datetime | None = None
+        self._published_candidate_at: datetime | None = None
+        self._published_ids: set[str] = set()
+        self._published_lookers: set[str] = set()
+        self._missing_since: dict[str, datetime] = {}
         self._published: Facts | None = None
         self._candidate: Facts | None = None
         self._candidate_since: datetime | None = None
@@ -147,11 +153,57 @@ class SnapshotBuilder:
         """Feed one frame. Returns the snapshot to send now, or None.
 
         `minor` is the already-voted moment reading (`agent.vision.minor`) and
-        `sound` the latest sound-scene labels (`agent.sound`); both are debounced
-        here like every other fact.
+        `sound` the latest sound-scene labels (`agent.sound`). Only clearing a
+        positive safety reading waits for this additional fact debounce.
         """
         facts = frame_facts(tracks, objects, held, self._config, minor, sound)
-        self._observe(facts, measured_at)
+        new_tracks = [
+            t.first_seen
+            for t in tracks
+            if t.id not in self._published_ids and t.first_seen is not None
+        ]
+        origin = (
+            min(new_tracks, default=measured_at)
+            if self._published and facts.people > self._published.people
+            else measured_at
+        )
+        current_ids = {t.id for t in tracks}
+        for track in tracks:
+            if track.id in self._published_ids and track.missing_since is not None:
+                self._missing_since.setdefault(track.id, track.missing_since)
+            elif track.missing_since is None:
+                self._missing_since.pop(track.id, None)
+        if self._published and facts.people < self._published.people:
+            origin = min(
+                (
+                    self._missing_since.get(tid, measured_at)
+                    for tid in self._published_ids - current_ids
+                ),
+                default=measured_at,
+            )
+        if (
+            self._published
+            and facts.people == self._published.people
+            and facts.looking != self._published.looking
+        ):
+            lookers = {t.id for t in tracks if t.looking}
+            changed = lookers ^ self._published_lookers
+            origin = min(
+                (
+                    t.attention_candidate_at
+                    for t in tracks
+                    if t.id in changed and t.attention_candidate_at is not None
+                ),
+                default=measured_at,
+            )
+        self._observe(facts, measured_at, origin)
+        if self._published and self._published.people == facts.people:
+            self._published_ids = current_ids
+            self._missing_since = {
+                tid: at for tid, at in self._missing_since.items() if tid in current_ids
+            }
+        if self._published and self._published.looking == facts.looking:
+            self._published_lookers = {t.id for t in tracks if t.looking}
         published = self._published
         assert published is not None
         if not self._due(measured_at, published):
@@ -165,6 +217,7 @@ class SnapshotBuilder:
             screen_id=self._screen_id,
             seq=self._seq,
             measured_at=measured_at,
+            candidate_at=self._published_candidate_at,
             people=published.people,
             looking=published.looking,
             tracklets=[
@@ -184,14 +237,23 @@ class SnapshotBuilder:
         self._last_sent_key = published.key
         return snapshot
 
-    def _observe(self, facts: Facts, now: datetime) -> None:
+    def _observe(self, facts: Facts, now: datetime, origin: datetime) -> None:
         self._recent.append((now, facts))
         while self._recent and now - self._recent[0][0] > self._config.vote_window:
             self._recent.popleft()
         if self._candidate is None or facts.key != self._candidate.key:
             self._candidate, self._candidate_since = facts, now
+            self._candidate_at = origin
         else:
             self._candidate = facts  # same facts, fresher scores
+        # A confirmed safety vote only restricts ads: never add another 500 ms.
+        # Clearing still goes through the full debounce, even during crowd voting.
+        if self._published is not None:
+            if facts.minor.value and not self._published.minor.value:
+                self._publish(replace(self._published, minor=facts.minor), now)
+            if facts.people == self._published.people and facts.looking != self._published.looking:
+                self._publish(replace(self._published, looking=facts.looking), now)
+
         if self._published is None:
             self._publish(facts, now)
             return
@@ -205,6 +267,10 @@ class SnapshotBuilder:
             # Re-check every max_stale: publish the vote if it disagrees, else confirm.
             vote = self._vote()
             if vote.key != self._published.key:
+                # A crowd vote must not clear the safety block before a stable
+                # negative candidate has passed the ordinary debounce.
+                if self._published.minor.value:
+                    vote = replace(vote, minor=self._published.minor)
                 self._publish(vote, now)
             else:
                 self._published_at = now
@@ -221,6 +287,7 @@ class SnapshotBuilder:
     def _publish(self, facts: Facts, now: datetime) -> None:
         self._published = facts
         self._published_at = now
+        self._published_candidate_at = self._candidate_at or now
 
     def _due(self, now: datetime, published: Facts) -> bool:
         if self._last_sent_at is None:
