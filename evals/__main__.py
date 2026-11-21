@@ -72,6 +72,9 @@ def main(argv: list[str] | None = None) -> int:
     creative.add_argument("--writer", choices=["stock", "recorded", "claude"], default="recorded")
     creative.add_argument("--record", action="store_true", help="live: overwrite recordings.json")
     creative.add_argument("--update-baseline", dest="creative_baseline", action="store_true")
+    creative.add_argument(
+        "--harvest", action="store_true", help="append rejected/demoted drafts to harvested.json"
+    )
     sub.add_parser("campaigns", help="campaign catalog, media, safety, quality and latency")
 
     pipeline = sub.add_parser(
@@ -318,13 +321,16 @@ def _run_creative(args: argparse.Namespace) -> int:
 
     from evals.creative import runner
 
-    report = anyio.run(lambda: runner.run(args.writer))
+    report = anyio.run(lambda: runner.run(args.writer, harvest=args.harvest))
     rows = runner.judge(report.metrics, runner.load_baseline(report.writer), writer=report.writer)
     latest = runner.write_results(report, runner.render(report, rows), args.out)
     print(latest.read_text(encoding="utf-8"))
     if args.record and report.writer == "claude":
         runner.save_recordings(report)
         print(f"recorded {len(report.recorded)} responses to {runner.RECORDINGS_FILE}")
+    if args.harvest:
+        new = runner.save_harvest(report)
+        print(f"harvested {new} new drafts to {runner.HARVEST_FILE} (review before promoting)")
     bad = runner.failed(rows)
     if args.creative_baseline:
         if any(r["status"] == "FAIL" for r in rows):

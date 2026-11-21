@@ -70,6 +70,28 @@ RESTRICTED_FOR_MINORS: tuple[str, ...] = (
     "bar",
 )
 
+# Child appeal and pester power: blocked when a minor is likely (invariant 2).
+# Ley 20.606 + DS 13/2015: children's language, toys or characters make an "alto en"
+# ad count as aimed at under-14s. CONAR (CChEP 2024): never exploit children's
+# credulity or push them to ask their parents. No bare "papa": it also means potato.
+CHILD_APPEAL: tuple[str, ...] = (
+    "peque*",
+    "nino*",
+    "nina*",
+    "infantil*",
+    "juguete*",
+    "sorpresa*",
+    "colegio*",
+    "recreo",
+    "dibujito*",
+    "monito*",
+    "cajita*",
+    "pidele*",
+    "tu mama",
+    "tu papa",
+    "tus papas",
+)
+
 # Real brands the copy must never name unless they are in the basket (competitors,
 # conquest or comparisons). The seed's own brands come from the brief's avoid list.
 KNOWN_BRANDS: tuple[str, ...] = (
@@ -134,6 +156,25 @@ FORBIDDEN_CLAIMS: tuple[str, ...] = (
     "rebaj*",
     "liquidacion",
     "off",
+    # CONAR (CChEP 2024): claims must be truthful and verifiable; no superlatives,
+    # endorsements or performance/health promises the brand kit didn't approve.
+    "mas rico",
+    "mas rica",
+    "mas sabros*",
+    "recomendad*",
+    "nutricionista*",
+    "cientific*",
+    "comprobad*",
+    "mas fuerte*",
+    "te hace mas*",
+    # Ley 21.363: alcohol copy must not encourage harmful drinking (or drink-driving).
+    "tomense todas",
+    "tomate todas",
+    "toma todas",
+    "sin limite*",
+    "al seco",
+    "hasta caer",
+    "para el camino",
 )
 
 # Copy must never describe or infer things about the viewers (invariant 3) or sound like surveillance.

@@ -162,6 +162,41 @@ the recorded latencies and outputs are fixtures, so the numbers only move
 when code or fixtures move. `--writer claude` runs the same suite live
 (costs real money; run on purpose, never in CI).
 
+## 4.5 Regulation-grounded cases and the feedback loop
+
+The guard's rules aren't only taste: four Chilean sources define what may air,
+and each one has adversarial entries (with a `source` field) in
+`evals/creative/adversarial.json` plus table tests in
+`tests/unit/creative/test_guard_regulatory.py`.
+
+| Source | What it means for copy | Guard rule |
+|---|---|---|
+| [Ley 20.606](https://es.wikipedia.org/wiki/Ley_sobre_composici%C3%B3n_nutricional_de_los_alimentos_y_su_publicidad) + DS 13/2015 ([MINSAL report](https://www.minsal.cl/wp-content/uploads/2017/05/Informe-evaluaci%C3%B3n-implementaci%C3%B3n-Ley-20606-Enero-2017.pdf)) | Children's language, toys, characters or "sorpresa" make an "alto en" ad count as aimed at under-14s | `CHILD_APPEAL` → `restricted_for_minor` when `minor_likely` |
+| [Ley 21.363](https://www.bcn.cl/leychile/navegar?idNorma=1163383) (alcohol) | No alcohol ads aimed at minors; nothing encouraging harmful drinking | `RESTRICTED_FOR_MINORS`; "sin límite", "al seco", "para el camino" → `unapproved_claim` |
+| [Ley 19.496 arts. 28 d) and 30](https://www.sernac.cl/portal/609/w3-propertyvalue-58760.html) (SERNAC) | The advertised price is the real, total price | "desde $", "a partir de $", "+ IVA", "IVA no incluido" → `price_changed` |
+| [Código Chileno de Ética Publicitaria](https://www.conar.cl/wp-content/uploads/2024/11/CODIGO-CHILENO-DE-ETICA-PUBLICTARIA-2024-VF.pdf) (CONAR, 2024) | Truthful, verifiable claims; never exploit children's credulity | superlatives, endorsements, performance promises → `unapproved_claim`; "pídele a tu mamá" → `restricted_for_minor` |
+
+Over-blocking is tested too: near-miss wording ("desde hoy", "papas" the
+potato, "¡qué rico!") must still air with a minor present, because a guard that
+rejects good copy turns every moment into the house ad.
+
+**The loop** (run after a rehearsal, or whenever the prompt or model changes):
+
+1. `python -m evals creative --writer claude --harvest`. A live run; every draft
+   the studio rejects or demotes is appended, deduplicated, to
+   `evals/creative/harvested.json` with its violations and model version.
+2. Review each harvested entry:
+   - a real violation becomes an `adversarial.json` entry with its `expect`
+     kind (a permanent regression case);
+   - a false rejection becomes a guard fix plus a benign near-miss test.
+3. `make eval-creative` must stay green (adversarial gate = 100 %, no new false
+   positives on the 23 cases), then lock any improved ratchet with
+   `make eval-creative-baseline`.
+
+Note: the `hot_compose_p95_ms` gate measures wall-clock time, so it can trip on
+a heavily loaded machine (it failed once at load average 10 and passed on a
+re-run at 4.7 ms). Re-run before treating it as a regression.
+
 ## 5. Testability
 
 - Everything is a pure function of a `CreativeBrief` except the writer call.
