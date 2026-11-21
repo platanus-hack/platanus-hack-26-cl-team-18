@@ -1,9 +1,10 @@
 {
-  "git_sha": "648c7b5",
+  "git_sha": "4ee0901",
   "metrics": {
     "video_ad_precision": 0.8228217037095402,
+    "video_brand_swaps_per_minute": 6.1905701908753885,
     "video_flicker_per_minute": 10.225527132074852,
     "video_sensible_ad_reach": 0.45858150193875985
   },
-  "updated_at": "2026-11-21T20:36:45+00:00"
+  "updated_at": "2026-11-21T20:46:37+00:00"
 }

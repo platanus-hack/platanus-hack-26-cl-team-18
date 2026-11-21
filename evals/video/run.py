@@ -325,9 +325,7 @@ def main(argv: list[str] | None = None) -> int:
         "video_ad_precision": sum(precisions) / len(precisions) if precisions else None,
         "video_sensible_ad_reach": sum(reaches) / len(reaches) if reaches else None,
         "video_paid_share": sum(r.metrics["paid_share"] for r in results) / max(len(results), 1),
-        "video_brand_swaps_per_minute": sum(
-            r.metrics["brand_swaps_per_minute"] for r in results
-        )
+        "video_brand_swaps_per_minute": sum(r.metrics["brand_swaps_per_minute"] for r in results)
         / max(len(results), 1),
         "video_flicker_per_minute": sum(r.metrics["flicker_per_minute"] for r in results)
         / max(len(results), 1),
