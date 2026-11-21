@@ -1,0 +1,310 @@
+{
+  "taxonomy": "IAB Tech Lab Audience Taxonomy",
+  "taxonomy_version": "1.1",
+  "catalog_version": "cstore-2026-11-21",
+  "source": "https://github.com/InteractiveAdvertisingBureau/Taxonomies/blob/main/Audience%20Taxonomies/Audience%20Taxonomy%201.1.tsv",
+  "retrieved": "2026-11-21",
+  "notes": "Convenience-store subset. Interest and Purchase Intent tiers only: no Demographic segments and nothing sensitive (health conditions, religion, politics, orientation). IDs and paths copied from the official TSV; the Purchase Intent asterisk is dropped from paths. Brand refs are the prop marker slugs in edge/props/markers.json (ADR 0008 D2). Spoken keyterms map to segments in the demo seed (speech_evidence.py), not here.",
+  "segments": [
+    {
+      "id": "369",
+      "label": "Alcoholic Beverages",
+      "path": "Interest | Food & Drink | Alcoholic Beverages",
+      "tier": "interest"
+    },
+    {
+      "id": "372",
+      "label": "Desserts and Baking",
+      "path": "Interest | Food & Drink | Desserts and Baking",
+      "tier": "interest"
+    },
+    {
+      "id": "373",
+      "label": "Dining Out",
+      "path": "Interest | Food & Drink | Dining Out",
+      "tier": "interest"
+    },
+    {
+      "id": "377",
+      "label": "Non-Alcoholic Beverages",
+      "path": "Interest | Food & Drink | Non-Alcoholic Beverages",
+      "tier": "interest"
+    },
+    {
+      "id": "408",
+      "label": "Fitness and Exercise",
+      "path": "Interest | Healthy Living | Fitness and Exercise",
+      "tier": "interest"
+    },
+    {
+      "id": "410",
+      "label": "Running and Jogging",
+      "path": "Interest | Healthy Living | Fitness and Exercise | Running and Jogging",
+      "tier": "interest"
+    },
+    {
+      "id": "481",
+      "label": "Music and Audio",
+      "path": "Interest | Music and Audio",
+      "tier": "interest"
+    },
+    {
+      "id": "541",
+      "label": "Pets",
+      "path": "Interest | Pets",
+      "tier": "interest"
+    },
+    {
+      "id": "544",
+      "label": "Dogs",
+      "path": "Interest | Pets | Dogs",
+      "tier": "interest"
+    },
+    {
+      "id": "607",
+      "label": "Sports",
+      "path": "Interest | Sports",
+      "tier": "interest"
+    },
+    {
+      "id": "625",
+      "label": "Cycling",
+      "path": "Interest | Sports | Cycling",
+      "tier": "interest"
+    },
+    {
+      "id": "636",
+      "label": "Skateboarding",
+      "path": "Interest | Sports | Extreme Sports | Skateboarding",
+      "tier": "interest"
+    },
+    {
+      "id": "663",
+      "label": "Soccer",
+      "path": "Interest | Sports | Soccer",
+      "tier": "interest"
+    },
+    {
+      "id": "687",
+      "label": "Technology & Computing",
+      "path": "Interest | Technology & Computing",
+      "tier": "interest"
+    },
+    {
+      "id": "719",
+      "label": "Travel",
+      "path": "Interest | Travel",
+      "tier": "interest"
+    },
+    {
+      "id": "733",
+      "label": "Video Gaming",
+      "path": "Interest | Video Gaming",
+      "tier": "interest"
+    },
+    {
+      "id": "736",
+      "label": "Mobile Games",
+      "path": "Interest | Video Gaming | Mobile Games",
+      "tier": "interest"
+    },
+    {
+      "id": "975",
+      "label": "Carbonated Soft Drinks",
+      "path": "Purchase Intent | Consumer Packaged Goods | Edible | Beverages | Carbonated Soft Drinks",
+      "tier": "purchase_intent"
+    },
+    {
+      "id": "977",
+      "label": "Coffee",
+      "path": "Purchase Intent | Consumer Packaged Goods | Edible | Beverages | Coffee & Tea | Coffee",
+      "tier": "purchase_intent"
+    },
+    {
+      "id": "982",
+      "label": "Tea/Coffee - Ready-to-Drink",
+      "path": "Purchase Intent | Consumer Packaged Goods | Edible | Beverages | Coffee & Tea | Tea/Coffee - Ready-to-Drink",
+      "tier": "purchase_intent"
+    },
+    {
+      "id": "997",
+      "label": "Energy Drinks",
+      "path": "Purchase Intent | Consumer Packaged Goods | Edible | Beverages | Sports/Energy Drinks | Energy Drinks",
+      "tier": "purchase_intent"
+    },
+    {
+      "id": "1000",
+      "label": "Bottled Water",
+      "path": "Purchase Intent | Consumer Packaged Goods | Edible | Beverages | Water | Bottled Water",
+      "tier": "purchase_intent"
+    },
+    {
+      "id": "1011",
+      "label": "Ice Cream/Sherbet",
+      "path": "Purchase Intent | Consumer Packaged Goods | Edible | Frozen | Frozen Desserts | Ice Cream/Sherbet",
+      "tier": "purchase_intent"
+    },
+    {
+      "id": "1045",
+      "label": "Pastry/Doughnuts",
+      "path": "Purchase Intent | Consumer Packaged Goods | Edible | General Food | Bakery | Pastry/Doughnuts",
+      "tier": "purchase_intent"
+    },
+    {
+      "id": "1074",
+      "label": "Candy",
+      "path": "Purchase Intent | Consumer Packaged Goods | Edible | General Food | Candy",
+      "tier": "purchase_intent"
+    },
+    {
+      "id": "1115",
+      "label": "Snacks",
+      "path": "Purchase Intent | Consumer Packaged Goods | Edible | General Food | Snacks",
+      "tier": "purchase_intent"
+    },
+    {
+      "id": "1122",
+      "label": "Salty Snacks",
+      "path": "Purchase Intent | Consumer Packaged Goods | Edible | General Food | Snacks | Salty Snacks",
+      "tier": "purchase_intent"
+    },
+    {
+      "id": "1404",
+      "label": "Fast Food",
+      "path": "Purchase Intent | Food and Beverage Services | Fast Food",
+      "tier": "purchase_intent"
+    },
+    {
+      "id": "1633",
+      "label": "Exercise and Fitness Equipment",
+      "path": "Purchase Intent | Sporting Goods | Exercise and Fitness Equipment",
+      "tier": "purchase_intent"
+    }
+  ],
+  "cues": {
+    "vision": [
+      {
+        "cue": "cup",
+        "segment": "977",
+        "weight": 55
+      },
+      {
+        "cue": "bottle",
+        "segment": "377",
+        "weight": 45
+      },
+      {
+        "cue": "wine glass",
+        "segment": "369",
+        "weight": 50
+      },
+      {
+        "cue": "sports ball",
+        "segment": "607",
+        "weight": 60
+      },
+      {
+        "cue": "sports ball",
+        "segment": "408",
+        "weight": 45
+      },
+      {
+        "cue": "skateboard",
+        "segment": "636",
+        "weight": 75
+      },
+      {
+        "cue": "bicycle",
+        "segment": "625",
+        "weight": 70
+      },
+      {
+        "cue": "dog",
+        "segment": "544",
+        "weight": 75
+      },
+      {
+        "cue": "laptop",
+        "segment": "687",
+        "weight": 55
+      },
+      {
+        "cue": "suitcase",
+        "segment": "719",
+        "weight": 60
+      },
+      {
+        "cue": "donut",
+        "segment": "1045",
+        "weight": 70
+      },
+      {
+        "cue": "cake",
+        "segment": "372",
+        "weight": 55
+      },
+      {
+        "cue": "sandwich",
+        "segment": "1404",
+        "weight": 55
+      },
+      {
+        "cue": "hot dog",
+        "segment": "1404",
+        "weight": 65
+      },
+      {
+        "cue": "pizza",
+        "segment": "1404",
+        "weight": 65
+      }
+    ],
+    "sound": [
+      {
+        "cue": "music",
+        "segment": "481",
+        "weight": 40
+      }
+    ]
+  },
+  "products": [
+    {
+      "category": "energy_drink",
+      "brand_ref": "voltio"
+    },
+    {
+      "category": "energy_drink",
+      "brand_ref": "rayo"
+    },
+    {
+      "category": "coffee",
+      "brand_ref": "cafe-patio"
+    },
+    {
+      "category": "pastry",
+      "brand_ref": "miga"
+    },
+    {
+      "category": "beer",
+      "brand_ref": "malta-sur"
+    },
+    {
+      "category": "soft_drink"
+    },
+    {
+      "category": "water"
+    },
+    {
+      "category": "snack"
+    },
+    {
+      "category": "candy"
+    },
+    {
+      "category": "ice_cream"
+    }
+  ],
+  "reliability": {
+    "vlm": 90
+  }
+}

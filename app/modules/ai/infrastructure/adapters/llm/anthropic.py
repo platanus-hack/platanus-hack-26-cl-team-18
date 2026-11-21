@@ -19,6 +19,7 @@ path never awaits it.
 
 from __future__ import annotations
 
+import base64
 import json
 from collections.abc import Sequence
 from types import TracebackType
@@ -128,7 +129,7 @@ class AnthropicProvider(ILLMProvider):
             "model": self.model,
             "max_tokens": params.max_tokens,
             "messages": [
-                {"role": m.role.value, "content": m.content}
+                {"role": m.role.value, "content": _content(m)}
                 for m in messages
                 if m.role is not ProviderRole.SYSTEM
             ],
@@ -139,6 +140,25 @@ class AnthropicProvider(ILLMProvider):
                 {"type": "text", "text": system_text, "cache_control": {"type": "ephemeral"}}
             ]
         return request
+
+
+def _content(message: ProviderMessage) -> str | list[dict[str, Any]]:
+    """Plain text, or image blocks followed by the text when the message carries images."""
+    if not message.images:
+        return message.content
+    blocks: list[dict[str, Any]] = [
+        {
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": image.media_type,
+                "data": base64.standard_b64encode(image.data).decode("ascii"),
+            },
+        }
+        for image in message.images
+    ]
+    blocks.append({"type": "text", "text": message.content})
+    return blocks
 
 
 def classify_provider_error(exc: anthropic.APIError) -> Exception:

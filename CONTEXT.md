@@ -14,6 +14,8 @@ Contexts: [`docs/architecture.md` §5](docs/architecture.md#5-bounded-contexts).
 | **Audience moment** | The debounced, stable interpretation of who is in front of a screen now: people, looking, segments with confidence, safety flags. Changes trigger auctions. | A snapshot (raw, noisy). |
 | **Audience moment snapshot** | Immutable audience facts published for an auction, including aggregate counts, segment estimates, timing and safety. | Audience snapshot, which is a device reading. |
 | **Segment** | An interest/audience category from the **IAB Audience Taxonomy** with a viewer count and confidence. Our only targeting vocabulary. | Raw VLM text; it's mapped to IAB ids at the anti-corruption layer. |
+| **Segment evidence** | One source's claim (vision, sound or vlm) that N looking viewers match a segment, with a confidence and an expiry. Fused per segment into a segment estimate (noisy-OR across sources). | A segment estimate (the fused result the auction sees). |
+| **Cue rule** | A catalog entry mapping a perception label (COCO class, sound-scene class) to an IAB segment with a weight. The only way a free-text label becomes a segment. | A segment; a prop marker (`product:<slug>`, a held product). |
 | **Speech mode** | Per-screen opt-in where speech is transcribed (Scribe) to extract topics. Off by default; visible indicator. | Sound scene (always on, no speech content). |
 | **Utterance** | One committed transcript segment from speech mode. **Ephemeral**: never persisted or logged. | Speech topic. |
 | **Speech topic** | An IAB segment extracted from utterances, with confidence, intent strength and a TTL. Merged into the moment with `source=speech`. | Raw transcript text. |

@@ -211,6 +211,14 @@ export const ConsoleLatencySchema = z.strictObject({
 });
 export type ConsoleLatency = z.infer<typeof ConsoleLatencySchema>;
 
+// A product someone holds (prop marker or label read): the object, never the person.
+export const HeldProductScoreSchema = z.strictObject({
+  category: z.string().min(1).max(64),
+  brand_ref: z.string().min(1).max(64).nullable(),
+  score: z.number().gte(0.0).lte(1.0),
+});
+export type HeldProductScore = z.infer<typeof HeldProductScoreSchema>;
+
 export const SignalSourceSchema = z.enum(["vision", "vlm", "speech", "sound"]);
 export type SignalSource = z.infer<typeof SignalSourceSchema>;
 
@@ -232,6 +240,7 @@ export const ConsoleMomentSchema = z.strictObject({
   segments: z.array(SegmentScoreSchema),
   minor_likely: MinorLikelySchema,
   trace: LatencyTraceSchema,
+  held_products: z.array(HeldProductScoreSchema).max(16),
 });
 export type ConsoleMoment = z.infer<typeof ConsoleMomentSchema>;
 

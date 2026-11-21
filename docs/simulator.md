@@ -47,9 +47,14 @@ production. Run it on loopback for these synthetic observations.
    ID, rejects stale measurements, and suppresses repeated audience facts.
    The trace preserves device time. Ordering caps it at server receipt so a
    fast device clock cannot delay a subsequent safety update.
-   [Fixture tagging](../app/modules/audience/application/fixture_tagging.py)
-   maps structured video and sound observations into one estimate per matched
-   segment. Fixture IDs use a `DEMO_` prefix.
+   The [audience classifier](../app/modules/audience/application/classifier.py)
+   maps observations through the [IAB catalog](../app/modules/audience/infrastructure/catalog/iab_audience_1_1_cstore.json)
+   into real IAB Audience Taxonomy 1.1 segments (Fitness `408`, Coffee `977`,
+   Alcoholic Beverages `369`), fusing vision, sound and (with
+   `ANTHROPIC_API_KEY`) the VLM's keyframe tags; speech topics merge in after.
+   The replay labels (`sports ball`, `tap handle fixture`, `coffee service
+   fixture`) are demo-only cues at full weight. A `product:<slug>` object is a
+   prop marker: it becomes a held product, never a segment.
 3. The [auction desk](../app/modules/auction/application/desk.py) passes an
    `AdOpportunity` (the moment, `Bidder`s, layouts, reserve, approved baskets)
    to the [engine](../app/modules/auction/domain/clearing.py). The engine
