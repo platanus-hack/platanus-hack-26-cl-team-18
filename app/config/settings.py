@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from pathlib import Path
 from typing import Literal
 
@@ -70,7 +71,7 @@ class AppSettings(BaseSettings):
     creative_ai_copy: bool = False
     creative_copy_timeout_s: float = Field(default=2.5, gt=0, le=20)
     # Generation spend cap per screen-hour, USD (the ROI rule applies under it).
-    creative_hourly_budget_usd: str = "2"
+    creative_hourly_budget_usd: Decimal = Field(default=Decimal(2), gt=0, le=1000)
     # Speech topics from opted-in screens (ADR 0005: off by default, per screen).
     speech_mode_screens: list[str] = Field(default_factory=list)
     speech_topic_ttl_s: int = Field(default=60, gt=0, le=600)

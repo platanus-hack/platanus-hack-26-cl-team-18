@@ -19,6 +19,7 @@ from app.contract.messages import (
     ConsoleBook,
     ConsoleDegradation,
     ConsoleReceipt,
+    CopySourceKind,
     CreativeReady,
     CreativeSpec,
     CreativeUpgraded,
@@ -74,7 +75,7 @@ from app.modules.creative.application.voiceover import InvalidSpokenLine, Voiceo
 from app.modules.creative.domain.angle import Angle
 from app.modules.creative.domain.brief import CreativeBrief
 from app.modules.creative.domain.cost import GenerationBudget, GenerationKind, UsdCost
-from app.modules.creative.domain.draft import CopyDraft
+from app.modules.creative.domain.draft import CopyDraft, CopySource
 from app.modules.creative.domain.offer import BasketOffer, OfferBook
 from app.modules.delivery.application.billing import DeliveryDesk, PlayRecord, Receipt
 from app.modules.delivery.application.ports.ledger import ChargeLedger
@@ -126,7 +127,7 @@ def register_demo(
     ledger: ChargeLedger | None = None,
     copywriter: CopyWriter | None = None,
     copy_timeout_s: float = 2.5,
-    hourly_budget_usd: str = "2",
+    hourly_budget_usd: Decimal = Decimal(2),
     budget_clp: int = 50_000,
 ) -> DemoControls:
     screen_id = ScreenId.create(ids.new_uuid7())
@@ -473,7 +474,13 @@ def register_demo(
         spec = house_spec
         brief = build_brief(moment=decision.moment, result=result, catalog=catalog)
         if brief is not None:
-            spec = render_spec(brief, studio.compose(brief).draft, kits_by_id)
+            composed = studio.compose(brief)
+            if composed.score.verdict.passed:
+                spec = render_spec(brief, composed.draft, kits_by_id)
+            else:
+                # Even stock copy failed the guard (e.g. a kit line unsafe for this
+                # moment): the house ad airs rather than an unsafe line.
+                brief = None
         current_brief = brief
         ready_at = clock.now_utc()
         trace = decision.trace.model_copy(update={"ready_at": ready_at})
@@ -539,7 +546,6 @@ def register_demo(
         if brief is not None and studio.needs_upgrade(brief):
             request_copy(
                 _CopyJob(
-                    creative_id=current_creative.creative_id,
                     brief=brief,
                     value_per_s_clp=result.bundle_value.amount,
                 )
@@ -740,14 +746,28 @@ def register_demo(
         warm.submit_threadsafe("claude", job.brief.signature(), run)
 
     def upgrade_copy(job: _CopyJob, draft: CopyDraft) -> None:
-        """Apply only while the same creative and brief are on air (stale results are dropped)."""
+        """Apply to whatever creative airs this brief now; a different brief means stale, drop it.
+
+        Not keyed by creative id: the warm worker dedupes by brief signature, so a new
+        creative for the same brief shares this job and must still get the upgrade.
+        """
         nonlocal current_creative
         with lock:
             target = current_creative
-            if target.creative_id != job.creative_id or current_brief != job.brief:
+            brief = current_brief
+            # Same signature = same copy deserved (people may shift by one passer-by during
+            # the call). A different signature is stale: drop it.
+            if brief is None or brief.signature() != job.brief.signature():
                 return
+            if target.spec.copy_source is CopySourceKind.AI:
+                return
+            if brief != job.brief:
+                composed = studio.compose(brief)  # re-guards the cached draft for this brief
+                if composed.draft.source is CopySource.STOCK:
+                    return
+                draft = composed.draft
             # A fresh spec drops the old voice-over: it no longer matches the new line.
-            spec = render_spec(job.brief, draft, kits_by_id)
+            spec = render_spec(brief, draft, kits_by_id)
             trace = target.trace.model_copy(update={"upgraded_at": clock.now_utc()})
             current_creative = target.model_copy(update={"spec": spec, "trace": trace})
             upgraded = CreativeUpgraded(
@@ -758,7 +778,7 @@ def register_demo(
                 spec=spec,
                 trace=trace,
             )
-            needs_voice = current_creative if job.brief.party > 0 else None
+            needs_voice = current_creative if brief.party > 0 else None
         hub.send_to_screen_threadsafe(upgraded)
         hub.broadcast_console_threadsafe(upgraded)
         if needs_voice is not None:
@@ -888,7 +908,6 @@ def _tiers(
 class _CopyJob:
     """A warm AI-copy request for the creative that just went on air."""
 
-    creative_id: str
     brief: CreativeBrief
     value_per_s_clp: Decimal
 

@@ -237,7 +237,7 @@ def _run_creative(args: argparse.Namespace) -> int:
     from evals.creative import runner
 
     report = anyio.run(lambda: runner.run(args.writer))
-    rows = runner.judge(report.metrics, runner.load_baseline(report.writer))
+    rows = runner.judge(report.metrics, runner.load_baseline(report.writer), writer=report.writer)
     latest = runner.write_results(report, runner.render(report, rows), args.out)
     print(latest.read_text(encoding="utf-8"))
     if args.record and report.writer == "claude":
