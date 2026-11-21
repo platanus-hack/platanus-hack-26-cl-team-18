@@ -61,7 +61,9 @@ percentage, discount, "gratis" or "regalo" unless it is in the offer or `claims`
 2. Brands: name every brand in `brands` across teaser, offer and close; name them all in \
 the offer line when you can. Never name anything in `avoid`.
 3. Group: if `address_group_as` is set, address the group with exactly those words \
-("para los 4"). Never state any other number of people.
+("para los 4"). Never state any other number of people. If `offer_for_fewer` is true, \
+the offer serves fewer people than are looking: offer it "para compartir" and never \
+say it is for everyone ("para todo el grupo", "para todos", "cada uno").
 4. Claims: only the claims in `claims`. No health, medical or "the best" claims.
 5. People: never describe or guess anything about the viewers (looks, age, body, \
 religion, politics, health, origin) and never say you see, watch or recognize them.
@@ -112,10 +114,11 @@ def brief_payload(brief: CreativeBrief) -> dict[str, object]:
         "address_group_as": (
             f"para los {brief.addressed_party}"
             if brief.addressed_party
-            else "para todo el grupo"
-            if brief.is_group
             else None
+            if brief.offer_undersized or not brief.is_group
+            else "para todo el grupo"
         ),
+        "offer_for_fewer": brief.offer_undersized,
         "people": brief.people,
         "angle": brief.angle.angle.value,
         "angle_reason": brief.angle.reason.value,
@@ -154,7 +157,13 @@ class ClaudeCopywriter:
     name = "claude"
 
     def __init__(
-        self, provider: ILLMProvider, profile: ModelProfile, *, max_tokens: int = 1024
+        # Thinking counts against max_tokens: at 1024 some briefs stopped mid-answer
+        # (max_tokens -> invalid output). The answer itself is ~100 tokens.
+        self,
+        provider: ILLMProvider,
+        profile: ModelProfile,
+        *,
+        max_tokens: int = 2048,
     ) -> None:
         self._provider = provider
         self._profile = profile

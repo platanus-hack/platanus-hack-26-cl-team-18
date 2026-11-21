@@ -27,6 +27,21 @@ class Daypart(StrEnum):
     NIGHT = "night"
 
 
+def daypart_for_hour(hour: int) -> Daypart:
+    """The venue's local hour → the daypart the hook speaks to (pure; the caller converts)."""
+    if not 0 <= hour <= 23:
+        raise ValueError("hour must be within [0, 23]")
+    if 6 <= hour < 11:
+        return Daypart.MORNING
+    if 11 <= hour < 15:
+        return Daypart.MIDDAY
+    if 15 <= hour < 19:
+        return Daypart.AFTERNOON
+    if 19 <= hour < 22:
+        return Daypart.EVENING
+    return Daypart.NIGHT
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class StageLimits:
     """Readability at 2–4 m: words per stage, plus a hard character cap."""
@@ -102,6 +117,12 @@ class CreativeBrief:
         if self.offer is not None and self.offer.min_party != self.party:
             return None
         return self.party
+
+    @property
+    def offer_undersized(self) -> bool:
+        """The best approved tier serves fewer people than are looking (a 4-pack for 12):
+        the copy may offer it to share, never present it as covering everyone."""
+        return self.offer is not None and self.offer.min_party < self.party
 
     def signature(self) -> str:
         """Cache key: two briefs with the same signature deserve the same copy."""

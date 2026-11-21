@@ -6,7 +6,7 @@ import pytest
 
 from app.modules.creative.application.stock_copy import StockCopywriter
 from app.modules.creative.domain.angle import Angle
-from app.modules.creative.domain.brief import Daypart
+from app.modules.creative.domain.brief import Daypart, daypart_for_hour
 from app.modules.creative.domain.draft import CopyDraft, CopySource
 from app.modules.creative.domain.guard import ViolationKind, check_copy
 from app.modules.creative.domain.lexicon import ANGLE_KEYWORDS, any_term, normalize
@@ -32,7 +32,7 @@ def test_every_template_airs_and_answers_its_angle(
     template_words = draft.teaser
     for name in b.names:
         template_words = template_words.replace(name, "")
-    assert len(template_words.split()) <= 6  # a hook reads in one glance from 3 m
+    assert len(template_words.split()) <= b.limits.teaser_words  # one glance from 3 m
     assert "?" not in draft.teaser  # statements, not "¿Hambre?" openers
 
 
@@ -118,3 +118,33 @@ def test_rewording_what_the_basket_contains_never_airs(offer: str) -> None:
 def test_approved_offer_phrasings_still_air(offer: str) -> None:
     verdict = check_copy(replace(GOOD, offer=offer, voice_line=offer), GROUP)
     assert verdict.passed, verdict.violations
+
+
+@pytest.mark.parametrize(
+    ("hour", "daypart"),
+    [
+        (0, Daypart.NIGHT),
+        (6, Daypart.MORNING),
+        (11, Daypart.MIDDAY),
+        (15, Daypart.AFTERNOON),
+        (19, Daypart.EVENING),
+        (22, Daypart.NIGHT),
+    ],
+)
+def test_the_venue_hour_maps_to_a_daypart(hour: int, daypart: Daypart) -> None:
+    assert daypart_for_hour(hour) is daypart
+
+
+def test_the_hour_and_the_head_count_combine_instead_of_overriding_each_other() -> None:
+    trio = replace(brief(PATIO, MIGA, party=3, angle=Angle.COFFEE_BREAK), daypart=Daypart.AFTERNOON)
+    assert WRITER.compose(trio).teaser == "Café de media tarde para los tres."
+    solo = replace(brief(PATIO, MIGA, angle=Angle.COFFEE_BREAK), daypart=Daypart.AFTERNOON)
+    assert WRITER.compose(solo).teaser == "Café de media tarde."
+
+
+def test_an_offer_smaller_than_the_group_is_offered_to_share() -> None:
+    crowd = brief(VOLTIO, PATIO, party=12, angle=Angle.QUEUE)
+    assert crowd.offer_undersized
+    draft = WRITER.compose(crowd)
+    assert "para compartir" in draft.offer and "todo el grupo" not in draft.all_text()
+    assert check_copy(draft, crowd).passed

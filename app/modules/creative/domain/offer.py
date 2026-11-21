@@ -74,7 +74,12 @@ class OfferBook:
         )
 
     def baskets(self) -> frozenset[frozenset[BrandId]]:
+        """Everything with an approved offer, solo brands included."""
         return frozenset(self.by_basket)
+
+    def pairings(self) -> frozenset[frozenset[BrandId]]:
+        """Approved multi-brand baskets only: what the auction's partner rule allows."""
+        return frozenset(basket for basket in self.by_basket if len(basket) > 1)
 
     def tiers(self, brand_ids: frozenset[BrandId]) -> tuple[BasketOffer, ...]:
         return self.by_basket.get(brand_ids, ())

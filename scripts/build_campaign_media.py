@@ -12,10 +12,16 @@ from pathlib import Path
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ffmpeg", default="ffmpeg", help="Path to the local ffmpeg binary")
+    parser.add_argument(
+        "photos", nargs="*", help="Photo stems to build (default: every photo); others are kept"
+    )
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1] / "assets" / "campaigns"
     (root / "videos").mkdir(exist_ok=True)
+    wanted = set(args.photos)
     for photo in sorted((root / "photos").glob("*.webp")):
+        if wanted and photo.stem not in wanted:
+            continue
         output = root / "videos" / f"{photo.stem}.mp4"
         subprocess.run(
             [

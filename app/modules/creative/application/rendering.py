@@ -15,7 +15,7 @@ from app.contract.messages import (
 )
 from app.modules.campaigns.domain.book import BrandId, BrandKit
 from app.modules.creative.domain.brief import CreativeBrief
-from app.modules.creative.domain.draft import CopyDraft
+from app.modules.creative.domain.draft import CopyDraft, Stage
 
 DURATION_MS = 12_000  # teaser 3 s + offer 5 s + close 4 s; the player holds on attention
 
@@ -39,9 +39,11 @@ def render_spec(
         layout_id=brief.layout,
         slots=slots,
         duration_ms=DURATION_MS,
+        # No approved offer, nothing to redeem: the hook and the brand line, no QR stage.
         stages=[
             CreativeStage(name=CreativeStageName(stage.value), copy_text=text)
             for stage, text in draft.stages()
+            if offer is not None or stage is not Stage.CLOSE
         ],
         offer=(
             CreativeOffer(

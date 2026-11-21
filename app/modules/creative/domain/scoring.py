@@ -14,7 +14,13 @@ from app.modules.creative.domain.angle import Angle
 from app.modules.creative.domain.brief import CreativeBrief
 from app.modules.creative.domain.draft import CopyDraft
 from app.modules.creative.domain.guard import GuardVerdict, check_copy, party_mentions
-from app.modules.creative.domain.lexicon import ANGLE_KEYWORDS, any_term, contains_term, normalize
+from app.modules.creative.domain.lexicon import (
+    ANGLE_KEYWORDS,
+    COVERS_EVERYONE,
+    any_term,
+    contains_term,
+    normalize,
+)
 
 WEIGHTS: dict[str, Decimal] = {
     "angle": Decimal("0.25"),
@@ -60,7 +66,11 @@ def score_draft(draft: CopyDraft, brief: CreativeBrief) -> QualityScore:
     parts["angle"] = ONE if not keywords or any_term(headline, keywords) else ZERO
 
     mentions = party_mentions(headline)
-    if brief.is_group:
+    if brief.offer_undersized:
+        # A 4-pack for 12: honest copy offers it to share and never says it covers everyone.
+        honest = any_term(headline, COVERS_EVERYONE) is None
+        parts["party"] = ONE if honest and any_term(headline, ("compartir",)) else ZERO
+    elif brief.is_group:
         addressed = bool(mentions) or any_term(headline, ("grupo", "todos", "ustedes")) is not None
         parts["party"] = ONE if addressed else ZERO
     else:

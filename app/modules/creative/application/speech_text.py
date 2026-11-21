@@ -131,17 +131,21 @@ def speakable(text: str) -> str:
     return re.sub(r"\s+", " ", out).strip()
 
 
-def offer_line(label: str, text: str, price_amount: str) -> str:
-    """The spoken form of an approved offer: `Dúo post-entreno: 2 combos … por N pesos`."""
+def offer_line(text: str, price_amount: str) -> str:
+    """The spoken form of an approved offer: what you get, then what it costs.
+
+    `Voltio y Café Patio para dos: cinco mil novecientos noventa pesos`. The tier's label
+    ("Dúo") is screen furniture; read aloud before the items it sounded like a data readout.
+    """
     try:
         amount = int(Decimal(price_amount))
     except InvalidOperation, ValueError:
-        return speakable(f"{label}: {text}")
-    return speakable(f"{label}: {text} por ${amount}")
+        return speakable(text)
+    return speakable(f"{text}: ${amount}")
 
 
 def spoken_line_for(spec: CreativeSpec) -> str:
     offer: CreativeOffer | None = spec.offer
     if offer is not None:
-        return offer_line(offer.label, offer.text, offer.price.amount)
+        return offer_line(offer.text, offer.price.amount)
     return speakable(spec.slots[0].copy_text)

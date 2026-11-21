@@ -213,4 +213,5 @@ def test_a_crowd_renders_with_the_largest_offer_and_no_count() -> None:
     composed = studio().compose(crowd)
     spec = render_spec(crowd, composed.draft, kits)
     assert spec.offer is not None and spec.offer.party_size == 4
-    assert "todo el grupo" in spec.stages[1].copy_text and composed.score.verdict.passed
+    assert "para compartir" in spec.stages[1].copy_text and composed.score.verdict.passed
+    assert "todo el grupo" not in spec.stages[1].copy_text

@@ -107,7 +107,7 @@ class CampaignGenerator:
             approved_baskets=[
                 sorted(self._slugs[b] for b in basket)
                 for basket in sorted(
-                    self._catalog.offers.baskets(), key=lambda bs: sorted(str(b) for b in bs)
+                    self._catalog.offers.pairings(), key=lambda bs: sorted(str(b) for b in bs)
                 )
             ],
         )
@@ -132,7 +132,7 @@ class CampaignGenerator:
                 left.category == right.category
                 or right.brand_id not in left.partners
                 or left.brand_id not in right.partners
-                or frozenset(ids) not in self._catalog.offers.baskets()
+                or frozenset(ids) not in self._catalog.offers.pairings()
             ):
                 raise ValueError(
                     "La combinación requiere marcas complementarias y una oferta aprobada"

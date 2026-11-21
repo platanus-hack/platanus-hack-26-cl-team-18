@@ -109,7 +109,9 @@ class Composed:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class StudioConfig:
-    copy_timeout_s: float = 2.5
+    # Warm path: stock copy is already on air, so waiting longer never blocks the screen. Haiku
+    # at effort low measured 2–7 s on 2026-11-21; 2.5 s timed most upgrades out.
+    copy_timeout_s: float = 6.0
     expected_dwell_s: Decimal = Decimal(8)
     # The rubric measures targeting and safety, not wit: AI copy may trail stock's total by
     # this much, but never on a targeting part (TARGETING_PARTS).

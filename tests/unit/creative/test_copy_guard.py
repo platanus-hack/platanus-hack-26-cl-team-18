@@ -108,7 +108,10 @@ def test_a_group_bigger_than_the_top_tier_is_never_counted() -> None:
     assert five.offer is not None and five.offer.min_party == 4
     assert five.addressed_party is None
     stock = StockCopywriter().compose(five)
-    assert "todo el grupo" in stock.offer and check_copy(stock, five).passed
+    assert "para compartir" in stock.offer and check_copy(stock, five).passed
+    # A 4-pack is never presented as covering all five.
+    overpromise = replace(stock, offer=stock.offer.replace("para compartir", "para todo el grupo"))
+    assert ViolationKind.PARTY_MISMATCH in check_copy(overpromise, five).kinds()
     for line in (
         "Para los 5 · Pack x4: Voltio + Café Patio por $10.970",
         "Para los 4 · Pack x4: Voltio + Café Patio por $10.970",

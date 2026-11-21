@@ -16,7 +16,9 @@ from app.modules.common.domain.primitives.specification import Specification
 from app.modules.creative.domain.brief import CreativeBrief
 from app.modules.creative.domain.draft import CopyDraft, Stage
 from app.modules.creative.domain.lexicon import (
+    CHILD_APPEAL,
     CLICHES,
+    COVERS_EVERYONE,
     FORBIDDEN_CLAIMS,
     GROUP_WORDS,
     KNOWN_BRANDS,
@@ -74,6 +76,11 @@ _SPELLED_MONEY = ("mil", "millon*", "luca*", "luka*", "cientos", "quinientos")
 # Promo mechanics (2x1, 3x2) are claims: only if the brand approved them.
 _PROMO = re.compile(r"\b\d\s?x\s?\d\b")
 _THOUSANDS = re.compile(r"\b\d+\s?k\b|\b\d+\s?lucas?\b")  # "9k", "9 lucas"
+# SERNAC (Ley 19.496 arts. 28 d, 30): an advertised price is the real, total price.
+# "desde $X" / "a partir de $X" hide the total, and "+ IVA" excludes taxes.
+_PRICE_QUALIFIER = re.compile(
+    r"\b(?:desde|a partir de)\s*\$|\+\s*iva\b|\bmas iva\b|\biva no incluido\b|\bsin iva\b"
+)
 # Shouting and trailing-off punctuation: house style states, it never exclaims.
 _LOUD_PUNCTUATION = re.compile(r"[!¡…—]|\.\.\.")
 _SOCIAL = re.compile(r"\b(?:instagram|insta|tiktok|facebook|whatsapp|twitter|youtube)\b")
@@ -227,8 +234,16 @@ def check_copy(draft: CopyDraft, brief: CreativeBrief) -> GuardVerdict:
             out.append(Violation(kind=ViolationKind.PRICE_CHANGED, where=where, detail=m.group(0)))
         if brief.minor_likely and (term := any_term(norm, RESTRICTED_FOR_MINORS)):
             out.append(Violation(kind=ViolationKind.RESTRICTED_FOR_MINOR, where=where, detail=term))
+        if brief.minor_likely and (term := any_term(norm, CHILD_APPEAL)):
+            out.append(Violation(kind=ViolationKind.RESTRICTED_FOR_MINOR, where=where, detail=term))
+        if (m := _PRICE_QUALIFIER.search(norm)) and not contains_term(approved_text, m.group(0)):
+            out.append(Violation(kind=ViolationKind.PRICE_CHANGED, where=where, detail=m.group(0)))
         if (term := any_term(norm, FORBIDDEN_CLAIMS)) and not contains_term(approved_text, term):
             out.append(Violation(kind=ViolationKind.UNAPPROVED_CLAIM, where=where, detail=term))
+        if brief.offer_undersized and (term := any_term(norm, COVERS_EVERYONE)):
+            out.append(
+                Violation(kind=ViolationKind.PARTY_MISMATCH, where=where, detail=f"covers: {term}")
+            )
         if (term := any_term(norm, CLICHES)) and not contains_term(approved_text, term):
             out.append(Violation(kind=ViolationKind.CLICHE, where=where, detail=term))
         if (m := _LOUD_PUNCTUATION.search(text)) is not None:

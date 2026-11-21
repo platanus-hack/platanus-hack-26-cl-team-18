@@ -54,9 +54,12 @@ def test_prices_counts_and_symbols_are_spoken_naturally() -> None:
     assert speakable("2 combos") == "dos combos"
 
 
-def test_offer_line_uses_the_approved_fields() -> None:
-    assert offer_line("Dúo post-entreno", "2 combos Voltio + Café Patio", "5990") == (
-        "Dúo post-entreno: dos combos Voltio y Café Patio por cinco mil novecientos noventa pesos"
+def test_offer_line_says_what_you_get_then_the_price() -> None:
+    assert offer_line("Voltio + Café Patio x2", "5990") == (
+        "Voltio y Café Patio para dos: cinco mil novecientos noventa pesos"
+    )
+    assert offer_line("2 combos Voltio + Café Patio", "5990") == (
+        "dos combos Voltio y Café Patio: cinco mil novecientos noventa pesos"
     )
 
 

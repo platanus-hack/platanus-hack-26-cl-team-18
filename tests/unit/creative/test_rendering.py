@@ -53,3 +53,23 @@ def test_copy_upgrade_preserves_media_offer_and_identity_but_rechecks_voice() ->
     )
     with pytest.raises(ValueError, match="brands"):
         render_copy_upgrade(other, b, draft, kits)
+
+
+def test_without_an_approved_offer_there_is_no_redeem_stage() -> None:
+    """Nothing priced, nothing to redeem: the hook and the brand line, never a QR stage."""
+    b = brief(with_offer=False)
+    kits = {
+        brand.brand_id: BrandKit(
+            brand_id=brand.brand_id,
+            name=brand.name,
+            logo_url=f"/kits/{index}.svg",
+            stock_copy=brand.stock_copy,
+            accent_color=None,
+        )
+        for index, brand in enumerate(b.brands)
+    }
+    spec = render_spec(b, StockCopywriter().compose(b), kits)
+    assert spec.offer is None
+    assert [stage.name.value for stage in spec.stages] == ["teaser", "offer"]
+    with_offer = render_spec(brief(), StockCopywriter().compose(brief()), kits)
+    assert [stage.name.value for stage in with_offer.stages] == ["teaser", "offer", "close"]

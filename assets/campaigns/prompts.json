@@ -12,5 +12,10 @@
     "build": "uv run python scripts/build_campaign_media.py",
     "codec": "H.264 / yuv420p / 1280x720 / 24fps / 6 seconds / no audio / faststart",
     "motion": "Subtle periodic centered zoom; first and last frames use the same framing. No generated product motion."
+  },
+  "recolors": {
+    "rayo.webp": "energy.webp with its lime rim light recoloured to Rayo's lavender (#b9adff family) by a local, deterministic hue mask; no generation. Script: tmp recolor (hue 45-120°, sat > 0.15 → hue 250°, sat x0.42, value x1.12).",
+    "rayo-coffee.webp": "energy-coffee.webp with the unbranded can and its counter glow recoloured to Rayo's lavender by the same local hue mask; the lime fruit (ellipse at 91.5%/74.5%) and the leaves (left of 60%) keep their colour. No generation.",
+    "todo": "Per-lead compositions (lead product first and larger) need new photography: one image per ordered basket."
   }
 }
