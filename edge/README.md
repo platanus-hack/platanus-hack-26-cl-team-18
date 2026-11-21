@@ -1,4 +1,33 @@
-# Perception agent scaffold
+# Perception agent
+
+## Local video replay (first slice)
+
+With Python 3.12 and uv installed, from `edge/` run:
+
+```sh
+uv sync --extra vision
+uv run on-sight /path/to/video.mp4 --fps 3
+```
+
+The first run downloads Ultralytics `yolo26n.pt`; model warmup runs before the
+playback clock starts, and startup and CPU latency depend on the machine.
+Windows uses PyTorch 2.6 and torchvision 0.21 to avoid a missing
+`VCRUNTIME140_THREADS.dll` seen with newer PyTorch on the test machine.
+MP4 and MOV support depends on the OpenCV codecs. JSON snapshots
+are printed as the video plays; inference falling behind skips to the current
+playback position. The input file remains on the user's machine and decoded
+frames stay in memory. Each invocation has a new anonymous session. The state
+distinguishes current detections, recently observed objects, active tracklets,
+and departed tracklets; the result is a local debug stream, not persisted data.
+`--model` can select another compatible Ultralytics model for benchmarking.
+
+The generic detector reports its supported object classes only; clothing and
+brands are not inferred. The source and detector ports are replaceable. The
+audio port is disabled by default. Remote GPU failover, a face-blurred VLM
+adapter, the backend WebSocket connection, browser upload/debug view, and
+Render deployment are not implemented yet. In particular, no frames are sent
+to a third party. CPU throughput and ByteTrack stability need measurement on
+representative video and deployment hardware.
 
 The agent is the device-side source for the [WebSocket contract](../app/contract/messages.py).
 
@@ -59,7 +88,8 @@ The frame path, in `agent/vision/` (ADR 0004, 0007, 0008):
 - **Snapshots:** `snapshot.py`. Facts (people, looking, objects, held
   products) are published once stable for 500 ms (`--debounce-ms`); a snapshot
   goes out at once when the published facts change, otherwise as a 1 s
-  heartbeat, at most 10 Hz. Counts are the published facts; tracklets are the
+  heartbeat, at most 10 Hz. If a crowd never holds still, the most frequent
+  facts of the last second are published every 1.5 s, so counts never freeze. Counts are the published facts; tracklets are the
   live samples used for attention. `minor_likely` is always false here: it
   comes from the warm VLM path.
 - **Record mode** (ADR 0008 D11): `--record` reads the clip on clip time

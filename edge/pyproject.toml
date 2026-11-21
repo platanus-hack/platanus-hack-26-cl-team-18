@@ -2,7 +2,7 @@
 name = "team18-edge"
 version = "0.1.0"
 description = "Perception agent: camera + mic on the venue laptop (ADR 0004)"
-requires-python = ">=3.12,<3.13"
+requires-python = ">=3.12,<3.14"
 dependencies = [
     "pydantic>=2.7",
     "websockets>=15",
@@ -16,9 +16,14 @@ audio = [
     "onnxruntime>=1.20",
 ]
 # Camera + YOLO + ArUco markers (agent/vision). `uv sync --extra vision`.
+# Ultralytics itself depends on opencv-python, so the headless wheel would clash.
+# Windows pins avoid a missing VCRUNTIME140_THREADS.dll with newer PyTorch.
 vision = [
-    "opencv-python-headless>=4.10",
-    "ultralytics>=8.3",
+    "opencv-python>=4.10",
+    "ultralytics>=8.4,<9",
+    "lap>=0.5.12",
+    "torch==2.6.0; sys_platform == 'win32'",
+    "torchvision==0.21.0; sys_platform == 'win32'",
 ]
 dev = [
     "pytest>=8.0",
@@ -28,8 +33,16 @@ dev = [
     "mypy>=2.4.0",
 ]
 
-[tool.uv]
-package = false
+[project.scripts]
+# Local video replay: `uv run on-sight /path/to/video.mp4 --fps 3` (needs --extra vision).
+on-sight = "agent.vision.replay:main"
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["agent*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
