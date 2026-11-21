@@ -13,7 +13,17 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Monitor } from "lucide-react";
 import { useEffect, useState } from "react";
 import { consoleReducer, initialConsoleState, type ScreenView } from "./console-state";
-import { CONNECTION, DEGRADATION, EXCLUSION, money, ms, SOURCE, stepLabel } from "./labels";
+import {
+    CONNECTION,
+    count,
+    DEGRADATION,
+    EXCLUSION,
+    money,
+    ms,
+    signedPct,
+    SOURCE,
+    stepLabel,
+} from "./labels";
 import { coBrandLift, percentile, serverDecisionMs, traceSteps } from "./metrics";
 
 const pct = (ratio: number) => `${Math.round(ratio * 100)} %`;
@@ -88,7 +98,9 @@ function ScreenSection({ screenId, view }: { screenId: string; view: ScreenView 
     return (
         <section aria-label={`Pantalla ${screenId}`} className="flex flex-col gap-4">
             <div className="flex flex-wrap items-center gap-3">
-                <h2 className="font-mono text-compact text-muted">{screenId}</h2>
+                <h2 className="text-compact text-muted">
+                    Pantalla <span className="font-mono text-fg">{screenId}</span>
+                </h2>
                 {view.degradation.map((flag) => (
                     <Badge key={flag} tone="warning">
                         {DEGRADATION[flag]}
@@ -122,7 +134,7 @@ function Headline({ view }: { view: ScreenView }) {
             <Metric label="Cobertura de la audiencia" value={a ? pct(a.coverage) : "—"} />
             <Metric
                 label="Ingreso vs. una sola marca"
-                value={revenueLift === null ? "—" : `+${pct(revenueLift)}`}
+                value={revenueLift === null ? "—" : signedPct(revenueLift)}
             />
             <Metric
                 label="Cámara a pantalla (p50)"
@@ -138,14 +150,21 @@ function Headline({ view }: { view: ScreenView }) {
 function AudiencePanel({ view }: { view: ScreenView }) {
     const m = view.moment;
     return (
-        <Panel title="Audiencia" aside={m && `${m.people} personas · ${m.looking} mirando`}>
+        <Panel
+            title="Audiencia"
+            aside={m && `${count(m.people, "persona", "personas")} · ${m.looking} mirando`}
+        >
             {!m ? (
                 <p className="text-compact text-muted">Sin momento todavía.</p>
             ) : (
                 <ul className="flex flex-col gap-3">
                     {m.minor_likely.value && (
                         <li>
-                            <Badge tone="warning" appearance="soft">
+                            <Badge
+                                tone="warning"
+                                appearance="soft"
+                                className="rounded-container whitespace-normal"
+                            >
                                 Posible menor: categorías restringidas bloqueadas
                             </Badge>
                         </li>
@@ -161,9 +180,9 @@ function AudiencePanel({ view }: { view: ScreenView }) {
                                     {pct(s.score)} · {s.sources.map((x) => SOURCE[x]).join(", ")}
                                 </span>
                             </div>
-                            <div className="h-1 rounded-full bg-surface-pressed">
+                            <div className="h-0.5 rounded-full bg-border-subtle">
                                 <div
-                                    className="h-full rounded-full bg-ink"
+                                    className="h-full rounded-full bg-accent"
                                     style={{ width: pct(s.score).replace(" ", "") }}
                                 />
                             </div>
@@ -180,7 +199,7 @@ function AuctionPanel({ view }: { view: ScreenView }) {
     const lift = a ? coBrandLift(a.bundle_value.amount, a.single_brand_value.amount) : null;
     const holdUntil = a?.swap === "held" ? a.trace.swap_not_before : null;
     return (
-        <Panel title="Subasta" aside={a && `${a.bids.length} pujas`}>
+        <Panel title="Subasta" aside={a && count(a.bids.length, "puja", "pujas")}>
             {!a ? (
                 <p className="text-compact text-muted">Sin subasta todavía.</p>
             ) : (
@@ -210,7 +229,10 @@ function AuctionPanel({ view }: { view: ScreenView }) {
                         Valor de la canasta {money(a.bundle_value)} · mejor marca sola{" "}
                         {money(a.single_brand_value)}
                         {a.winners.length > 1 && lift !== null && (
-                            <span className="text-success"> (+{pct(lift)})</span>
+                            <span className={lift < 0 ? "text-warning" : "text-success"}>
+                                {" "}
+                                ({signedPct(lift)})
+                            </span>
                         )}
                     </p>
                     {a.bids.length > 0 && (
@@ -299,7 +321,7 @@ function ReceiptPanel({ view }: { view: ScreenView }) {
             ) : (
                 <div className="flex flex-col gap-3">
                     <p className="text-compact text-muted tabular-nums">
-                        {last.people} personas · {last.looking} miraron ·{" "}
+                        {count(last.people, "persona", "personas")} · {last.looking} miraron ·{" "}
                         {decimalCl(last.attention_seconds, 1)} s de atención ·{" "}
                         {decimalCl(last.played_s, 1)} s al aire
                     </p>
@@ -349,7 +371,7 @@ function MarketPanel({ view }: { view: ScreenView }) {
     return (
         <Panel title="Mercado" className="lg:col-span-2">
             {!book ? (
-                <p className="text-compact text-muted">Aparece tras la primera decisión.</p>
+                <p className="text-compact text-muted">Sin datos del mercado todavía.</p>
             ) : (
                 <Table>
                     <TableHeader>

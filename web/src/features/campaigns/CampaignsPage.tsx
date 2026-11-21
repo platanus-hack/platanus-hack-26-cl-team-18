@@ -401,7 +401,9 @@ export function CampaignsPage() {
                                 {busy
                                     ? "Cargando…"
                                     : campaign && !error
-                                      ? `Compuesta en ${campaign.compose_ms.toFixed(0)} ms`
+                                      ? campaign.compose_ms < 1
+                                          ? "Compuesta en <1 ms"
+                                          : `Compuesta en ${campaign.compose_ms.toFixed(0)} ms`
                                       : "Sin vista previa"}
                             </span>
                         </div>

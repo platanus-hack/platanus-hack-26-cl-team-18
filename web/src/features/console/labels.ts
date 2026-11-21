@@ -59,3 +59,12 @@ export const money = (m: MoneyDTO) => moneyCl(m.amount);
 
 export const ms = (value: number | null) =>
     value === null ? "—" : value === 0 ? "<1 ms" : `${Math.round(value)} ms`;
+
+/** "+7 %", "−21 %", "0 %": the sign is part of the fact. */
+export const signedPct = (ratio: number) => {
+    const n = Math.round(ratio * 100);
+    return `${n > 0 ? "+" : n < 0 ? "−" : ""}${Math.abs(n)} %`;
+};
+
+/** "1 persona", "2 personas". */
+export const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
