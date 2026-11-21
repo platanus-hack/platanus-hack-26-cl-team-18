@@ -149,3 +149,51 @@ The account has about 10,000 credits, so every path that can spend them is cappe
   our commit. The early keyterm utterance (`hambre`, `café`) fired from the
   partial transcript.
 - **Total spent:** about 36 credits and about 10 s of realtime STT.
+
+## Amendment (2026-11-21): latency tuning from live measurements in Santiago
+
+These numbers come from `edge/agent/speech/bench.py`, which runs the real
+Scribe API through our own VAD and client, using a TTS fixture with
+per-character timings. Medians of 3 runs. The test line is *"Uf, qué hambre.
+¿Vamos por un café después del gimnasio?"*.
+
+| Variant | keyterm → partial | first partial | speech end → final | WER |
+|---|---|---|---|---|
+| `scribe_v2_realtime`, our VAD at 512 ms | 1,214 ms | 3,547 ms | 446 ms | 0.00 |
+| `scribe_v3_live`, our VAD at 512 ms | 208 ms | 607 ms | 431 ms | 0.00 |
+| **`scribe_v3_live`, our VAD at 320 ms** | **201 ms** | **593 ms** | **227 ms** | **0.00** |
+| `scribe_v3_live`, server VAD at 0.3 s | 334 ms | 699 ms | 395 ms | 0.00 |
+| `scribe_v3_live`, `turn_prediction` | 560 ms | 677 ms | no commit within 3 s | — |
+
+**Speech-to-text decisions**
+- **Default model:** `scribe_v3_live`, which meets the stack doc's day-1 switch
+  condition. v2 buffers about 2 s before its first partial, while v3's first
+  partial arrives in about 0.6 s. The docs also report 44% lower semantic WER.
+- **Commits:** our own VAD commits, with a **320 ms** hangover. Server VAD and
+  turn prediction were both slower on this line.
+- **Network:** from Santiago every request makes a round trip of about 200 ms
+  to `us-central1`, the region reported in the `x-region` header. The TCP and
+  TLS handshakes complete at a local Google edge in under 15 ms.
+  `api.us.elevenlabs.io` was slower, at 223 ms.
+
+**Text-to-speech decisions**
+- **Latency:** Flash v2.5 takes about 320 ms on a warm connection, about 200 ms
+  of which is that round trip. Turning `use_speaker_boost` off made no
+  measurable difference (323 ms against 349 ms), so it stays on.
+- **What gets spoken:** the **approved offer line**, which is stable per tier,
+  not the AI copy. That keeps the set of lines known in advance, so they can
+  be pre-generated once and every play is a cache hit.
+- **Normalization:** prices, counts and symbols are spelled out in our own
+  code (`speech_text.py`), because Flash disables text normalization for
+  latency. A round trip proved it: the aired line transcribes back as
+  "…para dos por 5,990 pesos".
+- **Pre-generation:** `VOICEOVER_PREWARM=true` synthesizes the demo's 7 offer
+  lines (562 characters, about 281 credits) once at startup, and they stay
+  cached on disk. On a cache hit the voice-over goes inside `creative.ready`
+  itself, so it plays with the first frame and no upgrade round trip is
+  needed.
+- **Connection:** the HTTP connection is kept alive for 120 s (httpx defaults
+  to 5 s) and warmed at startup.
+
+**Cost of tuning:** about 175 credits in total, for fixtures, the A/B test and
+round trips. Reruns cost 0 TTS characters.

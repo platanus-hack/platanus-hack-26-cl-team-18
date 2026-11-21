@@ -115,6 +115,7 @@ def register_contexts(container: Container) -> None:
             ledger=container.ledger,
             budget_clp=container.settings.demo_budget_clp,
             copywriter=container.copywriter,
+            startup=container.startup if container.settings.voiceover_prewarm else None,
             copy_timeout_s=container.settings.creative_copy_timeout_s,
             hourly_budget_usd=container.settings.creative_hourly_budget_usd,
         )
