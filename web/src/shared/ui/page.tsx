@@ -37,7 +37,7 @@ export function AppShell({
             <header className="sticky top-0 z-(--z-overlay) border-b border-border bg-surface">
                 <div className="mx-auto flex h-14 max-w-7xl items-center gap-6 px-4 sm:px-6">
                     <a href="/" className="shrink-0 text-body font-semibold tracking-tight">
-                        team18
+                        advisor
                     </a>
                     <nav
                         aria-label="Principal"
