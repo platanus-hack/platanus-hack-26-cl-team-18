@@ -1,6 +1,30 @@
 import type { CreativeSpec } from "@/contract";
 import { assetUrl } from "@/lib/config";
+import { useState } from "react";
 import { useDwellStage } from "./stages";
+
+/** Reveal the actual mounted video only after it can play; overlays stay ready. */
+function VideoLoop({ url }: { url: string }) {
+    const [ready, setReady] = useState(false);
+    return (
+        <video
+            className="absolute inset-0 h-full w-full object-cover"
+            src={assetUrl(url)}
+            style={{ opacity: ready ? 1 : 0 }}
+            onCanPlayThrough={() => {
+                setReady(true);
+            }}
+            onError={() => {
+                setReady(false);
+            }}
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="auto"
+        />
+    );
+}
 
 /**
  * Renders a CreativeSpec as DOM over an optional video loop. Logos are the
@@ -21,17 +45,7 @@ export function CreativeView({ spec, playKey }: { spec: CreativeSpec; playKey: s
               : "grid-cols-3";
     return (
         <div className="relative h-full w-full overflow-hidden bg-canvas">
-            {spec.video_url && (
-                <video
-                    className="absolute inset-0 h-full w-full object-cover"
-                    src={assetUrl(spec.video_url)}
-                    autoPlay
-                    muted
-                    loop
-                    playsInline
-                    preload="auto"
-                />
-            )}
+            {spec.video_url && <VideoLoop key={spec.video_url} url={spec.video_url} />}
             {stage === null ? (
                 <div className={`relative grid h-full ${columns} gap-8 p-16`}>
                     {spec.slots.map((slot) => (

@@ -3,7 +3,7 @@ import type { CreativeSpec } from "@/contract";
 /**
  * The player as a pure state machine (docs/stack.md §6): two stacked layers
  * (A/B double buffer). A new creative mounts hidden in the back layer, is
- * preloaded (images decoded, video canplaythrough), then crossfades over the
+ * preloaded (required logos decoded), then crossfades over the
  * front. The front layer always holds something: the house ad or the last good
  * creative. The screen is never blank.
  *

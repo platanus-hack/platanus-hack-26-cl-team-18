@@ -69,9 +69,7 @@ export function ScreenPage() {
     useEffect(() => {
         if (preloadingId === null || back === null) return;
         const controller = new AbortController();
-        preloadCreative(back.spec, controller.signal, (url, signal) =>
-            voice.prepare(url, signal),
-        ).then(
+        preloadCreative(back.spec, controller.signal).then(
             () => {
                 store.dispatch({ type: "preloaded", creativeId: preloadingId, at: Date.now() });
             },
@@ -84,17 +82,29 @@ export function ScreenPage() {
         return () => {
             controller.abort();
         };
-    }, [preloadingId, back, store, voice]);
+    }, [preloadingId, back, store]);
 
-    // Speak the on-air creative's voice-over once, as soon as it is on screen.
+    // Prepare voice independently of visual readiness; late audio may still play
+    // while its creative is on air. A replacement cancels the old line.
     const onAir = frontCreative(state);
     const onAirVoice = onAir.spec.voiceover_url;
     useEffect(() => {
-        if (onAirVoice === null) {
-            voice.stop();
-            return;
+        voice.stop();
+        if (onAirVoice === null) return;
+        const controller = new AbortController();
+        const play = () => {
+            if (!controller.signal.aborted) voice.play(onAir.creativeId, onAirVoice);
+        };
+        if (voice.isReady(onAirVoice)) play();
+        else {
+            void voice.prepare(onAirVoice, controller.signal).then(play, () => {
+                // Optional: failed audio leaves the visible creative on air.
+            });
         }
-        voice.play(onAir.creativeId, onAirVoice);
+        return () => {
+            controller.abort();
+            voice.stop();
+        };
     }, [onAir.creativeId, onAirVoice, voice]);
 
     // Finish the crossfade on a timer (transitionend doesn't fire at 0 ms).

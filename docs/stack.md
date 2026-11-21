@@ -98,7 +98,7 @@ provenance string stored with each result.
 |---|---|---|
 | Build | **Vite + React + TypeScript**, `npm` | Zero-config dev server; agents know it |
 | Browser | **Chromium in kiosk mode** with `--kiosk --autoplay-policy=no-user-gesture-required --ignore-gpu-blocklist --enable-gpu-rasterization --disable-features=Translate --noerrdialogs` | Audio and video autoplay without a click; GPU compositing |
-| Rendering | **Two stacked layers (A/B double buffer)**. The next creative mounts hidden in the back layer, waits for `img.decode()` and the video's `canplaythrough`, then a **250 ms CSS opacity crossfade** | The swap costs one compositor frame. Never mount-and-show |
+| Rendering | **Two stacked layers (A/B double buffer)**. The next creative mounts hidden in the back layer, waits for required logos' `img.decode()`, then a **250 ms CSS opacity crossfade**. Optional video/hero media loads independently (ADR 0001 amendment) | The swap costs one compositor frame. Never mount-and-show |
 | Video | `<video muted playsinline loop preload="auto">` with H.264 MP4 from `/media` | Hardware decode everywhere |
 | Audio | **Web Audio API** with pre-decoded `AudioBuffer`s for voice-overs, a `GainNode` for ducking, and an `AudioWorklet` for streamed PCM replies | Instant start; `<audio>` elements add decode lag |
 | Motion | CSS transitions + Web Animations API only | No animation library in the critical bundle |
