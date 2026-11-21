@@ -126,7 +126,10 @@ def clear(
     )
     best = cleared.best
     if best is None:
-        reason = NoFillReason.BELOW_RESERVE if ranked else NoFillReason.NO_ELIGIBLE_BIDS
+        priced_out = ranked or any(
+            item.reason is ExclusionReason.BELOW_RESERVE for item in exclusions
+        )
+        reason = NoFillReason.BELOW_RESERVE if priced_out else NoFillReason.NO_ELIGIBLE_BIDS
         exclusions += [
             Exclusion(campaign_id=item.campaign_id, reason=ExclusionReason.BELOW_RESERVE)
             for item in ranked
@@ -213,9 +216,13 @@ def _eligible(
                 matches=valuation.matches,
             )
         )
+        if reason is None and valuation.value <= ZERO:
+            # Matched but worth nothing (a zero bid, a 0 % confidence segment): it can
+            # never clear a reserve, and the console still owes it a reason.
+            reason = ExclusionReason.BELOW_RESERVE
         if reason is not None:
             exclusions.append(Exclusion(campaign_id=bidder.campaign_id, reason=reason))
-        elif valuation.value > ZERO:
+        else:
             ranked.append(
                 _Ranked(
                     bidder=bidder,

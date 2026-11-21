@@ -136,3 +136,27 @@ async def test_outbox_is_bounded_and_drops_oldest_while_offline() -> None:
         link.send(utterance(seq))
     assert link.stats.dropped == 2
     assert [json.loads(item.text)["seq"] for item in link._pending] == [2, 3, 4]
+
+
+async def test_an_unexpected_link_error_reconnects_instead_of_ending_the_link() -> None:
+    """The vision loop never awaits the link task: if it died, snapshots would pile up unsent."""
+    backend = FakeBackend()
+    url = await backend.start()
+    attempts = 0
+
+    async def flaky_connect(target: str):  # type: ignore[no-untyped-def]
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise RuntimeError("unexpected failure inside the client library")
+        return await websockets.connect(target)
+
+    link = BackendLink(url, connect=flaky_connect, backoff_base_s=0.01, backoff_max_s=0.02)
+    task = asyncio.create_task(link.run())
+    try:
+        link.send(utterance(1))
+        await wait_for(lambda: len(backend.frames) == 1)
+        assert not task.done()
+    finally:
+        task.cancel()
+        await backend.stop()

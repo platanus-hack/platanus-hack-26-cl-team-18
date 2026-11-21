@@ -9,6 +9,14 @@
 
 An invalid frame is answered with `system.error` on the same socket; the
 socket stays open (a bad frame must not take the screen down).
+
+A vision agent that said `agent.hello` and then dies, hangs or loses its socket
+can't report the room emptying, so its last moment would stay on air. When its
+socket closes (and no other vision agent serves the screen), or no snapshot
+arrives for `AGENT_SILENCE` (it heartbeats every second), the backend routes
+one empty-room snapshot itself: the normal decision path then applies the leave
+grace (D5.5) before the house ad, and attention stops at the last reading.
+Scripts and replays never say hello, so their sparse snapshots are unaffected.
 """
 
 from __future__ import annotations
@@ -16,6 +24,7 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import MutableMapping
+from datetime import datetime, timedelta
 from typing import Any
 
 import anyio
@@ -28,11 +37,13 @@ from app.contract.messages import (
     AGENT_INBOUND,
     PLAYER_INBOUND,
     AgentHello,
+    AgentRole,
     AudienceKeyframe,
     AudienceSnapshot,
     AudienceUtterance,
     DevPerception,
     ErrorMessage,
+    MinorLikely,
     PlaybackReport,
     RecognitionSnapshot,
 )
@@ -53,6 +64,11 @@ AgentMessage = (
     | DevPerception
 )
 DEV_DISABLED = 4404  # close code: the dev console is off in this environment
+AGENT_SILENCE = timedelta(seconds=5)  # five missed 1 s heartbeats: the agent is gone
+SILENCE_POLL_S = 0.5
+# The empty reading is dated just after the last real one (no silent attention is
+# billed), but never further back than the loop's measurement-skew bound accepts.
+_EMPTY_MAX_AGE = timedelta(seconds=8)
 
 
 def _admitted_live(c: Container, message: AgentMessage) -> bool:
@@ -93,6 +109,24 @@ async def _next_frame(ws: WebSocket) -> MutableMapping[str, Any] | None:
     return frame
 
 
+def _empty_room(c: Container, screen_id: str, seq: int) -> tuple[AudienceSnapshot, Received] | None:
+    """The reading a silent vision agent can no longer send, or None if nothing to clear."""
+    last = c.input_activity.last_snapshot(screen_id)
+    if last is None or not c.live.sensing(screen_id):
+        return None
+    now = c.clock.now_utc()
+    measured_at = max(last[1] + timedelta(milliseconds=1), now - _EMPTY_MAX_AGE)
+    snapshot = AudienceSnapshot(
+        screen_id=screen_id,
+        seq=seq,
+        measured_at=measured_at,
+        people=0,
+        looking=0,
+        minor_likely=MinorLikely(value=False, confidence=0.0),
+    )
+    return snapshot, Received(received_at=now)
+
+
 # ------------------------------------------------------------------ agent
 
 
@@ -105,15 +139,40 @@ async def agent_socket(ws: WebSocket) -> None:
         max_items=c.settings.ws_agent_mailbox_size
     )
     pending_keyframe: AudienceKeyframe | None = None
+    vision_screens: set[str] = set()  # screens this socket said hello for as `vision`
+    last_seq: dict[str, int] = {}
+    emptied: dict[str, datetime] = {}  # screen -> the real reading already cleared
+
+    def empty_room(screen_id: str) -> tuple[AudienceSnapshot, Received] | None:
+        last = c.input_activity.last_snapshot(screen_id)
+        if last is None or emptied.get(screen_id) == last[0]:
+            return None
+        empty = _empty_room(c, screen_id, last_seq.get(screen_id, 0))
+        if empty is not None:
+            emptied[screen_id] = last[0]
+        return empty
 
     async def drain() -> None:
         while True:
             message, received = await mailbox.get()
             await c.router.dispatch(message, received)
 
+    async def watch_silence() -> None:
+        while True:
+            await anyio.sleep(SILENCE_POLL_S)
+            now = c.clock.now_utc()
+            for screen_id in sorted(vision_screens):
+                last = c.input_activity.last_snapshot(screen_id)
+                if last is None or now - last[0] < AGENT_SILENCE:
+                    continue
+                if (empty := empty_room(screen_id)) is not None:
+                    logger.warning("vision agent silent: the room counts as empty")
+                    mailbox.put(("audience.snapshot", screen_id), empty)
+
     try:
         async with anyio.create_task_group() as tg:
             tg.start_soon(drain)
+            tg.start_soon(watch_silence)
             while (frame := await _next_frame(ws)) is not None:
                 text, data = frame.get("text"), frame.get("bytes")
                 if data is not None:
@@ -152,6 +211,8 @@ async def agent_socket(ws: WebSocket) -> None:
                 if not gate.admit((message.type, message.screen_id), message.seq):
                     continue  # duplicate or stale: drop, never queue
                 if isinstance(message, AgentHello):
+                    if message.role is AgentRole.VISION:
+                        vision_screens.add(message.screen_id)
                     c.hub.add_agent(message.screen_id, message.role, ws)
                     status = c.live.status(message.screen_id)
                     await c.hub.send_to_agents(status, sink=ws)
@@ -170,6 +231,8 @@ async def agent_socket(ws: WebSocket) -> None:
                     continue
                 if isinstance(message, (AudienceSnapshot, AudienceUtterance)):
                     c.input_activity.observe(message, received_at)
+                if isinstance(message, AudienceSnapshot):
+                    last_seq[message.screen_id] = message.seq
                 if isinstance(message, RecognitionSnapshot):
                     if not c.recognition.put(message, Received(received_at=received_at)):
                         continue  # stale session or sequence, even across connections
@@ -192,8 +255,14 @@ async def agent_socket(ws: WebSocket) -> None:
     except WebSocketDisconnect:
         pass
     finally:
-        for screen_id in c.hub.remove_agent(ws):
-            await c.hub.broadcast_live(c.live.status(screen_id))
+        with anyio.CancelScope(shield=True):
+            for screen_id in c.hub.remove_agent(ws):
+                await c.hub.broadcast_live(c.live.status(screen_id))
+            for screen_id in sorted(vision_screens):
+                if AgentRole.VISION in c.hub.agent_roles(screen_id):
+                    continue  # another vision agent still reports this room
+                if (empty := empty_room(screen_id)) is not None:
+                    await c.router.dispatch(*empty)
 
 
 # ------------------------------------------------------------------ player

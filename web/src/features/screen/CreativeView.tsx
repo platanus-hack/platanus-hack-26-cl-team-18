@@ -1,6 +1,6 @@
 import type { CreativeSlot, CreativeSpec, CreativeStageName, DistanceBand } from "@/contract";
 import { assetUrl } from "@/lib/config";
-import { Fragment, useMemo, useState, type CSSProperties } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { readableAccent } from "./accent";
 import { spirographPath, themeForHour, type AdTheme } from "./ad-theme";
 import "./creative.css";
@@ -10,8 +10,21 @@ import { useDwellStage, useViewingDistance, type AttentionSample } from "./stage
 /** Reveal the actual mounted video only after it can play; overlays stay ready. */
 function VideoLoop({ url }: { url: string }) {
     const [ready, setReady] = useState(false);
+    const ref = useRef<HTMLVideoElement>(null);
+    // A detached <video> keeps its decoder and buffers until GC; over hours of
+    // swaps that piles up. Release the media as soon as the loop leaves.
+    useEffect(() => {
+        const video = ref.current;
+        return () => {
+            if (video === null) return;
+            video.pause();
+            video.removeAttribute("src");
+            video.load();
+        };
+    }, []);
     return (
         <video
+            ref={ref}
             className="creative-media"
             src={assetUrl(url)}
             style={{ opacity: ready ? 1 : 0 }}

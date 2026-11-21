@@ -29,6 +29,10 @@ MOTION_BY_CATEGORY = {
     "snack": "crunchy chips tumbling in slow motion",
     "snacks": "crunchy chips tumbling in slow motion",
     "candy": "a chocolate wafer bar snapping in half, crumbs in slow motion",
+    "sports_drink": "an ice-cold sports drink bottle beaded with condensation",
+    "dairy": "cold chocolate milk pouring into a glass in slow motion",
+    "juice": "golden nectar pouring over ice, morning light",
+    "ice_cream": "an ice cream bar with a thin chocolate shell cracking, cold mist",
     "water": "clear water splashing into a bottle, crisp light",
 }
 

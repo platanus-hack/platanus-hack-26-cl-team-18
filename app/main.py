@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -15,6 +16,8 @@ from app.bootstrap.container import Container, build_container
 from app.config.logging_setup import configure_logging
 from app.config.settings import AppSettings
 from app.modules.creative.infrastructure.campaign_assets import CAMPAIGN_ASSETS
+
+logger = logging.getLogger(__name__)
 
 
 def create_app(
@@ -34,7 +37,11 @@ def create_app(
         async def expire_recognition() -> None:
             while True:
                 await asyncio.sleep(5)
-                built.recognition.prune(built.clock.now_utc())
+                try:
+                    built.recognition.prune(built.clock.now_utc())
+                except Exception:
+                    # One bad prune must not end expiry for the process's lifetime.
+                    logger.exception("recognition prune failed")
 
         expiry_task = asyncio.create_task(expire_recognition())
         startup_tasks: list[asyncio.Future[None]] = [

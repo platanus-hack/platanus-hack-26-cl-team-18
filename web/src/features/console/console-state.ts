@@ -12,6 +12,7 @@ import type {
     DevPerception,
     LatencyTrace,
 } from "@/contract";
+import { moneyCl } from "@/lib/format";
 import type { ConnectionState } from "@/lib/ws/typed-socket";
 import { glassToGlassMs } from "./metrics";
 
@@ -29,6 +30,11 @@ export interface ScreenView {
     readonly book: ConsoleBook | null;
     /** Newest first; the moment receipts this console has seen. */
     readonly receipts: readonly ConsoleReceipt[];
+    /**
+     * Everything charged this session, across every receipt (the list above is a
+     * window). Presentation only (ADR 0008 D5); each amount stays a decimal string.
+     */
+    readonly billed: number;
     /** Newest first; QR/promo redemptions credited to every brand in the basket. */
     readonly redemptions: readonly ConsoleRedemption[];
     /** What the screen airs now (a station console gets it; ?live=1). */
@@ -72,6 +78,7 @@ export const emptyScreen: ScreenView = {
     lastCreativeId: null,
     book: null,
     receipts: [],
+    billed: 0,
     redemptions: [],
     onAir: null,
     events: [],
@@ -136,7 +143,7 @@ export function describe(m: ConsoleOutbound): Omit<StationEvent, "at"> | null {
         case "console.receipt":
             return m.total.amount === "0"
                 ? { text: "Recibo: $0, nadie miró", tone: "neutral" }
-                : { text: `Recibo: $${m.total.amount} cobrado`, tone: "success" };
+                : { text: `Recibo: ${moneyCl(m.total.amount)} cobrado`, tone: "success" };
         case "console.redemption":
             return { text: `Canje ${m.code}: ${m.brands.join(" + ")}`, tone: "success" };
         case "console.next":
@@ -205,6 +212,7 @@ export function consoleReducer(state: ConsoleState, event: ConsoleEvent): Consol
             return update(state, m.screen_id, (v) => ({
                 ...v,
                 receipts: [m, ...v.receipts].slice(0, RECEIPT_WINDOW),
+                billed: v.billed + (Number(m.total.amount) || 0),
             }));
         case "console.redemption":
             return update(state, m.screen_id, (v) => ({

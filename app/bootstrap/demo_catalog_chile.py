@@ -6,7 +6,9 @@ offer per brand. Baskets follow real distribution lines where we know them (CCU 
 Red Bull, Pepsi and Cachantun; the Coca-Cola bottlers sell Coca-Cola, Monster and
 Benedictino). No beer, spirits or Loto: Chile bans alcohol sales at gas stations
 (Ley 21.363), so the minor-safety beat here blocks the "ALTO EN" products instead
-(Ley 20.606 bans their advertising to children under 14).
+(Ley 20.606 bans their advertising to children under 14): snacks, candy, flavoured
+milk, nectars and ice cream. Energy and sports drinks stay open so the hero basket
+survives a false minor flag; a stricter reading would restrict them too.
 
 These are real trademarks used for a local demo without affiliation; the fictional
 catalog stays the default for tests, evals and the public URL. Logos are official
@@ -23,10 +25,14 @@ from __future__ import annotations
 from app.bootstrap.demo_catalog import (
     CANDY,
     COFFEE,
+    DESSERTS,
     ENERGY_DRINKS,
     FAST_FOOD,
     FITNESS,
+    ICE_CREAM,
+    NON_ALCOHOLIC,
     PASTRY,
+    READY_TO_DRINK_COFFEE,
     SALTY_SNACKS,
     SNACKS,
     SOFT_DRINKS,
@@ -93,7 +99,7 @@ BRANDS: tuple[DemoBrand, ...] = (
         name="Nescafé",
         category="coffee",
         age_restricted=False,
-        segments=(COFFEE,),
+        segments=(COFFEE, READY_TO_DRINK_COFFEE),
         rate_clp_per_as="3.5",
         color="#e2231a",
         stock_copy="Nescafé · Un café rápido antes de seguir.",
@@ -200,6 +206,130 @@ BRANDS: tuple[DemoBrand, ...] = (
         voice=("cercano", "breve"),
         product="candy",
     ),
+    DemoBrand(
+        slug="ambrosoli",
+        name="Ambrosoli",
+        category="candy",
+        age_restricted=True,
+        segments=(CANDY, SNACKS),
+        rate_clp_per_as="2.8",
+        color="#d4213d",
+        stock_copy="Ambrosoli · Dulces para el viaje.",
+        voice=("familiar", "tranquilo"),
+        product="candy",
+    ),
+    # --- Chile's own soda, rival to Coca-Cola for the completo (CCU) ----------------
+    DemoBrand(
+        slug="bilz-y-pap",
+        name="Bilz y Pap",
+        category="cola",
+        age_restricted=False,
+        segments=(SOFT_DRINKS, FAST_FOOD),
+        rate_clp_per_as="4.2",
+        color="#f4c300",
+        stock_copy="Bilz y Pap · Bien heladas, para el completo.",
+        voice=("nostálgico", "alegre"),
+        product="soft_drink",
+    ),
+    # --- sports drinks (Coca-Cola system vs PepsiCo) ---------------------------------
+    DemoBrand(
+        slug="powerade",
+        name="Powerade",
+        category="sports_drink",
+        age_restricted=False,
+        segments=(FITNESS, WATER),
+        rate_clp_per_as="3.8",
+        color="#1d6fd6",
+        stock_copy="Powerade · Isotónica, helada.",
+        voice=("deportivo", "directo"),
+        product="sports_drink",
+    ),
+    DemoBrand(
+        slug="gatorade",
+        name="Gatorade",
+        category="sports_drink",
+        age_restricted=False,
+        segments=(FITNESS, WATER),
+        rate_clp_per_as="4",
+        color="#f26522",
+        stock_copy="Gatorade · Isotónica, helada.",
+        voice=("deportivo", "seguro"),
+        product="sports_drink",
+    ),
+    # --- flavoured milk and nectars usually carry ALTO EN AZÚCARES (Ley 20.606) ------
+    DemoBrand(
+        slug="colun",
+        name="Colún",
+        category="dairy",
+        age_restricted=True,
+        segments=(NON_ALCOHOLIC, PASTRY),
+        rate_clp_per_as="3.2",
+        color="#2a6ebb",
+        stock_copy="Colún · Leche chocolatada del sur.",
+        voice=("campestre", "cercano"),
+        product="dairy",
+    ),
+    DemoBrand(
+        slug="soprole",
+        name="Soprole",
+        category="dairy",
+        age_restricted=True,
+        segments=(NON_ALCOHOLIC, PASTRY),
+        rate_clp_per_as="3",
+        color="#e30613",
+        stock_copy="Soprole · Leche chocolatada, fría.",
+        voice=("familiar", "simple"),
+        product="dairy",
+    ),
+    DemoBrand(
+        slug="watts",
+        name="Watt's",
+        category="juice",
+        age_restricted=True,
+        segments=(NON_ALCOHOLIC, PASTRY),
+        rate_clp_per_as="3",
+        color="#e2001a",
+        stock_copy="Watt's · Néctar frío para el desayuno.",
+        voice=("familiar", "fresco"),
+        product="juice",
+    ),
+    DemoBrand(
+        slug="andina-del-valle",
+        name="Andina del Valle",
+        category="juice",
+        age_restricted=True,
+        segments=(NON_ALCOHOLIC, PASTRY),
+        rate_clp_per_as="2.9",
+        color="#f7a800",
+        stock_copy="Andina del Valle · Néctar frío, para el camino.",
+        voice=("fresco", "simple"),
+        product="juice",
+    ),
+    # --- ice cream: summer on the highway (ALTO EN, so never with a child) ----------
+    DemoBrand(
+        slug="savory",
+        name="Savory",
+        category="ice_cream",
+        age_restricted=True,
+        segments=(ICE_CREAM, DESSERTS),
+        rate_clp_per_as="3.4",
+        color="#e4002b",
+        stock_copy="Savory · Helado para el calor de la ruta.",
+        voice=("veraniego", "alegre"),
+        product="ice_cream",
+    ),
+    DemoBrand(
+        slug="bresler",
+        name="Bresler",
+        category="ice_cream",
+        age_restricted=True,
+        segments=(ICE_CREAM, DESSERTS),
+        rate_clp_per_as="3.3",
+        color="#ff3b30",
+        stock_copy="Bresler · Helado para el viaje.",
+        voice=("veraniego", "cercano"),
+        product="ice_cream",
+    ),
 )
 
 
@@ -277,6 +407,96 @@ BASKETS: tuple[DemoBasket, ...] = (
         slugs=frozenset({"super-8", "juan-valdez"}),
         names="Juan Valdez + Super 8",
         tiers=_sized(3290, 5990, 8490, 10990),
+    ),
+    # The completo's soda slot: Bilz y Pap fights Coca-Cola for it.
+    DemoBasket(
+        slugs=frozenset({"pronto-copec", "bilz-y-pap"}),
+        names="Pronto Copec + Bilz y Pap",
+        tiers=(
+            (1, "Completo + bebida", "", 3790),
+            (2, "Dúo completo", " x2", 7290),
+            (3, "Trío completo", " x3", 10190),
+            (4, "Pack x4 completo", " x4", 13190),
+        ),
+    ),
+    # Summer on the highway: ice cream and cold water, Savory vs Bresler.
+    DemoBasket(
+        slugs=frozenset({"savory", "cachantun"}),
+        names="Cachantun + Savory",
+        tiers=(
+            (1, "Pack verano", "", 2990),
+            (2, "Pack verano para 2", " x2", 5590),
+            (3, "Pack verano para 3", " x3", 7990),
+            (4, "Pack verano para 4", " x4", 9990),
+        ),
+    ),
+    DemoBasket(
+        slugs=frozenset({"bresler", "cachantun"}),
+        names="Cachantun + Bresler",
+        tiers=(
+            (1, "Pack verano", "", 2890),
+            (2, "Pack verano para 2", " x2", 5390),
+            (3, "Pack verano para 3", " x3", 7790),
+            (4, "Pack verano para 4", " x4", 9790),
+        ),
+    ),
+    # Breakfast at the counter: medialuna with chocolate milk or a nectar.
+    DemoBasket(
+        slugs=frozenset({"colun", "pronto-copec"}),
+        names="Pronto Copec + Colún",
+        tiers=(
+            (1, "Medialuna + chocolatada", "", 2290),
+            (2, "Medialuna + chocolatada para 2", " x2", 4290),
+            (3, "Medialuna + chocolatada para 3", " x3", 5990),
+            (4, "Medialuna + chocolatada para 4", " x4", 7690),
+        ),
+    ),
+    DemoBasket(
+        slugs=frozenset({"soprole", "pronto-copec"}),
+        names="Pronto Copec + Soprole",
+        tiers=(
+            (1, "Medialuna + chocolatada", "", 2190),
+            (2, "Medialuna + chocolatada para 2", " x2", 4190),
+            (3, "Medialuna + chocolatada para 3", " x3", 5890),
+            (4, "Medialuna + chocolatada para 4", " x4", 7490),
+        ),
+    ),
+    DemoBasket(
+        slugs=frozenset({"watts", "pronto-copec"}),
+        names="Pronto Copec + Watt's",
+        tiers=(
+            (1, "Medialuna + néctar", "", 2390),
+            (2, "Medialuna + néctar para 2", " x2", 4490),
+            (3, "Medialuna + néctar para 3", " x3", 6290),
+            (4, "Medialuna + néctar para 4", " x4", 7990),
+        ),
+    ),
+    DemoBasket(
+        slugs=frozenset({"andina-del-valle", "pronto-copec"}),
+        names="Pronto Copec + Andina del Valle",
+        tiers=(
+            (1, "Medialuna + néctar", "", 2290),
+            (2, "Medialuna + néctar para 2", " x2", 4390),
+            (3, "Medialuna + néctar para 3", " x3", 6190),
+            (4, "Medialuna + néctar para 4", " x4", 7890),
+        ),
+    ),
+    # Road snacks with a sports drink (PepsiCo with PepsiCo; Powerade with Marco Polo).
+    DemoBasket(
+        slugs=frozenset({"gatorade", "lays"}),
+        names="Lay's + Gatorade",
+        tiers=_sized(3790, 6990, 9790, 12490),
+    ),
+    DemoBasket(
+        slugs=frozenset({"powerade", "marco-polo"}),
+        names="Marco Polo + Powerade",
+        tiers=_sized(3590, 6690, 9390, 11990),
+    ),
+    # Something sweet with the coffee: Ambrosoli vs Super 8.
+    DemoBasket(
+        slugs=frozenset({"ambrosoli", "juan-valdez"}),
+        names="Juan Valdez + Ambrosoli",
+        tiers=_sized(3190, 5790, 8290, 10690),
     ),
     # Solo offers: every brand sells alone too, sized to the group.
     DemoBasket(
@@ -376,6 +596,86 @@ BASKETS: tuple[DemoBasket, ...] = (
         names="Super 8",
         tiers=_solo(
             ("Super 8", "Dos Super 8", "Tres Super 8", "Cuatro Super 8"), (590, 1090, 1590, 1990)
+        ),
+    ),
+    DemoBasket(
+        slugs=frozenset({"ambrosoli"}),
+        names="Ambrosoli",
+        tiers=_solo(
+            ("Dulces Ambrosoli", "Dos Ambrosoli", "Tres Ambrosoli", "Cuatro Ambrosoli"),
+            (990, 1790, 2490, 3190),
+        ),
+    ),
+    DemoBasket(
+        slugs=frozenset({"bilz-y-pap"}),
+        names="Bilz y Pap",
+        tiers=_solo(
+            ("Bilz o Pap helada", "Dos Bilz y Pap", "Tres Bilz y Pap", "Cuatro Bilz y Pap"),
+            (1390, 2490, 3590, 4590),
+        ),
+    ),
+    DemoBasket(
+        slugs=frozenset({"powerade"}),
+        names="Powerade",
+        tiers=_solo(
+            ("Powerade helado", "Dos Powerade", "Tres Powerade", "Cuatro Powerade"),
+            (1490, 2690, 3790, 4790),
+        ),
+    ),
+    DemoBasket(
+        slugs=frozenset({"gatorade"}),
+        names="Gatorade",
+        tiers=_solo(
+            ("Gatorade helado", "Dos Gatorade", "Tres Gatorade", "Cuatro Gatorade"),
+            (1590, 2890, 3990, 4990),
+        ),
+    ),
+    DemoBasket(
+        slugs=frozenset({"colun"}),
+        names="Colún",
+        tiers=_solo(
+            ("Chocolatada Colún", "Dos chocolatadas", "Tres chocolatadas", "Cuatro chocolatadas"),
+            (1190, 2190, 2990, 3790),
+        ),
+    ),
+    DemoBasket(
+        slugs=frozenset({"soprole"}),
+        names="Soprole",
+        tiers=_solo(
+            ("Chocolatada Soprole", "Dos chocolatadas", "Tres chocolatadas", "Cuatro chocolatadas"),
+            (1090, 1990, 2890, 3590),
+        ),
+    ),
+    DemoBasket(
+        slugs=frozenset({"watts"}),
+        names="Watt's",
+        tiers=_solo(
+            ("Néctar Watt's", "Dos néctares", "Tres néctares", "Cuatro néctares"),
+            (1190, 2190, 2990, 3790),
+        ),
+    ),
+    DemoBasket(
+        slugs=frozenset({"andina-del-valle"}),
+        names="Andina del Valle",
+        tiers=_solo(
+            ("Néctar Andina del Valle", "Dos néctares", "Tres néctares", "Cuatro néctares"),
+            (1090, 1990, 2890, 3590),
+        ),
+    ),
+    DemoBasket(
+        slugs=frozenset({"savory"}),
+        names="Savory",
+        tiers=_solo(
+            ("Helado Savory", "Dos helados", "Tres helados", "Cuatro helados"),
+            (1490, 2790, 3990, 4990),
+        ),
+    ),
+    DemoBasket(
+        slugs=frozenset({"bresler"}),
+        names="Bresler",
+        tiers=_solo(
+            ("Helado Bresler", "Dos helados", "Tres helados", "Cuatro helados"),
+            (1390, 2590, 3690, 4690),
         ),
     ),
 )

@@ -120,7 +120,7 @@ class BackendLink:
         while True:
             try:
                 socket = await self._connect(self._url)
-            except (OSError, websockets.WebSocketException) as exc:
+            except Exception as exc:  # anything: the link must outlive it and retry
                 attempt += 1
                 await self._sleep_backoff(attempt, exc)
                 continue
@@ -132,6 +132,8 @@ class BackendLink:
                 await self._pump(socket)
             except (OSError, websockets.WebSocketException) as exc:
                 logger.warning("backend link dropped: %s", exc)
+            except Exception as exc:  # never let the link task die while the agent runs
+                logger.warning("backend link failed (%s); reconnecting", type(exc).__name__)
             finally:
                 self._connected.clear()
                 await _quiet_close(socket)

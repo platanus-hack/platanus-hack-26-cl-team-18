@@ -110,6 +110,10 @@ class FailoverDetector:
         except DetectorUnavailable as exc:
             self._fail_over(f"primary unavailable: {exc}")
             return None
+        except Exception as exc:  # an unclassified client bug costs the remote, not perception
+            # The type only: a provider payload never enters the logs.
+            self._fail_over(f"primary failed: {type(exc).__name__}")
+            return None
         elapsed_ms = (self._now() - started) * 1000
         if not self._on_primary:
             # A probe: only switch back if it came in under budget.

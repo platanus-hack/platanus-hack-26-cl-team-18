@@ -6,6 +6,8 @@ import type { z } from "zod";
  * - Every inbound frame is size-capped, JSON-parsed and validated against the
  *   socket's zod schema (generated from the backend contract). Invalid frames
  *   are counted and dropped; they never reach UI code.
+ * - A handshake that doesn't open within `connectTimeoutMs` (a stalled tunnel
+ *   or proxy) is abandoned and retried; the browser itself may wait minutes.
  * - Reconnects forever with capped exponential backoff + jitter. The UI keeps
  *   showing the last good state while `status` is "reconnecting" (never blank).
  * - Connection status is a discriminated union, not boolean soup.
@@ -32,12 +34,14 @@ interface Options<In> {
     readonly onClose?: (code: number) => void;
     readonly maxFrameBytes?: number;
     readonly backoff?: { readonly baseMs: number; readonly maxMs: number };
+    readonly connectTimeoutMs?: number;
     /** Injected for tests. */
     readonly createSocket?: (url: string) => WebSocket;
     readonly random?: () => number;
 }
 
 const DEFAULT_BACKOFF = { baseMs: 250, maxMs: 5_000 } as const;
+const DEFAULT_CONNECT_TIMEOUT_MS = 8_000;
 
 export function backoffDelay(
     attempt: number,
@@ -52,6 +56,7 @@ export function backoffDelay(
 export class TypedSocket<In, Out = never> {
     private socket: WebSocket | null = null;
     private retryTimer: ReturnType<typeof setTimeout> | null = null;
+    private connectTimer: ReturnType<typeof setTimeout> | null = null;
     private attempt = 0;
     private stopped = true;
     private stats_: SocketStats = { received: 0, invalid: 0, reconnects: 0 };
@@ -78,6 +83,7 @@ export class TypedSocket<In, Out = never> {
         this.stopped = true;
         if (this.retryTimer !== null) clearTimeout(this.retryTimer);
         this.retryTimer = null;
+        this.clearConnectTimer();
         const socket = this.socket;
         this.socket = null; // Invalidate callbacks before close (which may fire synchronously).
         socket?.close(1000, "client stop");
@@ -97,9 +103,18 @@ export class TypedSocket<In, Out = never> {
         const create = this.options.createSocket ?? ((url: string) => new WebSocket(url));
         const socket = create(this.options.url);
         this.socket = socket;
+        this.connectTimer = setTimeout(() => {
+            this.connectTimer = null;
+            if (this.stopped || this.socket !== socket) return;
+            this.socket = null; // Invalidate callbacks before close.
+            socket.close();
+            this.options.onClose?.(1006);
+            this.scheduleReconnect();
+        }, this.options.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS);
 
         socket.onopen = () => {
             if (this.stopped || this.socket !== socket) return;
+            this.clearConnectTimer();
             this.attempt = 0;
             this.setState({ status: "open", since: Date.now() });
         };
@@ -110,12 +125,18 @@ export class TypedSocket<In, Out = never> {
         socket.onclose = (event?: CloseEvent) => {
             if (this.stopped || this.socket !== socket) return;
             this.socket = null;
+            this.clearConnectTimer();
             this.options.onClose?.(event?.code ?? 1006);
             this.scheduleReconnect();
         };
         socket.onerror = () => {
             // onclose follows; reconnect is handled there.
         };
+    }
+
+    private clearConnectTimer(): void {
+        if (this.connectTimer !== null) clearTimeout(this.connectTimer);
+        this.connectTimer = null;
     }
 
     private handleFrame(data: unknown): void {

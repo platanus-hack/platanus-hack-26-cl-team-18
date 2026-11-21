@@ -119,7 +119,20 @@ export function playerReducer(state: PlayerState, event: PlayerEvent): PlayerSta
             return updateKnownCreative(state, event.creative) ?? state;
         case "received": {
             const updated = updateKnownCreative(state, event.creative);
-            if (updated !== null) return updated;
+            if (updated !== null) {
+                // A newer ready for the ad on air beats the one still preloading: latest wins.
+                const resentOnAir =
+                    state.layers[state.front]?.creativeId === event.creative.creativeId &&
+                    state.phase.kind === "preloading" &&
+                    state.phase.creativeId !== event.creative.creativeId;
+                return resentOnAir
+                    ? {
+                          ...updated,
+                          layers: { ...updated.layers, [other(state.front)]: null },
+                          phase: { kind: "showing" },
+                      }
+                    : updated;
+            }
             if (state.phase.kind === "crossfading") return { ...state, queued: event.creative };
             return loadIntoBack(state, event.creative);
         }

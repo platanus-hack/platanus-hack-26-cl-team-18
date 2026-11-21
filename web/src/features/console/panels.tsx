@@ -37,6 +37,16 @@ export const DEMO_BRANDS: Readonly<Record<string, string>> = {
     lays: "Lay's",
     "marco-polo": "Marco Polo",
     "super-8": "Super 8",
+    ambrosoli: "Ambrosoli",
+    "bilz-y-pap": "Bilz y Pap",
+    powerade: "Powerade",
+    gatorade: "Gatorade",
+    colun: "Colún",
+    soprole: "Soprole",
+    watts: "Watt's",
+    "andina-del-valle": "Andina del Valle",
+    savory: "Savory",
+    bresler: "Bresler",
 };
 
 export function AudiencePanel({ view }: { view: ScreenView }) {

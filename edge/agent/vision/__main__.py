@@ -39,7 +39,13 @@ from agent.vision.detector import (
 )
 from agent.vision.dev_view import DevViewBuilder
 from agent.vision.held import HeldProductTracker, MarkerCatalog
-from agent.vision.pipeline import JsonlRecorder, Link, VisionPipeline, blur_encoder
+from agent.vision.pipeline import (
+    JsonlRecorder,
+    Link,
+    VisionConfig,
+    VisionPipeline,
+    blur_encoder,
+)
 from agent.vision.remote import RemoteGpuDetector
 from agent.vision.snapshot import SnapshotBuilder, SnapshotConfig
 from agent.vision.types import FrameDetections
@@ -172,6 +178,8 @@ async def run(args: argparse.Namespace) -> int:
             args.screen, SnapshotConfig(debounce=timedelta(milliseconds=args.debounce_ms))
         ),
         keyframes=None if (args.no_keyframes or args.record) else blur_encoder(),
+        # Wall-clock sources only: a lost camera publishes an empty room, not the last group.
+        config=VisionConfig(blind_after=None if args.record else timedelta(seconds=2)),
         live=live,
         dev_view=DevViewBuilder(args.screen, brand_for=catalog.brand_for if catalog else None)
         if dev_stream_on(args)

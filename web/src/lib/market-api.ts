@@ -100,31 +100,45 @@ export interface BookState {
     readonly refresh: () => void;
 }
 
+/** A book request older than this is abandoned for a fresh one. */
+const HUNG_BOOK_MS = 5_000;
+
 /** Poll the live book (default every second); `refresh` after a write for snappy feedback. */
 export function useBook(intervalMs = 1000, screenId = "demo-01"): BookState {
     const [book, setBook] = useState<ConsoleBook | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [tick, setTick] = useState(0);
     useEffect(() => {
-        const controller = new AbortController();
+        let stopped = false;
+        let inFlight: AbortController | null = null;
+        let startedAt = 0;
         let latestRequest = 0;
         const load = () => {
+            // At most one request in flight: a slow one is waited for, a hung one replaced.
+            if (inFlight !== null && Date.now() - startedAt < HUNG_BOOK_MS) return;
+            inFlight?.abort();
+            const controller = new AbortController();
+            inFlight = controller;
+            startedAt = Date.now();
             const request = ++latestRequest;
             fetchBook(controller.signal, screenId)
+                .finally(() => {
+                    if (inFlight === controller) inFlight = null;
+                })
                 .then((next) => {
-                    if (controller.signal.aborted || request !== latestRequest) return;
+                    if (stopped || request !== latestRequest) return;
                     setBook(next);
                     setError(null);
                 })
                 .catch((reason: unknown) => {
-                    if (!controller.signal.aborted && request === latestRequest)
-                        setError(String(reason));
+                    if (!stopped && request === latestRequest) setError(String(reason));
                 });
         };
         load();
         const timer = setInterval(load, intervalMs);
         return () => {
-            controller.abort();
+            stopped = true;
+            inFlight?.abort();
             clearInterval(timer);
         };
     }, [intervalMs, tick, screenId]);

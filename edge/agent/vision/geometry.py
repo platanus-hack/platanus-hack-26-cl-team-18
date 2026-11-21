@@ -85,10 +85,9 @@ def head_box(person: PersonDetection, config: GeometryConfig = DEFAULT_GEOMETRY)
         span = max(max(xs) - min(xs), box.width * 0.25)
         cx, cy = (max(xs) + min(xs)) / 2, (max(ys) + min(ys)) / 2
         half = span * 0.9
-        return Box(
-            max(box.x1, cx - half),
-            max(box.y1, cy - half * 1.3),
-            min(box.x2, cx + half),
-            min(box.y2, cy + half * 1.1),
-        )
+        x1, y1 = max(box.x1, cx - half), max(box.y1, cy - half * 1.3)
+        x2, y2 = min(box.x2, cx + half), min(box.y2, cy + half * 1.1)
+        if x1 < x2 and y1 < y2:
+            return Box(x1, y1, x2, y2)
+        # Stray face keypoints outside the person box: blur the top of the box instead.
     return Box(box.x1, box.y1, box.x2, box.y1 + box.height * 0.28)

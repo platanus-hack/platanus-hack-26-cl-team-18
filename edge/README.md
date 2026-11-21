@@ -115,6 +115,9 @@ The frame path, in `agent/vision/` (ADR 0004, 0007, 0008):
   detector skips frames, never queues them. `VideoFileSource` replays a
   recorded video on a fixed playback clock (replay mode). Slow inference seeks
   to the current playback frame instead of showing old frames in slow motion.
+  An unplugged camera is reopened after 2 s of failed reads; if no frame is
+  processed for 2 s, the pipeline publishes one empty room (`people=0`) and
+  then goes quiet, so a lost camera never leaves the last group on screen.
 - **Detection:** `adapters.py`. `UltralyticsDetector` runs YOLO26 pose every
   frame and YOLO26 objects on a 200 ms capture-time deadline (or every
   `--object-every` frames when overridden). `ArucoMarkerDetector`

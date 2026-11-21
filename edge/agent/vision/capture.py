@@ -7,6 +7,7 @@ falling behind (docs/stack.md §3). OpenCV is imported lazily.
 
 from __future__ import annotations
 
+import logging
 import math
 import threading
 import time
@@ -16,22 +17,32 @@ from typing import Any
 
 from agent.vision.types import Box
 
+logger = logging.getLogger(__name__)
+
 
 class LatestFrameCamera:
-    """UVC webcam: 1280x720 @ 30 fps MJPG, buffer of 1, newest frame only."""
+    """UVC webcam: 1280x720 @ 30 fps MJPG, buffer of 1, newest frame only.
+
+    An unplugged or wedged camera is reopened after `reopen_after_s` of failed
+    reads; a read error or an empty frame never kills the capture thread.
+    """
 
     def __init__(
-        self, index: int = 0, *, width: int = 1280, height: int = 720, fps: int = 30
+        self,
+        index: int = 0,
+        *,
+        width: int = 1280,
+        height: int = 720,
+        fps: int = 30,
+        reopen_after_s: float = 2.0,
     ) -> None:
         import cv2
 
         self._cv2 = cv2
-        self._cap = cv2.VideoCapture(index)
-        self._cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter.fourcc(*"MJPG"))
-        self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-        self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-        self._cap.set(cv2.CAP_PROP_FPS, fps)
-        self._cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        self._index = index
+        self._settings = (width, height, fps)
+        self._reopen_after_s = reopen_after_s
+        self._cap = self._open()
         if not self._cap.isOpened():
             raise RuntimeError(f"camera {index} could not be opened")
         self._lock = threading.Lock()
@@ -41,15 +52,48 @@ class LatestFrameCamera:
         self._thread = threading.Thread(target=self._loop, name="camera", daemon=True)
         self._thread.start()
 
+    def _open(self) -> Any:
+        cv2 = self._cv2
+        width, height, fps = self._settings
+        cap = cv2.VideoCapture(self._index)
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter.fourcc(*"MJPG"))
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+        cap.set(cv2.CAP_PROP_FPS, fps)
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        return cap
+
     def _loop(self) -> None:
+        failing_since: float | None = None
         while not self._stop.is_set():
-            ok, frame = self._cap.read()
-            if not ok:
-                time.sleep(0.01)
+            try:
+                ok, frame = self._cap.read()
+            except Exception:  # cv2.error from a vanished device
+                ok, frame = False, None
+            if not ok or frame is None or getattr(frame, "size", 1) == 0:
+                now = time.monotonic()
+                if failing_since is None:
+                    failing_since = now
+                elif now - failing_since >= self._reopen_after_s:
+                    logger.warning("camera %s returns no frames; reopening it", self._index)
+                    self._reopen()
+                    failing_since = time.monotonic()
+                self._stop.wait(0.01)
                 continue
+            failing_since = None
             with self._lock:
                 self._latest = (frame, datetime.now(UTC))
                 self._serial += 1
+
+    def _reopen(self) -> None:
+        try:
+            self._cap.release()
+        except Exception:
+            pass
+        try:
+            self._cap = self._open()
+        except Exception:  # the device is still gone: try again later
+            logger.warning("camera %s could not be reopened yet", self._index)
 
     def latest(self, after_serial: int) -> tuple[Any, datetime, int] | None:
         """The newest frame if it is newer than `after_serial`, else None."""

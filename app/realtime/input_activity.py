@@ -20,6 +20,9 @@ class _Activity:
 class InputStatus(TypedDict):
     camera_recent: bool
     last_snapshot_at: str | None
+    # Server receipt minus the agent's measured_at for the latest snapshot. Beyond
+    # the loop's skew bound every snapshot is dropped, so a wrong laptop clock shows here.
+    camera_clock_skew_s: float | None
     speech_enabled: bool
     speech_recent: bool
     last_utterance_at: str | None
@@ -48,6 +51,15 @@ class InputActivity:
             while len(self._screens) > self._capacity:
                 self._screens.popitem(last=False)
 
+    def last_snapshot(self, screen_id: str) -> tuple[datetime, datetime] | None:
+        """(server received_at, device measured_at) of the screen's latest admitted snapshot."""
+        with self._lock:
+            activity = self._screens.get(screen_id)
+            if activity is None or activity.snapshot_at is None:
+                return None
+            assert activity.snapshot_measured_at is not None
+            return activity.snapshot_at, activity.snapshot_measured_at
+
     def snapshot(
         self, *, at: datetime, speech_screens: list[str], players: list[str]
     ) -> dict[str, InputStatus]:
@@ -60,6 +72,11 @@ class InputActivity:
                     and abs(at - activity.snapshot_measured_at) <= timedelta(seconds=5),
                     "last_snapshot_at": activity.snapshot_at.isoformat()
                     if activity.snapshot_at
+                    else None,
+                    "camera_clock_skew_s": round(
+                        (activity.snapshot_at - activity.snapshot_measured_at).total_seconds(), 1
+                    )
+                    if activity.snapshot_at and activity.snapshot_measured_at
                     else None,
                     "speech_enabled": screen in speech_screens,
                     "speech_recent": activity.utterance_at is not None

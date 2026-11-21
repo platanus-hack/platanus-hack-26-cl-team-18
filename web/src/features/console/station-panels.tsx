@@ -17,8 +17,8 @@ export function SessionPanel({ view }: { view: ScreenView }) {
         auction?.bundle_revenue && auction.single_brand_revenue && auction.winners.length > 1
             ? coBrandLift(auction.bundle_revenue.amount, auction.single_brand_revenue.amount)
             : null;
-    // Session total: presentation only (ADR 0008 D5); each amount stays a decimal string.
-    const billed = view.receipts.reduce((sum, r) => sum + Number(r.total.amount), 0);
+    // Session total over every receipt, not just the shown window (presentation only).
+    const billed = view.billed;
     return (
         <Panel title="Sesión">
             <div className="grid grid-cols-2 gap-4">

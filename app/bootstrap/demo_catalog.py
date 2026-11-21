@@ -28,6 +28,10 @@ SALTY_SNACKS = "1122"  # Purchase Intent | CPG | Edible | Salty Snacks
 WATER = "1000"  # Purchase Intent | CPG | Edible | Beverages | Bottled Water
 ENERGY_DRINKS = "997"  # Purchase Intent | CPG | Edible | Beverages | Energy Drinks
 CANDY = "1074"  # Purchase Intent | CPG | Edible | General Food | Candy
+NON_ALCOHOLIC = "377"  # Interest | Food & Drink | Non-Alcoholic Beverages
+DESSERTS = "372"  # Interest | Food & Drink | Desserts and Baking
+READY_TO_DRINK_COFFEE = "982"  # Purchase Intent | CPG | Edible | Beverages | Tea/Coffee RTD
+ICE_CREAM = "1011"  # Purchase Intent | CPG | Edible | Frozen | Frozen Desserts | Ice Cream
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

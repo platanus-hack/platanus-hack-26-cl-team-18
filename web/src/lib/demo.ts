@@ -4,6 +4,7 @@
  * `/demo/<key>/…`, and its API calls carry the key as `X-Demo-Key`. Without
  * the right key the backend answers 404, so a guessed path shows nothing.
  */
+import { backendHttpUrl } from "./config";
 
 export const DEMO_PAGES = ["advertiser", "clerk", "campaigns", "dev"] as const;
 export type DemoPage = (typeof DEMO_PAGES)[number];
@@ -45,8 +46,8 @@ export function demoHeaders(pathname?: string): Record<string, string> {
 
 const REMEMBERED = "team18.demoKey";
 
-/** Remember the key in this browser after a visit to `/demo/<key>` (operator laptop only). */
-export function rememberDemoKey(key: string): void {
+/** Remember the key in this browser (operator laptop only). */
+function rememberDemoKey(key: string): void {
     try {
         window.localStorage.setItem(REMEMBERED, key);
     } catch {
@@ -61,4 +62,26 @@ export function rememberedDemoKey(): string | null {
     } catch {
         return null;
     }
+}
+
+/**
+ * After a visit to `/demo/<key>`: remember the key only once the backend accepts
+ * it (a keyed GET of the book). A typo or a backend that is down never replaces
+ * the key this browser already uses for the console's demo controls.
+ */
+export async function rememberDemoKeyIfAccepted(
+    key: string,
+    fetcher: (input: string, init?: RequestInit) => Promise<Response> = (input, init) =>
+        fetch(input, init),
+): Promise<boolean> {
+    try {
+        const response = await fetcher(`${backendHttpUrl}/api/book`, {
+            headers: { "X-Demo-Key": key },
+        });
+        if (!response.ok) return false;
+    } catch {
+        return false;
+    }
+    rememberDemoKey(key);
+    return true;
 }

@@ -1,6 +1,7 @@
 """DEMO_CATALOG=chile: real brands at a Pronto Copec run the same loop as the fictional seed."""
 
 from collections import Counter
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -22,7 +23,12 @@ from app.contract.messages import (
     Tracklet,
 )
 from app.main import create_app
+from app.modules.campaigns.domain.book import BrandId
 from app.modules.common.infrastructure.clock.fixed_clock import FixedClock
+from app.modules.creative.domain.brief import BrandBrief
+from app.modules.creative.domain.draft import CopyDraft, CopySource
+from app.modules.creative.domain.guard import ViolationKind, check_copy
+from tests.unit.creative.factory import brief
 
 BRANDS = {brand.slug: brand for brand in CHILE.brands}
 
@@ -65,7 +71,18 @@ def test_partner_baskets_never_pair_rivals() -> None:
 
 def test_the_main_aisles_have_a_rival_so_vcg_prices_are_real() -> None:
     per_category = Counter(brand.category for brand in CHILE.brands)
-    for category in ("energy_drink", "coffee", "cola", "water", "snacks"):
+    for category in (
+        "energy_drink",
+        "coffee",
+        "cola",
+        "water",
+        "snacks",
+        "candy",
+        "sports_drink",
+        "dairy",
+        "juice",
+        "ice_cream",
+    ):
         assert per_category[category] >= 2, category
 
 
@@ -75,9 +92,37 @@ def test_alto_en_products_are_never_shown_to_a_group_with_a_child() -> None:
         "lays",
         "marco-polo",
         "super-8",
+        "ambrosoli",
+        "colun",
+        "soprole",
+        "watts",
+        "andina-del-valle",
+        "savory",
+        "bresler",
     }
     # No alcohol at a gas station (Ley 21.363).
     assert "alcohol" not in {brand.category for brand in CHILE.brands}
+
+
+def test_a_brand_whose_name_contains_a_known_brand_is_not_its_own_competitor() -> None:
+    # "Bilz y Pap" contains "Bilz" (KNOWN_BRANDS); "Pronto Copec" contains "Copec".
+    bilz = BrandBrief(
+        brand_id=BrandId.create("00000000-0000-7000-8000-0000000000b1"),
+        name="Bilz y Pap",
+        category="cola",
+        stock_copy="Bilz y Pap · Bien heladas, para el completo.",
+    )
+    own = replace(brief(), brands=(bilz,), layout="solo", offer=None)
+    draft = CopyDraft(
+        teaser="Completo y Bilz bien helada.",
+        offer="Bilz y Pap, bien heladas.",
+        close="Escanea y canjea en caja.",
+        voice_line="Bilz y Pap, bien heladas.",
+        source=CopySource.AI,
+    )
+    assert ViolationKind.COMPETITOR_NAME not in check_copy(draft, own).kinds()
+    rival = replace(draft, teaser="Más rica que Coca-Cola.")
+    assert ViolationKind.COMPETITOR_NAME in check_copy(rival, own).kinds()
 
 
 def test_official_logos_are_used_where_present_and_a_wordmark_elsewhere() -> None:
@@ -85,6 +130,9 @@ def test_official_logos_are_used_where_present_and_a_wordmark_elsewhere() -> Non
     assert _brand_logo(red_bull.slug, red_bull.name, red_bull.color) == (
         "/campaign-assets/logos/red-bull.svg"
     )
+    for slug in ("powerade", "gatorade", "soprole", "watts", "bresler"):
+        brand = BRANDS[slug]
+        assert _brand_logo(slug, brand.name, brand.color) == f"/campaign-assets/logos/{slug}.svg"
     score = BRANDS["score"]
     assert _brand_logo(score.slug, score.name, score.color).startswith("data:image/svg+xml")
 

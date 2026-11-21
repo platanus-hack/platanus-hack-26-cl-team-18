@@ -18,7 +18,12 @@ affiliation. Never AI-drawn or redrawn (CLAUDE.md invariant 4).
 | `coca-cola.svg` | File:Coca-Cola logo.svg |
 | `pepsi.svg` | File:Pepsi 2023.svg |
 | `lays.svg` | File:Lay's 2025.svg |
+| `powerade.svg` | File:Powerade-logo-2019.svg |
+| `gatorade.svg` | File:Gatorade logo.svg (rasterized to 240 px) |
+| `soprole.svg` | File:Soprole.png |
+| `watts.svg` | File:Watt's-logo.png |
+| `bresler.svg` | File:Bresler logo 2022.png |
 
 Missing (a plain wordmark is drawn until the brand's press-kit file is dropped in as
 `<slug>.svg`, `.png` or `.webp`): `score`, `cachantun`, `benedictino`, `marco-polo`,
-`super-8`.
+`super-8`, `ambrosoli`, `bilz-y-pap`, `colun`, `andina-del-valle`, `savory`.

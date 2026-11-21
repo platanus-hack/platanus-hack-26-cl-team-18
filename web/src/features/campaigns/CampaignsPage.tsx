@@ -127,6 +127,15 @@ const STARTERS: readonly Starter[] = [
         media: "photo",
     },
     {
+        title: "Verano en ruta",
+        subtitle: "Savory lidera · para 4",
+        brands: ["savory", "cachantun"],
+        party: 4,
+        moment: "hunger",
+        daypart: "afternoon",
+        media: "photo",
+    },
+    {
         title: "Red Bull pelea el turno",
         subtitle: "Red Bull lidera · para 1",
         brands: ["red-bull", "juan-valdez"],

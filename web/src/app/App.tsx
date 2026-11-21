@@ -1,4 +1,4 @@
-import { demoHref, demoRoute, rememberDemoKey, type DemoPage } from "@/lib/demo";
+import { demoHref, demoRoute, rememberDemoKeyIfAccepted, type DemoPage } from "@/lib/demo";
 import { ErrorBoundary } from "@/shared/ui/ErrorBoundary";
 import { Card } from "@/shared/ui/card";
 import { AppShell, PageHeader } from "@/shared/ui/page";
@@ -105,7 +105,8 @@ function DemoHub({ demo }: { demo: string }) {
 export function App() {
     const path = window.location.pathname.replace(/\/+$/, "") || "/";
     const demo = demoRoute(path);
-    if (demo) rememberDemoKey(demo.key); // this browser now shows the demo tools in the nav
+    // Once the backend accepts the key, this browser shows the demo tools in the nav.
+    if (demo) void rememberDemoKeyIfAccepted(demo.key);
     const page = demo ? (
         demo.page ? (
             DEMO_ROUTES[demo.page]()

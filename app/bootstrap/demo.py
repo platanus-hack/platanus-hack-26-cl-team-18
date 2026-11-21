@@ -670,8 +670,15 @@ def register_demo(
             )
             if not reconsider:
                 latest_observed_at = observed_at
+            handled_moment, handled_party = current_moment, briefed_party
             briefed_party = party_now
-            needs_voice = run_auction(snapshot, moment, Trigger.MOMENT_CHANGED)
+            try:
+                needs_voice = run_auction(snapshot, moment, Trigger.MOMENT_CHANGED)
+            except Exception:
+                # Not aired: forget this audience so the next identical reading retries
+                # it, instead of being skipped as "unchanged" while the old ad sticks.
+                current_moment, briefed_party = handled_moment, handled_party
+                raise
         # Outside the lock: a cache hit upgrades the creative, which takes the lock.
         if needs_voice is not None:
             request_voiceover(needs_voice)

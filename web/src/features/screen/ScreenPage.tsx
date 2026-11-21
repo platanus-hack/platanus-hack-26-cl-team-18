@@ -2,6 +2,7 @@ import { PlayerOutboundSchema, type PlayerInbound, type PlayerOutbound } from "@
 import { backendWsUrl, screenIdFromLocation } from "@/lib/config";
 import { createStore, useStore } from "@/lib/store";
 import { TypedSocket } from "@/lib/ws/typed-socket";
+import { ErrorBoundary } from "@/shared/ui/ErrorBoundary";
 import { useEffect, useState } from "react";
 import { CreativeView } from "./CreativeView";
 import { HOUSE_AD } from "./house-ad";
@@ -28,7 +29,42 @@ function toPlayable(
     };
 }
 
+/** How long the bundled house ad covers a crashed player before the kiosk reloads itself. */
+const CRASH_RELOAD_MS = 10_000;
+
+/**
+ * The player itself failed to render: keep an ad on the glass (never blank),
+ * then reload so the kiosk heals without anyone touching it.
+ */
+export function PlayerCrashed({
+    reload = () => {
+        window.location.reload();
+    },
+}: {
+    reload?: () => void;
+}) {
+    useEffect(() => {
+        const timer = setTimeout(reload, CRASH_RELOAD_MS);
+        return () => {
+            clearTimeout(timer);
+        };
+    }, [reload]);
+    return (
+        <main className="relative h-screen w-screen cursor-none overflow-hidden bg-canvas">
+            <CreativeView spec={HOUSE_AD.spec} playKey="house" />
+        </main>
+    );
+}
+
 export function ScreenPage() {
+    return (
+        <ErrorBoundary label="screen" fallback={<PlayerCrashed />}>
+            <ScreenPlayer />
+        </ErrorBoundary>
+    );
+}
+
+function ScreenPlayer() {
     const [screenId] = useState(() => screenIdFromLocation());
     const [store] = useState(() =>
         createStore(playerReducer, initialPlayerState(HOUSE_AD, Date.now())),
@@ -225,11 +261,18 @@ export function ScreenPage() {
                         // Test hook: which creative this layer holds (evals/browser.py).
                         data-creative-id={creative.creativeId}
                     >
-                        <CreativeView
-                            spec={creative.spec}
-                            playKey={creative.creativeId}
-                            readAttention={attention.getState}
-                        />
+                        {/* A creative that throws while rendering falls back to the house ad. */}
+                        <ErrorBoundary
+                            key={creative.creativeId}
+                            label="creative"
+                            fallback={<CreativeView spec={HOUSE_AD.spec} playKey="house" />}
+                        >
+                            <CreativeView
+                                spec={creative.spec}
+                                playKey={creative.creativeId}
+                                readAttention={attention.getState}
+                            />
+                        </ErrorBoundary>
                     </div>
                 );
             })}

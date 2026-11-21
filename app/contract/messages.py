@@ -106,7 +106,7 @@ class MoneyDTO(_Model):
 
 class Tracklet(_Model):
     id: Annotated[str, Field(min_length=1, max_length=32)]
-    dwell_s: Annotated[float, Field(ge=0.0)]
+    dwell_s: Annotated[FiniteFloat, Field(ge=0.0)]
     looking: bool
     distance_band: DistanceBand
 
@@ -412,7 +412,7 @@ class ScreenAttention(_Message):
     screen_id: ScreenId
     creative_id: EntityId | None = None
     looking: Annotated[int, Field(ge=0)]
-    dwell_s: Annotated[float, Field(ge=0.0)]
+    dwell_s: Annotated[FiniteFloat, Field(ge=0.0)]
     # The nearest looking viewer's band: the player sizes the layout for it
     # (far: headline and price only; near: the QR up front). None = unknown.
     distance_band: DistanceBand | None = None
@@ -752,7 +752,7 @@ class DevPerson(_Model):
     confidence: Score
     looking: bool
     distance_band: DistanceBand
-    dwell_s: Annotated[float, Field(ge=0.0)]
+    dwell_s: Annotated[FiniteFloat, Field(ge=0.0)]
 
 
 class DevObject(_Model):

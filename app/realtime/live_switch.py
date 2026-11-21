@@ -13,19 +13,24 @@ screen via SPEECH_MODE_SCREENS) and `ai_generation = live`.
 
 The state lives in process memory (single worker, ADR 0006). It is station
 control, not a business record: a backend restart returns to `starts_live`.
-Listeners run on the caller's thread, after the lock is released.
+Listeners run on the caller's thread, after the state lock is released, one
+change at a time (a double click can't announce revision 2 before 1), and a
+failing listener is logged without skipping the others or failing the switch.
 """
 
 from __future__ import annotations
 
+import logging
 from collections import OrderedDict
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime
-from threading import Lock
+from threading import Lock, RLock
 
 from app.contract.messages import AgentRole, LiveSet, LiveStatus
 from app.modules.common.application.clock import BaseClock
+
+logger = logging.getLogger(__name__)
 
 type LiveListener = Callable[[LiveStatus, LiveStatus], None]
 type AgentRoles = Callable[[str], Iterable[AgentRole]]
@@ -59,6 +64,8 @@ class LiveSwitchboard:
         self._screens: OrderedDict[str, _State] = OrderedDict()
         self._listeners: list[LiveListener] = []
         self._lock = Lock()
+        # Serializes a whole change, listeners included; reentrant for a listener's set().
+        self._changing = RLock()
         self._started_at = clock.now_utc()
         # Agent messages dropped at the socket while in standby (diagnostics only).
         self.dropped = 0
@@ -97,22 +104,32 @@ class LiveSwitchboard:
         A no-op (same values) keeps the revision and notifies nobody, so a
         retried or double-clicked request has no side effect.
         """
-        with self._lock:
-            before = self._screens.get(message.screen_id) or self._initial()
-            live = before.live if message.live is None else message.live
-            mic = before.mic if message.mic is None else message.mic
-            if (live, mic) == (before.live, before.mic):
-                self._remember(message.screen_id, before)
-                return self._status(message.screen_id, before)
-            after = _State(
-                live=live, mic=mic, revision=before.revision + 1, changed_at=self._clock.now_utc()
-            )
-            self._remember(message.screen_id, after)
-        previous = self._status(message.screen_id, before)
-        current = self._status(message.screen_id, after)
-        for listener in self._listeners:
-            listener(previous, current)
-        return current
+        with self._changing:
+            with self._lock:
+                before = self._screens.get(message.screen_id) or self._initial()
+                live = before.live if message.live is None else message.live
+                mic = before.mic if message.mic is None else message.mic
+                if (live, mic) == (before.live, before.mic):
+                    self._remember(message.screen_id, before)
+                    return self._status(message.screen_id, before)
+                after = _State(
+                    live=live,
+                    mic=mic,
+                    revision=before.revision + 1,
+                    changed_at=self._clock.now_utc(),
+                )
+                self._remember(message.screen_id, after)
+            previous = self._status(message.screen_id, before)
+            current = self._status(message.screen_id, after)
+            for listener in self._listeners:
+                try:
+                    listener(previous, current)
+                except Exception:
+                    logger.exception(
+                        "live switch listener failed",
+                        extra={"screen_id": message.screen_id, "revision": current.revision},
+                    )
+            return current
 
     # ------------------------------------------------------------ internals
 

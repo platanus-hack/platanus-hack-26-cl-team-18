@@ -53,6 +53,10 @@ class VisionConfig:
     idle_sleep_s: float = 0.005
     # Standby (live switch off): how often to discard the camera's latest frame.
     standby_poll_s: float = 0.05
+    # No frame processed for this long (camera unplugged, both detectors failing):
+    # publish the room as empty once, then go quiet, so a lost camera never leaves
+    # the last group "present" on screen. None (offline clips on clip time) disables.
+    blind_after: timedelta | None = None
 
 
 @dataclass(slots=True)
@@ -107,6 +111,10 @@ class VisionPipeline:
         self.stats = VisionStats()
         self._keyframe_task: asyncio.Task[None] | None = None
         self._latest_at: datetime | None = None
+        self._seen_at = time.monotonic()  # last frame processed (or the loop's start)
+        self._shape: tuple[int, int] = (0, 0)
+        self._sent_people = 0  # people in the last snapshot sent
+        self._blind = False
 
     def process(self, frame: Frame, detections: FrameDetections) -> AudienceSnapshot | None:
         """Process a detected frame and publish timestamped aggregate facts."""
@@ -151,6 +159,7 @@ class VisionPipeline:
             )
             self._link.send(snapshot)
             self.stats.snapshots += 1
+            self._sent_people = snapshot.people
         if self._dev_view is not None:
             # Debug geometry for `/dev`: latest-wins in the link, never recorded.
             view = self._dev_view.build(
@@ -168,11 +177,14 @@ class VisionPipeline:
 
     async def run(self) -> None:
         """Loop until cancelled, or until a finite source (a clip) reports `finished`."""
+        self._seen_at = time.monotonic()
         try:
             while True:
                 if self._live is not None and not self._live.sensing:
                     await self._standby()
+                    self._seen_at = time.monotonic()
                     continue
+                self._check_blind()
                 item = self._source.latest(self._serial)
                 if item is None:
                     if getattr(self._source, "finished", False):
@@ -185,12 +197,43 @@ class VisionPipeline:
                 except Exception:
                     logger.exception("detector failed; skipping frame")
                     continue
-                self.process(frame, detections)
+                try:
+                    self.process(frame, detections)
+                except Exception:
+                    # One bad frame must never end perception while the process stays up.
+                    logger.exception("frame processing failed; skipping frame")
+                    continue
+                self._seen_at = time.monotonic()
+                self._shape = (detections.width, detections.height)
+                if self._blind:
+                    self._blind = False
+                    logger.info("camera frames are back")
         finally:
             if self._keyframe_task is not None:
                 self._keyframe_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await self._keyframe_task
+
+    def _check_blind(self) -> None:
+        """No frame for `blind_after`: feed empty frames until an empty room is sent."""
+        limit = self._config.blind_after
+        if limit is None or time.monotonic() - self._seen_at < limit.total_seconds():
+            return
+        if not self._blind:
+            self._blind = True
+            logger.warning(
+                "no camera frames for %.1fs; publishing an empty room", limit.total_seconds()
+            )
+        if self._sent_people == 0:
+            return  # already told the backend nobody is seen; stay quiet
+        width, height = self._shape
+        with contextlib.suppress(Exception):
+            self.process(
+                None,
+                FrameDetections(
+                    measured_at=datetime.now(UTC), width=width, height=height, detector="none"
+                ),
+            )
 
     async def _standby(self) -> None:
         """Live switch off: forget the room, then discard frames unread until resumed.

@@ -9,6 +9,7 @@ import { demoKey, rememberedDemoKey } from "@/lib/demo";
 import { createStore, useStore } from "@/lib/store";
 import { TypedSocket } from "@/lib/ws/typed-socket";
 import { Badge } from "@/shared/ui/badge";
+import { ErrorBoundary } from "@/shared/ui/ErrorBoundary";
 import { AppShell } from "@/shared/ui/page";
 import { useEffect, useState } from "react";
 import { consoleReducer, emptyScreen, initialConsoleState } from "./console-state";
@@ -74,7 +75,13 @@ export function ConsolePage() {
 
     return (
         <AppShell>
-            <StationBar screen={screen} screens={Object.keys(screens)} connection={connection} />
+            <ErrorBoundary label="station">
+                <StationBar
+                    screen={screen}
+                    screens={Object.keys(screens)}
+                    connection={connection}
+                />
+            </ErrorBoundary>
             {(lastError || view.degradation.length > 0) && (
                 <div className="flex flex-wrap gap-2">
                     {lastError && (
@@ -90,17 +97,31 @@ export function ConsolePage() {
                 </div>
             )}
             <div className="grid gap-7 lg:grid-cols-2">
-                <CameraPanel view={view} />
-                <PeopleScreen view={view} />
+                <ErrorBoundary label="camera">
+                    <CameraPanel view={view} />
+                </ErrorBoundary>
+                <ErrorBoundary label="people">
+                    <PeopleScreen view={view} />
+                </ErrorBoundary>
             </div>
-            <AuctionSection view={view} screen={screen} />
+            <ErrorBoundary label="auction">
+                <AuctionSection view={view} screen={screen} />
+            </ErrorBoundary>
             <div className="grid items-start gap-7 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
-                <TagsPanel view={view} />
-                <WhyPanel view={view} />
+                <ErrorBoundary label="tags">
+                    <TagsPanel view={view} />
+                </ErrorBoundary>
+                <ErrorBoundary label="why">
+                    <WhyPanel view={view} />
+                </ErrorBoundary>
             </div>
             <div className="grid items-start gap-7 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
-                <SessionPanel view={view} />
-                <Timeline view={view} />
+                <ErrorBoundary label="session">
+                    <SessionPanel view={view} />
+                </ErrorBoundary>
+                <ErrorBoundary label="timeline">
+                    <Timeline view={view} />
+                </ErrorBoundary>
             </div>
         </AppShell>
     );

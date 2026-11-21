@@ -69,6 +69,15 @@ it.each(["/advertiser", "/clerk", "/campaigns", "/dev", "/demo", "/demo/k3y/admi
 );
 
 it("the hidden hub lists the demo tools and this browser keeps them in the nav", async () => {
+    // The backend accepts this key (a keyed GET of the book), so the browser keeps it.
+    vi.stubGlobal(
+        "fetch",
+        vi.fn((input: string, init?: RequestInit) =>
+            input.endsWith("/api/book") && new Headers(init?.headers).get("X-Demo-Key") === "k3y"
+                ? Promise.resolve(new Response("{}"))
+                : Promise.reject(new Error("no backend in this test")),
+        ),
+    );
     await open("/demo/k3y");
     expect(host.textContent).toContain("Herramientas para mostrar el producto");
     expect(links()).toEqual(
