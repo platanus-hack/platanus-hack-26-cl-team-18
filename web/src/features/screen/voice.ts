@@ -2,8 +2,8 @@ import { assetUrl } from "@/lib/config";
 
 /**
  * Voice-over playback through Web Audio (docs/stack.md §6): MP3s are fetched
- * and decoded into AudioBuffers during preload, so playback starts on the
- * frame the creative appears. `<audio>` elements add decode lag.
+ * and decoded into cached AudioBuffers independently of the visual swap.
+ * A ready buffer plays immediately; late audio plays while its ad is on air.
  *
  * - Best effort: a voice that fails to load never blocks the visual swap.
  * - Each (creative, voice) plays once: an upgrade or a re-render doesn't repeat it.
@@ -41,7 +41,7 @@ export class VoicePlayer {
         return this.buffers.has(url);
     }
 
-    /** Fetch + decode; resolves when the buffer is ready. Never throws past the caller's catch. */
+    /** Fetch + decode; callers handle optional audio failures. */
     async prepare(url: string, signal: AbortSignal): Promise<void> {
         if (this.buffers.has(url)) return;
         const response = await this.fetcher(assetUrl(url), { signal });

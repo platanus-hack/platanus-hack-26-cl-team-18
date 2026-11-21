@@ -225,3 +225,56 @@ Scorecard: `evals/results/creative-latest.md` (gitignored). Add a case in
 in `evals/creative/adversarial.json`. Live copy in the demo turns on with
 `CREATIVE_AI_COPY=true` plus `ANTHROPIC_API_KEY`; without them the demo
 runs on targeted stock copy, which already passes every targeting gate.
+
+## 8. Ad-loop latency investigation (2026-11-21)
+
+The measured bottleneck was browser readiness, after backend composition.
+Ranked hypotheses and findings:
+
+1. **Optional media gates the swap:** confirmed. The preloader awaited optional
+   image/video/audio promises after logos decoded; video/audio could each
+   hold readiness until the 3000 ms timeout. Removing that gate removes this
+   delay even if optional media never responds.
+2. **Voice preparation shares the visual preload lifecycle:** confirmed by the
+   call chain. Separating it allows late audio to play after the visual swap,
+   and cancellation prevents a superseded voice from playing over a new ad.
+3. **Duplicate logo URLs cause redundant decodes:** confirmed by a failing
+   regression (two calls for the same URL). Decode distinct URLs once per ad.
+4. **Server composition dominates:** unsupported by the measurements below.
+   Keep the existing stock/cache hot path and guarded warm AI upgrades.
+
+| Measurement | Before | After |
+|---|---:|---:|
+| Live server decision p95, six scenarios + 200-step soak | 2.704 ms | 1.289 ms |
+| Agent → player message p95, same eval | 15.0 ms | 7.866 ms |
+| Offline creative hot composition p95 | 1.267 ms | 1.031 ms |
+| Chromium stalled-media POST → visible, median of 5 fresh pages | 3506.6 ms | 285.4 ms |
+| Chromium stalled-media POST → visible, observed range | 289.4–3520.7 ms | 275.9–313.1 ms |
+| Simulated agent snapshot → live auction → Chromium visible | — | 287.5 ms |
+
+The browser comparison served an isolated copy of the original player and
+the changed player through Vite, against the same live uvicorn backend.
+Each trial opened a fresh Chromium page, pushed a creative via `/dev/push`
+with a valid inline logo and unique hero/video/voice URLs, and intercepted
+those optional URLs without returning a response. Timing ended when the
+creative occupied the front layer (`aria-hidden="false"`), after the 250 ms
+crossfade. This is a small local fault-injection sample, not a production
+percentile. The lower backend timings are normal run-to-run variation; no
+backend optimization is claimed. No product ratchet changed, so the existing
+baseline stays valid (latency has absolute gates).
+
+Regression coverage in `web/src/features/screen/preload.test.ts` and
+`ScreenPage.test.tsx` checks visual readiness despite stalled optional media,
+logo failure/timeout, superseded preloads, cleanup, duplicate logos, late
+voice playback, stale voice cancellation, audio failure and video visibility
+before readiness/after failure. Run it with
+`cd web && npm test -- src/features/screen/preload.test.ts src/features/screen/ScreenPage.test.tsx`.
+The fake-timer swap test gates the full 250 ms crossfade when logos decode
+immediately; it is independent of machine scheduling. `make eval` and
+`make eval-creative` still verify the actual backend loop and creative guards.
+
+The remaining physical latency includes camera capture, remote inference,
+edge publication/debounce, browser scheduling, logo downloads and the TV.
+Those require a hardware rehearsal. The eval's glass-to-glass metric remains
+unavailable until the player reports `displayed_at`; the browser measurements
+above do not fill that missing production trace.

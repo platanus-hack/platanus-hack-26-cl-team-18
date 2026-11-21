@@ -66,12 +66,16 @@ fails CI when they drift.
 ## The player: never blank
 
 - There are two stacked layers (A/B). A new creative mounts hidden in the back
-  layer and is preloaded (logos decoded, which is required; hero image and
-  video are best effort). Only then does it crossfade over the front for 250 ms
-  (`--duration-crossfade`).
+  layer and its required logos are decoded (each distinct URL once). It then
+  crossfades over the front for 250 ms (`--duration-crossfade`). Hero images
+  and video load in the mounted layer without delaying copy, price or logos.
+  Video stays hidden until that element emits `canplaythrough`.
 - The front layer always holds the bundled house ad or the last good creative.
   If a preload fails, the current creative stays on screen.
 - Latest wins: a newer creative replaces one that is still preloading.
+- Voice preparation runs independently when the creative reaches the front.
+  Cached audio plays immediately; late audio plays only if its creative is
+  still on air. Replacing the creative cancels pending audio and stops playback.
 - When a creative leaves the screen, `playback.report` is sent. The backend
   computes attention-seconds.
 - Motion is CSS transitions and WAAPI only. No animation libraries.

@@ -31,3 +31,24 @@ Hot-path code must never `await` a warm-path result.
 - Moments can be refined after an auction has run; a refinement that changes
   the winner triggers a new auction (bounded by a minimum dwell per creative so
   the screen doesn't flicker).
+
+## Amendment (2026-11-21): optional media never gates visual readiness
+
+The browser was awaiting optional hero images, video `canplaythrough` and
+voice preparation after the required logos decoded. A stalled optional
+asset added up to 3 seconds to the swap, even though the hot backend decision
+was already ready in milliseconds.
+
+Only real brand logos gate the visual swap. Decode each distinct logo URL,
+then crossfade the copy, approved price and logos over the last good ad.
+Video and hero images load in the mounted layer. The actual video stays
+hidden until its own `canplaythrough`; a failed video hides again. Voice
+preparation is independent: cached audio plays when the ad is on air, late audio plays only while that same creative/voice remains current,
+and replacement cancels preparation and stops the old audio. Optional media
+can therefore begin after the visual swap. A failed or stalled required logo
+still retains the previous creative.
+
+This refines the rendering readiness rule in `docs/stack.md`; it changes no
+stack component. Deterministic player tests lock down the display budget and
+late/stale voice behavior. Measurements are in `docs/creative-generation.md`
+§8; camera-to-TV latency remains a separate hardware rehearsal measurement.
