@@ -4,6 +4,8 @@ import { createStore, useStore } from "@/lib/store";
 import { TypedSocket, type ConnectionState } from "@/lib/ws/typed-socket";
 import { Empty, Panel } from "@/shared/ui/Panel";
 import { StatusBadge, type Tone } from "@/shared/ui/StatusBadge";
+import { WorkspaceHeader } from "@/shared/ui/WorkspaceHeader";
+import { Monitor } from "lucide-react";
 import { useEffect, useState } from "react";
 import { consoleReducer, initialConsoleState, type ScreenView } from "./console-state";
 import { coBrandLift, percentile, serverDecisionMs, traceSteps } from "./metrics";
@@ -60,23 +62,50 @@ export function ConsolePage() {
     const { tone, label } = CONNECTION[connection.status];
 
     return (
-        <div className="flex min-h-screen flex-col gap-4 p-6">
-            <header className="flex items-center justify-between">
-                <h1 className="text-section font-semibold tracking-tight">Console</h1>
-                <div className="flex items-center gap-3">
-                    {lastError && <StatusBadge tone="danger" label={lastError} />}
-                    <StatusBadge tone={tone} label={label} />
-                </div>
-            </header>
-            {Object.keys(screens).length === 0 ? (
-                <Panel title="Waiting for screens">
-                    <Empty>No screen activity yet. Start the agent or the simulator.</Empty>
-                </Panel>
-            ) : (
-                Object.entries(screens).map(([screenId, view]) => (
-                    <ScreenRow key={screenId} screenId={screenId} view={view} />
-                ))
-            )}
+        <div className="min-h-screen">
+            <WorkspaceHeader />
+            <main className="workspace-content flex flex-col gap-6">
+                <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-6">
+                    <div>
+                        <p className="eyebrow mb-2">Operación en vivo</p>
+                        <h1 className="page-heading">Console</h1>
+                        <p className="mt-2 text-body text-muted">
+                            Cada momento. Cada decisión. Cada segundo de atención.
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        {lastError && <StatusBadge tone="danger" label={lastError} />}
+                        <StatusBadge tone={tone} label={label} />
+                    </div>
+                </header>
+                {Object.keys(screens).length === 0 ? (
+                    <Panel title="Waiting for screens">
+                        <div className="flex flex-col items-center gap-4 py-14 text-center">
+                            <span className="workspace-mark">
+                                <Monitor className="size-5" aria-hidden />
+                            </span>
+                            <div>
+                                <p className="mb-2 text-section font-medium">
+                                    Todo listo para el próximo momento
+                                </p>
+                                <Empty>
+                                    No screen activity yet. Start the agent or the simulator.
+                                </Empty>
+                            </div>
+                            <a
+                                className="rounded-control border border-border px-4 py-2 text-body text-accent hover:bg-accent-soft"
+                                href="/screen?id=demo-01"
+                            >
+                                Abrir pantalla
+                            </a>
+                        </div>
+                    </Panel>
+                ) : (
+                    Object.entries(screens).map(([screenId, view]) => (
+                        <ScreenRow key={screenId} screenId={screenId} view={view} />
+                    ))
+                )}
+            </main>
         </div>
     );
 }

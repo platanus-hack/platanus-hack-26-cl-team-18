@@ -1,6 +1,7 @@
 import type { BookLine } from "@/contract";
 import { setBidMultiplier, useBook } from "@/lib/market-api";
 import { StatusBadge } from "@/shared/ui/StatusBadge";
+import { WorkspaceHeader } from "@/shared/ui/WorkspaceHeader";
 import { useState } from "react";
 
 const MIN = 0.2;
@@ -14,20 +15,27 @@ export function AdvertiserPage() {
     );
     const line = book?.lines.find((l) => l.brand_name === brand) ?? null;
     return (
-        <main className="mx-auto flex min-h-screen max-w-md flex-col gap-6 bg-canvas p-4 text-body">
-            <h1 className="text-section font-semibold">Bidding war</h1>
-            {error && <StatusBadge tone="danger" label="Can't reach the market" />}
-            {!line ? (
-                <BrandPicker lines={book?.lines ?? []} onPick={setBrand} />
-            ) : (
-                <Slider
-                    key={line.campaign_id}
-                    line={line}
-                    rivals={book?.lines ?? []}
-                    onSent={refresh}
-                />
-            )}
-        </main>
+        <div className="paper-theme">
+            <WorkspaceHeader />
+            <main className="operator-page flex flex-col gap-6 text-body">
+                <header className="border-b border-rule pb-6">
+                    <p className="eyebrow mb-3">Mercado en vivo</p>
+                    <h1 className="page-heading">Bidding war</h1>
+                    <p className="mt-3 text-muted">Tu marca, en el momento indicado.</p>
+                </header>
+                {error && <StatusBadge tone="danger" label="Can't reach the market" />}
+                {!line ? (
+                    <BrandPicker lines={book?.lines ?? []} onPick={setBrand} />
+                ) : (
+                    <Slider
+                        key={line.campaign_id}
+                        line={line}
+                        rivals={book?.lines ?? []}
+                        onSent={refresh}
+                    />
+                )}
+            </main>
+        </div>
     );
 }
 
@@ -41,11 +49,16 @@ function BrandPicker({
     return (
         <div className="flex flex-col gap-3">
             <p className="text-muted">Pick the brand you bid for.</p>
+            {lines.length === 0 && (
+                <p className="tool-card text-muted" role="status">
+                    Esperando marcas del mercado. Aparecerán aquí cuando estén disponibles.
+                </p>
+            )}
             {lines.map((l) => (
                 <button
                     key={l.campaign_id}
                     type="button"
-                    className="rounded-control border border-border px-4 py-3 text-left font-medium"
+                    className="rounded-container border border-border bg-surface px-5 py-5 text-left font-medium hover:bg-accent-soft"
                     style={{ borderLeft: `6px solid ${l.accent_color ?? "transparent"}` }}
                     onClick={() => {
                         onPick(l.brand_name);
@@ -87,7 +100,7 @@ function Slider({
             });
     };
     return (
-        <section className="flex flex-col gap-4">
+        <section className="tool-card flex flex-col gap-6">
             <div className="flex items-center justify-between">
                 <span className="text-section font-semibold">{line.brand_name}</span>
                 {line.on_air ? (

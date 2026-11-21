@@ -1,5 +1,30 @@
 @import "tailwindcss";
 
+@font-face {
+    font-family: "Instrument Sans";
+    src: url("/fonts/InstrumentSans-Regular.woff2") format("woff2");
+    font-weight: 400;
+    font-display: swap;
+}
+@font-face {
+    font-family: "Instrument Sans";
+    src: url("/fonts/InstrumentSans-Medium.woff2") format("woff2");
+    font-weight: 500;
+    font-display: swap;
+}
+@font-face {
+    font-family: "Instrument Sans";
+    src: url("/fonts/InstrumentSans-SemiBold.woff2") format("woff2");
+    font-weight: 600;
+    font-display: swap;
+}
+@font-face {
+    font-family: "Instrument Sans";
+    src: url("/fonts/InstrumentSans-Bold.woff2") format("woff2");
+    font-weight: 700;
+    font-display: swap;
+}
+
 /*
  * Design tokens. The scale is closed: every color, radius, shadow, duration and
  * z-index comes from a token here. If a need has no token, add one; never an
@@ -11,13 +36,14 @@
  */
 
 :root {
-    --palette-ink-950: oklch(0.16 0.01 260);
-    --palette-ink-900: oklch(0.2 0.012 260);
-    --palette-ink-800: oklch(0.26 0.014 260);
-    --palette-ink-600: oklch(0.42 0.015 260);
-    --palette-ink-300: oklch(0.75 0.01 260);
-    --palette-ink-50: oklch(0.97 0.005 260);
-    --palette-lime: oklch(0.86 0.2 128);
+    --palette-ink-950: #13131e;
+    --palette-ink-900: #1e1e2c;
+    --palette-ink-800: #292938;
+    --palette-ink-600: #9a9aa6;
+    --palette-ink-300: #c9c9d2;
+    --palette-ink-50: #ffffff;
+    --palette-teal: #8cc7c7;
+    --palette-mint: #72ddaa;
     --palette-amber: oklch(0.82 0.16 78);
     --palette-red: oklch(0.66 0.21 25);
     --palette-sky: oklch(0.74 0.13 235);
@@ -32,33 +58,37 @@
     --color-muted: var(--palette-ink-300);
     --color-subtle: var(--palette-ink-600);
 
-    --color-accent: var(--palette-lime);
-    --color-success: var(--palette-lime);
+    --color-accent: var(--palette-teal);
+    --color-rule: var(--palette-ink-300);
+    --color-accent-soft: rgb(140 199 199 / 0.1);
+    --color-success: var(--palette-mint);
     --color-warning: var(--palette-amber);
     --color-danger: var(--palette-red);
     --color-info: var(--palette-sky);
-    --color-success-soft: color-mix(in oklch, var(--palette-lime) 16%, transparent);
+    --color-success-soft: color-mix(in oklch, var(--palette-mint) 16%, transparent);
     --color-warning-soft: color-mix(in oklch, var(--palette-amber) 16%, transparent);
     --color-danger-soft: color-mix(in oklch, var(--palette-red) 16%, transparent);
     --color-info-soft: color-mix(in oklch, var(--palette-sky) 16%, transparent);
 
-    --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+    --font-sans: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
     --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
     /* Type tiers */
-    --text-micro: 0.6875rem;
-    --text-metadata: 0.75rem;
-    --text-body: 0.875rem;
+    --text-micro: 0.75rem;
+    --text-metadata: 0.8125rem;
+    --text-body: 1rem;
     --text-section: 1rem;
-    --text-kpi: 2rem;
+    --text-kpi: 2.5rem;
     --text-display: 4.5rem;
+    --text-title: 2rem;
+    --text-hero: clamp(2.75rem, 6vw, 5.5rem);
 
     /* Radius tiers */
     --radius-control: 0.375rem;
-    --radius-container: 0.75rem;
+    --radius-container: 0.625rem;
 
     /* Exactly two elevations */
-    --shadow-resting: 0 1px 2px oklch(0 0 0 / 0.35);
+    --shadow-resting: 0 1px 0 rgb(19 19 30 / 0.04);
     --shadow-overlay: 0 12px 32px oklch(0 0 0 / 0.5);
 
     /* Motion tiers; --duration-crossfade is the player's swap (docs/stack.md §6) */
@@ -113,5 +143,155 @@ body {
     to {
         opacity: 1;
         transform: none;
+    }
+}
+
+/* Paper surfaces for operator tools; the live console stays ink-first. */
+.paper-theme {
+    --color-canvas: #f6f7f8;
+    --color-surface: #ffffff;
+    --color-surface-raised: #ececf0;
+    --color-border: #dcdce2;
+    --color-rule: #13131e;
+    --color-fg: #13131e;
+    --color-muted: #5c5c69;
+    --color-subtle: #6e6e7a;
+    --color-accent: #186666;
+    --color-accent-soft: #f0f9f5;
+    --color-success: #3f7a1c;
+    --color-success-soft: #f0f9f5;
+    --color-warning: #8a5a00;
+    --color-warning-soft: #fbf3e4;
+    --color-danger: #a3302a;
+    --color-danger-soft: #fceeed;
+    --color-info: #186666;
+    --color-info-soft: #dff4eb;
+    min-height: 100dvh;
+    background: var(--color-canvas);
+    color: var(--color-fg);
+}
+.workspace-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+    padding: 1rem clamp(1rem, 4vw, 3rem);
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface);
+}
+.workspace-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 1.125rem;
+    font-weight: 600;
+    letter-spacing: -0.04em;
+}
+.workspace-mark {
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    border: 1px solid var(--color-accent);
+    border-radius: var(--radius-control);
+    color: var(--color-accent);
+}
+.workspace-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+.workspace-links a {
+    padding: 0.5rem 0.75rem;
+    color: var(--color-muted);
+    border-radius: var(--radius-control);
+    font-size: var(--text-body);
+    transition:
+        background var(--duration-fast),
+        color var(--duration-fast);
+}
+.workspace-links a:hover,
+.workspace-links a[aria-current="page"] {
+    background: var(--color-accent-soft);
+    color: var(--color-accent);
+}
+.workspace-content {
+    max-width: 100rem;
+    margin: 0 auto;
+    padding: 2rem clamp(1rem, 4vw, 3rem) 3rem;
+}
+.eyebrow {
+    color: var(--color-accent);
+    font-size: var(--text-metadata);
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+.page-heading {
+    font-size: var(--text-title);
+    font-weight: 500;
+    line-height: 1.15;
+    letter-spacing: -0.035em;
+}
+.tool-card {
+    border: 1px solid var(--color-border);
+    border-top: 2px solid var(--color-rule);
+    border-radius: var(--radius-container);
+    background: var(--color-surface);
+    padding: 1.5rem;
+}
+.tool-link {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    transition:
+        border-color var(--duration-base),
+        background var(--duration-base);
+}
+.tool-link:hover {
+    border-color: var(--color-accent);
+    background: var(--color-accent-soft);
+}
+.operator-page {
+    margin: 0 auto;
+    max-width: 38rem;
+    padding: 3rem 1rem;
+}
+button:not(:disabled),
+input[type="range"] {
+    cursor: pointer;
+}
+button {
+    transition:
+        background var(--duration-fast),
+        border-color var(--duration-fast);
+}
+button:hover {
+    border-color: var(--color-accent);
+}
+input[type="range"] {
+    accent-color: var(--color-accent);
+}
+table th {
+    padding-bottom: 0.75rem;
+}
+table td {
+    padding-block: 0.75rem;
+    border-top: 1px solid var(--color-border);
+}
+::selection {
+    background: var(--color-accent);
+    color: var(--color-canvas);
+}
+
+@media (max-width: 40rem) {
+    .workspace-links {
+        width: 100%;
+        justify-content: space-between;
+    }
+    .workspace-links a {
+        padding-inline: 0.5rem;
+        font-size: 0.875rem;
     }
 }
