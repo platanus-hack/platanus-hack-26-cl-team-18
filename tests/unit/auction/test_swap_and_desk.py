@@ -100,7 +100,20 @@ def test_audience_leaving_keeps_the_ad_for_a_grace_period() -> None:
     outcome = desk.run(
         opportunity(moment(looking=0), *demo_bidders()), Trigger.MOMENT_CHANGED, now=at(1)
     )
-    assert outcome.not_before == at(3)
+    assert outcome.not_before == at(4)  # D5.5: 3 s after attention left
+
+
+def test_a_glance_away_late_in_an_ad_never_strobes_the_house_ad() -> None:
+    """Real café footage: people in conversation look away for a second, then back.
+    The grace counts from the glance, not from when the ad went up."""
+    desk = desk_on_air(opportunity(FITNESS_ONLY, *demo_bidders()))
+    away = desk.run(
+        opportunity(moment(looking=0), *demo_bidders()), Trigger.MOMENT_CHANGED, now=at(10)
+    )
+    assert not away.swap_now and away.not_before == at(13)
+    back = desk.run(opportunity(FITNESS_ONLY, *demo_bidders()), Trigger.MOMENT_CHANGED, now=at(11))
+    assert back.action is SwapAction.UNCHANGED
+    assert away.hold_token is not None and desk.release(away.hold_token) is None
 
 
 def test_a_held_decision_superseded_during_the_hold_is_never_released() -> None:
@@ -271,3 +284,16 @@ def test_a_bid_change_during_a_new_group_hold_keeps_the_new_group_floor() -> Non
         now=at(0.7),
     )
     assert slid.not_before == at(1.5)  # not stretched to the 3 s same-moment hold
+
+
+def test_a_signal_dropout_keeps_the_ad_for_the_grace_too() -> None:
+    """Real café footage: the cup disappears behind a hand for a second. The group is
+    still there, so the coffee ad stays for the grace instead of flashing the house ad."""
+    desk = desk_on_air(opportunity(moment(segment(COFFEE)), *demo_bidders()))
+    dropout = desk.run(opportunity(moment(), *demo_bidders()), Trigger.MOMENT_CHANGED, now=at(8))
+    assert not dropout.swap_now and dropout.not_before == at(11)
+    back = desk.run(
+        opportunity(moment(segment(COFFEE)), *demo_bidders()), Trigger.MOMENT_CHANGED, now=at(9)
+    )
+    assert back.action is SwapAction.UNCHANGED
+    assert dropout.hold_token is not None and desk.release(dropout.hold_token) is None

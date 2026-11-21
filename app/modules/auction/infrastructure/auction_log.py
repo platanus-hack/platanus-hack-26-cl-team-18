@@ -68,7 +68,19 @@ def auction_row(record: AuctionRecord) -> tuple[Any, ...]:
         for winner in result.winners
     ]
     bids = [
-        {"campaign_id": str(bid.campaign_id), "value_per_s": str(bid.value_per_s.amount)}
+        {
+            "campaign_id": str(bid.campaign_id),
+            "value_per_s": str(bid.value_per_s.amount),
+            "matches": [
+                {
+                    "segment_id": match.moment_segment.value,
+                    "bid_segment_id": match.bid_segment.value,
+                    "kind": match.kind.value,
+                    "weight": str(match.weight),
+                }
+                for match in bid.matches
+            ],
+        }
         for bid in result.bids
     ]
     exclusions = [

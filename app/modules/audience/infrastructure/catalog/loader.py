@@ -13,6 +13,7 @@ from app.modules.audience.domain.catalog import (
     CueRule,
     ProductRef,
     SegmentCatalog,
+    SegmentRelation,
     SegmentTier,
     normalize_cue,
 )
@@ -54,6 +55,14 @@ def load_catalog(path: Path = DEFAULT_CATALOG) -> LoadedCatalog:
         ProductRef(category=item["category"], brand_ref=item.get("brand_ref"))
         for item in raw["products"]
     )
+    relations = tuple(
+        SegmentRelation(
+            left=SegmentId.create(item["segments"][0]),
+            right=SegmentId.create(item["segments"][1]),
+            weight=Percentage.create(item["weight"]),
+        )
+        for item in raw.get("related", [])
+    )
     reliability = raw.get("reliability", {})
     return LoadedCatalog(
         catalog=SegmentCatalog(
@@ -61,6 +70,7 @@ def load_catalog(path: Path = DEFAULT_CATALOG) -> LoadedCatalog:
             segments=segments,
             cues=cues,
             products=products,
+            relations=relations,
         ),
         reliability=SourceReliability(
             vlm=Percentage.create(reliability.get("vlm", 90)),

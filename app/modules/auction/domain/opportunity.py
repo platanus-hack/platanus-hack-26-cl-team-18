@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from enum import StrEnum
 
+from app.modules.auction.domain.affinity import SegmentAffinity
 from app.modules.audience import AudienceMomentSnapshot
 from app.modules.campaigns.domain.book import Bidder, BrandId, CampaignId
 from app.modules.common.domain.value_objects.money_rate import MoneyRate
@@ -13,6 +14,7 @@ from app.modules.common.domain.value_objects.percentage import Percentage
 
 ZERO = Decimal(0)
 ONE = Decimal(1)
+EXACT_ONLY = SegmentAffinity.exact_only()
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -113,6 +115,9 @@ class AdOpportunity:
     max_play_seconds: Decimal = Decimal(15)
     # The winners on air, so the desk can apply hysteresis on same-moment triggers.
     incumbent: frozenset[CampaignId] | None = None
+    # How a segment bid reaches neighbouring segments; exact-only unless the caller
+    # passes the catalog's table (affinity.py).
+    affinity: SegmentAffinity = EXACT_ONLY
 
     def __post_init__(self) -> None:
         if not self.max_play_seconds.is_finite() or self.max_play_seconds <= ZERO:

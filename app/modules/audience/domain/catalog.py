@@ -64,11 +64,31 @@ class ProductRef:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class SegmentRelation:
+    """A curated, symmetric "same need" pair: viewers of one are prospects for the other.
+
+    The auction reads these (with the IAB hierarchy in `path`) to let a bid reach
+    neighbouring segments at a discount (auction `SegmentAffinity`).
+    """
+
+    left: SegmentId
+    right: SegmentId
+    weight: Percentage
+
+    def __post_init__(self) -> None:
+        if self.left == self.right:
+            raise ValueError("a segment is not related to itself")
+        if not 0 < self.weight.value < 100:
+            raise ValueError("a related-segment weight must be strictly between 0 and 100")
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class SegmentCatalog:
     version: str
     segments: tuple[CatalogSegment, ...]
     cues: tuple[CueRule, ...] = ()
     products: tuple[ProductRef, ...] = ()
+    relations: tuple[SegmentRelation, ...] = ()
     _by_id: dict[SegmentId, CatalogSegment] = field(init=False, repr=False, compare=False)
     _by_cue: dict[tuple[SegmentSource, str], tuple[CueRule, ...]] = field(
         init=False, repr=False, compare=False
@@ -85,6 +105,11 @@ class SegmentCatalog:
             by_cue.setdefault((rule.source, rule.cue), []).append(rule)
         if any(len({rule.segment_id for rule in rules}) != len(rules) for rules in by_cue.values()):
             raise ValueError("a cue may map to each segment once")
+        pairs = [frozenset({item.left, item.right}) for item in self.relations]
+        if any(item.left not in by_id or item.right not in by_id for item in self.relations):
+            raise ValueError("a segment relation points outside the catalog")
+        if len(set(pairs)) != len(pairs):
+            raise ValueError("each pair of segments is related at most once")
         object.__setattr__(self, "_by_id", by_id)
         object.__setattr__(self, "_by_cue", {key: tuple(rules) for key, rules in by_cue.items()})
 
@@ -121,4 +146,5 @@ class SegmentCatalog:
             segments=self.segments,
             cues=tuple(cues),
             products=self.products,
+            relations=self.relations,
         )

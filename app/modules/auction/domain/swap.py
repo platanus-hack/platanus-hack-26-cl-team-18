@@ -86,6 +86,13 @@ class SwapPlan:
     not_before: datetime | None = None
 
 
+# No-fills that are a blink rather than a decision: the audience looked away or its
+# signal dropped out. Engine errors are handled by the desk, never graced here.
+GRACED_NO_FILLS = frozenset(
+    {NoFillReason.NO_AUDIENCE, NoFillReason.NO_ELIGIBLE_BIDS, NoFillReason.BELOW_RESERVE}
+)
+
+
 class MinAdTimePolicy(Policy[SwapInput, SwapPlan]):
     def __init__(self, timings: SwapTimings | None = None) -> None:
         self.timings = timings or SwapTimings()
@@ -116,9 +123,13 @@ class MinAdTimePolicy(Policy[SwapInput, SwapPlan]):
             <= result.incumbent_value.amount * (1 + timings.hysteresis)
         ):
             return SwapPlan(action=SwapAction.KEEP_INCUMBENT)
-        if not result.filled and result.no_fill is NoFillReason.NO_AUDIENCE:
-            hold = timings.leave_grace
-        elif input.trigger is Trigger.MOMENT_CHANGED:
+        if not result.filled and result.no_fill in GRACED_NO_FILLS:
+            # D5.5: keep the creative for the grace *after attention or the signal left*,
+            # not after it went on air: a glance away, or a cup hidden behind a hand for a
+            # second, never strobes the house ad. If it comes back within the grace, the
+            # next moment supersedes this held swap. Unsafe ads came down above already.
+            return SwapPlan(action=SwapAction.SWAP, not_before=now + timings.leave_grace)
+        if input.trigger is Trigger.MOMENT_CHANGED:
             hold = timings.new_group
         else:
             hold = timings.same_moment

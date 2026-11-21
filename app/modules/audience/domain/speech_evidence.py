@@ -31,6 +31,9 @@ class SpeechTopic:
     intent: Percentage
     heard_at: UtcTimestamp
     expires_at: UtcTimestamp
+    model_version: str | None = None
+    confidence: Percentage | None = None
+    reasoning_trace: str | None = None  # bounded classification code, never transcript text
 
     def __post_init__(self) -> None:
         if self.expires_at.value <= self.heard_at.value:
@@ -46,13 +49,30 @@ class SpeechEvidence:
 
     topics: tuple[SpeechTopic, ...] = ()
 
-    def heard(self, new: Iterable[SpeechTopic]) -> SpeechEvidence:
-        by_segment = {t.segment_id: t for t in self.topics}
-        for topic in new:
+    def heard(
+        self, new: Iterable[SpeechTopic], *, replace_previous: bool = False
+    ) -> SpeechEvidence:
+        """Merge group topics, or replace one viewer's complete current request."""
+        incoming = tuple(new)
+        if not incoming:
+            return self
+        if (
+            replace_previous
+            and self.topics
+            and max(t.heard_at.value for t in incoming) < max(t.heard_at.value for t in self.topics)
+        ):
+            return self  # a delayed classification cannot undo a more recent request
+        by_segment = {} if replace_previous else {t.segment_id: t for t in self.topics}
+        for topic in incoming:
             current = by_segment.get(topic.segment_id)
             if current is None or _stronger_or_fresher(topic, current):
                 by_segment[topic.segment_id] = topic
         return SpeechEvidence(tuple(sorted(by_segment.values(), key=lambda t: t.segment_id.value)))
+
+    def without(self, rejected: frozenset[SegmentId]) -> SpeechEvidence:
+        """Retract only classified speech topics; camera evidence is independent."""
+        kept = tuple(topic for topic in self.topics if topic.segment_id not in rejected)
+        return self if len(kept) == len(self.topics) else SpeechEvidence(kept)
 
     def active(self, at: UtcTimestamp) -> SpeechEvidence:
         live = tuple(t for t in self.topics if t.active_at(at))
@@ -64,6 +84,8 @@ class SpeechEvidence:
 
 def _stronger_or_fresher(new: SpeechTopic, old: SpeechTopic) -> bool:
     # A repeat of the same intent refreshes the TTL; a stronger one replaces it.
+    if new.heard_at.value < old.heard_at.value:
+        return False
     return new.intent.value >= old.intent.value or new.expires_at.value > old.expires_at.value
 
 

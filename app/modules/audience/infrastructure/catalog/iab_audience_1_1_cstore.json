@@ -4,7 +4,7 @@
   "catalog_version": "cstore-2026-11-21",
   "source": "https://github.com/InteractiveAdvertisingBureau/Taxonomies/blob/main/Audience%20Taxonomies/Audience%20Taxonomy%201.1.tsv",
   "retrieved": "2026-11-21",
-  "notes": "Convenience-store subset. Interest and Purchase Intent tiers only: no Demographic segments and nothing sensitive (health conditions, religion, politics, orientation). IDs and paths copied from the official TSV; the Purchase Intent asterisk is dropped from paths. Brand refs are the prop marker slugs in edge/props/markers.json (ADR 0008 D2). Spoken keyterms map to segments in the demo seed (speech_evidence.py), not here.",
+  "notes": "Convenience-store subset. Interest and Purchase Intent tiers only: no Demographic segments and nothing sensitive (health conditions, religion, politics, orientation). IDs and paths copied from the official TSV; the Purchase Intent asterisk is dropped from paths. Brand refs are the prop marker slugs in edge/props/markers.json (ADR 0008 D2). Spoken keyterms map to segments in the demo seed (speech_evidence.py), not here. `related` lists curated, symmetric same-need pairs the auction may match at a discount (weight 0-100); the IAB hierarchy in `path` adds broader/narrower matches on its own. Age-restricted segments (369) are never related to anything, so a related match can't widen alcohol's reach.",
   "segments": [
     {
       "id": "369",
@@ -257,6 +257,26 @@
         "cue": "pizza",
         "segment": "1404",
         "weight": 65
+      },
+      {
+        "cue": "energy drink can",
+        "segment": "997",
+        "weight": 70
+      },
+      {
+        "cue": "soda can",
+        "segment": "975",
+        "weight": 60
+      },
+      {
+        "cue": "beer bottle",
+        "segment": "369",
+        "weight": 65
+      },
+      {
+        "cue": "pastry",
+        "segment": "1045",
+        "weight": 65
       }
     ],
     "sound": [
@@ -267,6 +287,120 @@
       }
     ]
   },
+  "related": [
+    {
+      "segments": [
+        "977",
+        "982"
+      ],
+      "weight": 70,
+      "why": "coffee ↔ ready-to-drink coffee: same caffeine need"
+    },
+    {
+      "segments": [
+        "977",
+        "1045"
+      ],
+      "weight": 40,
+      "why": "coffee ↔ pastry: the breakfast run"
+    },
+    {
+      "segments": [
+        "997",
+        "408"
+      ],
+      "weight": 50,
+      "why": "energy drinks ↔ fitness"
+    },
+    {
+      "segments": [
+        "997",
+        "733"
+      ],
+      "weight": 40,
+      "why": "energy drinks ↔ video gaming"
+    },
+    {
+      "segments": [
+        "1000",
+        "408"
+      ],
+      "weight": 50,
+      "why": "bottled water ↔ fitness"
+    },
+    {
+      "segments": [
+        "1000",
+        "410"
+      ],
+      "weight": 60,
+      "why": "bottled water ↔ running"
+    },
+    {
+      "segments": [
+        "1633",
+        "408"
+      ],
+      "weight": 60,
+      "why": "fitness equipment ↔ fitness interest"
+    },
+    {
+      "segments": [
+        "1404",
+        "373"
+      ],
+      "weight": 60,
+      "why": "fast food ↔ dining out"
+    },
+    {
+      "segments": [
+        "975",
+        "1404"
+      ],
+      "weight": 40,
+      "why": "soft drinks ↔ fast food: the combo"
+    },
+    {
+      "segments": [
+        "1115",
+        "1074"
+      ],
+      "weight": 50,
+      "why": "snacks ↔ candy: the impulse shelf"
+    },
+    {
+      "segments": [
+        "1011",
+        "372"
+      ],
+      "weight": 60,
+      "why": "ice cream ↔ desserts"
+    },
+    {
+      "segments": [
+        "1045",
+        "372"
+      ],
+      "weight": 60,
+      "why": "pastry ↔ desserts"
+    },
+    {
+      "segments": [
+        "377",
+        "1000"
+      ],
+      "weight": 60,
+      "why": "non-alcoholic beverages ↔ bottled water"
+    },
+    {
+      "segments": [
+        "736",
+        "687"
+      ],
+      "weight": 40,
+      "why": "mobile games ↔ technology"
+    }
+  ],
   "products": [
     {
       "category": "energy_drink",

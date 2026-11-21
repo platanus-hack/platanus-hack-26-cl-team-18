@@ -28,7 +28,12 @@ from app.modules.auction.domain.rules import (
     BidderInMoment,
     FirstEligibilityFailure,
 )
-from app.modules.auction.domain.valuation import price_ceiling, valuate
+from app.modules.auction.domain.valuation import (
+    held_basket_boost,
+    match_segments,
+    price_ceiling,
+    valuate,
+)
 from app.modules.audience.domain.value_objects.segment import SegmentId
 from app.modules.campaigns.domain.book import Bidder, CampaignId
 from app.modules.common.domain.value_objects.money_rate import MoneyRate
@@ -43,6 +48,7 @@ class _Ranked:
     bidder: Bidder
     value: Decimal  # per screen-second, boosts included (ranking)
     ceiling: Decimal  # max chargeable per AS before basket bonuses
+    reach: frozenset[SegmentId] = frozenset()  # moment segments its bids reach
 
     @property
     def campaign_id(self) -> CampaignId:
@@ -202,13 +208,19 @@ def _eligible(
             BidValue(
                 campaign_id=bidder.campaign_id,
                 value_per_s=MoneyRate.create(currency=currency, amount=valuation.value),
+                matches=valuation.matches,
             )
         )
         if reason is not None:
             exclusions.append(Exclusion(campaign_id=bidder.campaign_id, reason=reason))
         elif valuation.value > ZERO:
             ranked.append(
-                _Ranked(bidder=bidder, value=valuation.value, ceiling=valuation.ceiling_rate)
+                _Ranked(
+                    bidder=bidder,
+                    value=valuation.value,
+                    ceiling=valuation.ceiling_rate,
+                    reach=frozenset(match.moment_segment for match in valuation.matches),
+                )
             )
     ranked.sort(key=lambda item: (-item.value, item.campaign_id.value))
     return ranked, exclusions, tuple(bids)
@@ -239,7 +251,6 @@ def _candidates(
     opportunity: AdOpportunity, top: Sequence[_Ranked], layouts: Sequence[Layout]
 ) -> tuple[_Candidate, ...]:
     looking = Decimal(opportunity.moment.looking)
-    present = frozenset(segment.segment_id for segment in opportunity.moment.segments)
     candidates: list[_Candidate] = []
     for layout in sorted(layouts, key=lambda item: item.name):
         for members in combinations(top, layout.slots):
@@ -247,7 +258,7 @@ def _candidates(
             if not COMPATIBLE.is_satisfied_by(basket):
                 continue
             brands = {member.bidder.brand_id for member in members}
-            reach = [_targeted(member.bidder, present) for member in members]
+            reach = [member.reach for member in members]
             # Efficiency above share pays for viewers only this slot reaches. A member
             # that targets the same segments as another slot reaches nobody new, so it
             # keeps only its screen share (same audience → the solo wins).
@@ -259,8 +270,11 @@ def _candidates(
                 else layout.shares[slot]
                 for slot in range(len(members))
             )
+            basket_brands = frozenset(brands)
             own = tuple(
-                member.value * efficiency
+                member.value
+                * efficiency
+                * held_basket_boost(member.bidder, basket_brands, opportunity)
                 + sum(
                     (
                         bonus.rate.amount * looking
@@ -301,10 +315,6 @@ def _candidates(
                 )
             )
     return tuple(sorted(candidates, key=_Candidate.sort_key))
-
-
-def _targeted(bidder: Bidder, present: frozenset[SegmentId]) -> frozenset[SegmentId]:
-    return frozenset(bid.segment_id for bid in bidder.segment_bids) & present
 
 
 def _vcg(best: _Candidate, candidates: Sequence[_Candidate]) -> tuple[Decimal, ...]:
@@ -421,11 +431,27 @@ def _losing_reason(
 
 
 def _coverage(opportunity: AdOpportunity, winners: Sequence[Winner]) -> Decimal:
-    """Upper-bound share of looking viewers matched by a winner (segment counts may overlap)."""
+    """Upper-bound share of looking viewers matched by a winner (segment counts may overlap).
+
+    An approximate match covers its segment's viewers only by its affinity weight,
+    so a "related" ad never counts as fully reaching someone.
+    """
     looking = opportunity.moment.looking
+    if not looking:
+        return ZERO
+    present = frozenset(segment.segment_id for segment in opportunity.moment.segments)
+    reached: dict[SegmentId, Decimal] = {}
+    for winner in winners:
+        for match in match_segments(winner.bidder, present, opportunity.affinity):
+            reached[match.moment_segment] = max(
+                reached.get(match.moment_segment, ZERO), match.weight
+            )
     covered = sum(
-        segment.viewer_count
-        for segment in opportunity.moment.segments
-        if any(winner.bidder.rate_for(segment.segment_id) for winner in winners)
+        (
+            segment.viewer_count * reached[segment.segment_id]
+            for segment in opportunity.moment.segments
+            if segment.segment_id in reached
+        ),
+        ZERO,
     )
-    return min(Decimal(1), Decimal(covered) / looking) if looking else ZERO
+    return min(Decimal(1), covered / looking)

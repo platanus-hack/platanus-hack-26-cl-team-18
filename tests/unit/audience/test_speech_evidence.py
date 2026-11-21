@@ -88,3 +88,36 @@ def test_topic_must_expire_after_it_was_heard() -> None:
         SpeechTopic(
             segment_id=COFFEE, intent=Percentage.create(50), heard_at=at(5), expires_at=at(5)
         )
+
+
+def test_a_new_single_viewer_request_replaces_the_previous_spoken_interest() -> None:
+    evidence = heard("gym", when=0).heard(
+        topics_from_keyterms(["café"], CATALOG, heard_at=at(1)), replace_previous=True
+    )
+    assert [topic.segment_id for topic in evidence.topics] == [COFFEE]
+
+
+def test_one_request_can_still_contain_multiple_interests() -> None:
+    evidence = heard("gym", when=0).heard(
+        topics_from_keyterms(["gym", "café"], CATALOG, heard_at=at(1)), replace_previous=True
+    )
+    assert {topic.segment_id for topic in evidence.topics} == {FITNESS, COFFEE}
+
+
+def test_an_older_delayed_request_cannot_replace_the_newest_request() -> None:
+    current = heard("café", when=5)
+    assert (
+        current.heard(topics_from_keyterms(["gym"], CATALOG, heard_at=at(1)), replace_previous=True)
+        == current
+    )
+
+
+def test_groups_keep_concurrent_interests_and_visual_evidence_is_preserved() -> None:
+    evidence = heard("gym", when=0).heard(topics_from_keyterms(["café"], CATALOG, heard_at=at(1)))
+    assert {topic.segment_id for topic in evidence.topics} == {FITNESS, COFFEE}
+    latest = evidence.heard(
+        topics_from_keyterms(["café"], CATALOG, heard_at=at(2)), replace_previous=True
+    )
+    assert {
+        s.segment_id for s in merge_speech((vision(FITNESS),), latest, at=at(2), looking=1)
+    } == {FITNESS, COFFEE}

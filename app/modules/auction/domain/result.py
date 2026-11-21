@@ -7,6 +7,7 @@ from decimal import Decimal
 from enum import StrEnum
 
 from app.modules.auction.domain.opportunity import Layout, PricingRule
+from app.modules.auction.domain.valuation import SegmentMatch
 from app.modules.campaigns.domain.book import Bidder, CampaignId
 from app.modules.common.domain.value_objects.money_rate import MoneyRate
 
@@ -59,6 +60,8 @@ class BidValue:
 
     campaign_id: CampaignId
     value_per_s: MoneyRate
+    # How each reached moment segment matched (exact, broader, narrower, related).
+    matches: tuple[SegmentMatch, ...] = ()
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

@@ -248,6 +248,39 @@ def test_held_product_boosts_its_approved_partner() -> None:
     assert boosted[campaign(VOLTIO)] == plain[campaign(VOLTIO)]  # own brand: no boost
 
 
+@pytest.mark.parametrize(
+    ("rayo_multiplier", "expected"),
+    [("1", {VOLTIO, CAFE}), ("1.5", {RAYO, CAFE})],
+)
+def test_a_held_product_keeps_its_brand_in_the_basket_through_a_bidding_war(
+    rayo_multiplier: str, expected: set[int]
+) -> None:
+    """Demo beats 3 → 4: a Café Patio cup in hand, Rayo outbids Voltio. Rayo takes
+    Voltio's seat *beside* Café Patio; the held brand is never crowded off its own
+    "complete the basket" moment by its partner's solo ad."""
+    audience = moment(segment(FITNESS, viewers=3), segment(COFFEE, viewers=3), looking=3)
+    held = replace(
+        opportunity(audience, *demo_bidders(rayo_multiplier=rayo_multiplier), baskets=DEMO_BASKETS),
+        held_products=(HeldProduct(brand_id=brand(CAFE), confidence=Percentage.create(95)),),
+    )
+    result = clear(held)
+    assert winners(result) == expected
+    assert result.coverage == 1
+    for winner in result.winners:  # relevance never charges above the bid
+        assert winner.payment_per_s.amount <= winner.value_per_s.amount
+
+
+def test_the_held_brand_is_not_boosted_alone() -> None:
+    """The held brand's own lift needs its partner on screen: no solo self-promotion."""
+    audience = moment(segment(COFFEE), looking=1)
+    cafe = bidder(CAFE, "coffee", {COFFEE: "5"}, partners=(VOLTIO,))
+    base = opportunity(audience, cafe)
+    held = replace(
+        base, held_products=(HeldProduct(brand_id=brand(CAFE), confidence=Percentage.create(95)),)
+    )
+    assert clear(held).bundle_value == clear(base).bundle_value
+
+
 def test_speech_intent_boost_is_capped_by_the_looking_viewers() -> None:
     loud = moment(segment(COFFEE, confidence=90, speech_intent=90))
     result = clear(opportunity(loud, bidder(0, "coffee", {COFFEE: "5"})))

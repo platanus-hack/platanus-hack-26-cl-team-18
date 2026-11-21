@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal
+from enum import StrEnum
 from typing import Protocol
 
 
@@ -20,10 +21,31 @@ class ExtractedTopic:
     confidence: Decimal  # 0..1
 
 
+class TopicOutcome(StrEnum):
+    REQUEST = "request"
+    IGNORE = "ignore"
+    CANCEL = "cancel"
+    FAILED = "failed"
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class TopicExtraction:
+    topics: tuple[ExtractedTopic, ...] = ()
+    rejected: tuple[str, ...] = ()
+    outcome: TopicOutcome = TopicOutcome.REQUEST
+    confidence: Decimal = Decimal("1")
+    model_version: str = "fixture"
+
+
 class TopicExtractor(Protocol):
     async def extract(
-        self, text: str, *, language: str, catalog: Mapping[str, str]
-    ) -> tuple[ExtractedTopic, ...]:
+        self,
+        text: str,
+        *,
+        language: str,
+        catalog: Mapping[str, str],
+        prior_topics: tuple[str, ...] = (),
+    ) -> TopicExtraction:
         """`catalog` maps segment key → plain-language description for the model."""
         ...
 
@@ -37,7 +59,12 @@ def accepted(
     """Keep only known segments with enough confidence, strongest first, one per segment."""
     best: dict[str, ExtractedTopic] = {}
     for topic in topics:
-        if topic.segment_key not in catalog or topic.confidence < MIN_TOPIC_CONFIDENCE:
+        if (
+            topic.segment_key not in catalog
+            or not topic.confidence.is_finite()
+            or not MIN_TOPIC_CONFIDENCE <= topic.confidence <= 1
+            or not topic.intent.is_finite()
+        ):
             continue
         if not Decimal(0) <= topic.intent <= Decimal(1):
             continue

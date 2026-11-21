@@ -6,7 +6,8 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from app.modules.auction.domain.opportunity import AdOpportunity, Layout
+from app.modules.auction.domain.affinity import SegmentAffinity
+from app.modules.auction.domain.opportunity import EXACT_ONLY, AdOpportunity, Layout
 from app.modules.audience import AudienceMomentSnapshot
 from app.modules.audience.domain.value_objects.ids import MomentId
 from app.modules.audience.domain.value_objects.segment import (
@@ -100,6 +101,7 @@ def bidder(
     active: bool = True,
     budget: int | None = None,
     currency: str = "CLP",
+    broad_match: bool = True,
 ) -> Bidder:
     return Bidder(
         campaign_id=campaign(index),
@@ -118,6 +120,7 @@ def bidder(
         live_multiplier=BidMultiplier.create(Decimal(multiplier)),
         active=active,
         budget_remaining=None if budget is None else Money.create(currency=currency, amount=budget),
+        broad_match=broad_match,
     )
 
 
@@ -132,6 +135,7 @@ def opportunity(
     baskets: tuple[frozenset[BrandId], ...] = (),
     layouts: tuple[Layout, ...] = (Layout.solo(), Layout.duo()),
     out_of_stock: tuple[int, ...] = (),
+    affinity: SegmentAffinity = EXACT_ONLY,
 ) -> AdOpportunity:
     return AdOpportunity(
         moment=audience,
@@ -140,6 +144,7 @@ def opportunity(
         reserve=rate(reserve),
         approved_baskets=frozenset(baskets),
         out_of_stock=frozenset(brand(index) for index in out_of_stock),
+        affinity=affinity,
     )
 
 
