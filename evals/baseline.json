@@ -2,11 +2,12 @@
   "git_sha": "e880589",
   "metrics": {
     "basket_rate": 0.5,
-    "basket_revenue_lift": 0.04655172413793104,
+    "basket_revenue_lift": 0.04462809917355372,
     "basket_value_lift": 0.075,
     "fill_rate": 0.631578947368421,
     "mean_coverage": 0.9722222222222222,
     "scenario_pass_rate": 1.0
   },
-  "updated_at": "2026-11-21T12:39:07+00:00"
+  "updated_at": "2026-11-21T12:39:07+00:00",
+  "note": "basket_revenue_lift lowered 0.0466 -> 0.0446 on purpose: the docs/demo.md seed adds in-category rivals (Miga, Brasa/Toro Burger, Cola Sur/Pacifica...), which raises the single-brand counterfactual revenue the lift is measured against."
 }

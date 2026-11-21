@@ -85,6 +85,14 @@ class CampaignGenerator:
         self._memo: OrderedDict[str, CampaignGenerated] = OrderedDict()
         self._lock = Lock()
 
+    def _ready(self, brand: BrandId) -> bool:
+        """Studio-ready: the brand has its own campaign photography bundled.
+
+        Brands without it still bid live and air with their wordmark template; the
+        studio never borrows another product's scenery for them.
+        """
+        return self._slugs[brand] in self._media
+
     def catalog(self) -> CampaignCatalog:
         return CampaignCatalog(
             brands=[
@@ -101,19 +109,23 @@ class CampaignGenerator:
                     age_restricted=self._bidders[brand].age_restricted,
                 )
                 for brand, kit in self._kits.items()
+                if self._ready(brand)
             ],
             approved_baskets=[
                 sorted(self._slugs[b] for b in basket)
                 for basket in sorted(
                     self._catalog.offers.baskets(), key=lambda bs: sorted(str(b) for b in bs)
                 )
+                if all(self._ready(b) for b in basket)
             ],
         )
 
     def generate(self, request: CampaignGenerate) -> CampaignGenerated:
         started = perf_counter()
         slugs = tuple(sorted(request.brands))
-        if len(set(slugs)) != len(slugs) or any(slug not in self._ids for slug in slugs):
+        if len(set(slugs)) != len(slugs) or any(
+            slug not in self._ids or not self._ready(self._ids[slug]) for slug in slugs
+        ):
             raise ValueError("Selecciona una o dos marcas diferentes del catálogo")
         ids = tuple(self._ids[slug] for slug in slugs)
         if request.moment == "complete_basket" and len(ids) != 2:

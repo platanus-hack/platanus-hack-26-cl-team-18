@@ -1,7 +1,6 @@
 """Compose one screen's live snapshot-to-creative flow and the shared seed market."""
 
 import logging
-from base64 import b64encode
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
@@ -10,6 +9,8 @@ from pathlib import Path
 from threading import Lock, RLock
 from uuid import UUID
 
+from app.bootstrap import demo_catalog
+from app.bootstrap.demo_catalog import wordmark
 from app.bootstrap.demo_console import decision_messages
 from app.contract.messages import (
     AdvertiserAutoBid,
@@ -173,85 +174,58 @@ def seed_market(
     ledger: ChargeLedger | None = None,
     redemption_ledger: RedemptionLedger | None = None,
 ) -> LiveMarket:
-    # Reuse the existing project mark for these fictional fixture brands.
-    logo = Path(__file__).resolve().parents[2].joinpath("project-logo.png").read_bytes()
-    logo_url = "data:image/png;base64," + b64encode(logo).decode("ascii")
+    # Brands use their own wordmarks (demo_catalog.wordmark); never AI-drawn logos.
 
-    # Real IAB Audience Taxonomy 1.1 IDs (source in the audience catalog JSON).
-    fitness = SegmentId.create("408")  # Interest | Healthy Living | Fitness and Exercise
-    coffee = SegmentId.create("977")  # Purchase Intent | CPG | Edible | Beverages | Coffee
-    beer = SegmentId.create("369")  # Interest | Food & Drink | Alcoholic Beverages
-    food = SegmentId.create("1404")  # Purchase Intent | Food and Beverage Services | Fast Food
+    # One brand catalog (app/bootstrap/demo_catalog.py, docs/demo.md): rivals in each
+    # category, pre-approved partner pairs, offers sized to the group (architecture §6.1).
     kits = tuple(
         BrandKit(
             brand_id=BrandId.create(ids.new_uuid7()),
-            name=name,
-            logo_url=logo_url,
-            stock_copy=copy,
-            accent_color=color,
+            name=brand.name,
+            logo_url=wordmark(brand.name, brand.color),
+            stock_copy=brand.stock_copy,
+            accent_color=brand.color,
         )
-        for name, copy, color in (
-            ("Voltio", "Voltio · Energía para tu próximo entrenamiento.", "#c6f26b"),
-            ("Café Patio", "Café Patio · Tu pausa después de entrenar.", "#f5bb84"),
-            ("Malta Sur", "Malta Sur · Cerveza artesanal.", "#f6d15a"),
-            ("Rayo", "Rayo · Energía para tu día.", "#b9adff"),
-        )
+        for brand in demo_catalog.BRANDS
     )
-    voltio, patio, rayo = kits[0].brand_id, kits[1].brand_id, kits[3].brand_id
-    # Every mutual-partner pair gets an approved basket (docs/demo.md), so Rayo competes
-    # for the energy slot inside a basket and prices it. Offers are sized to the group
-    # looking (architecture §6.1); the price is the brands', never the copywriter's.
+    # Stable brand slugs: prop markers (edge/props/markers.json, ADR 0008 D2), the
+    # audience catalog's brand_refs and the bundle loop files all use them.
+    brand_by_slug = {
+        brand.slug: kit.brand_id for brand, kit in zip(demo_catalog.BRANDS, kits, strict=True)
+    }
+    # Every mutual-partner pair gets an approved basket (docs/demo.md), so a rival
+    # competes for its slot inside a basket and prices it. The price is the brands',
+    # never the copywriter's.
     offer_book = OfferBook.of(
         [
-            *_tiers(
-                frozenset({voltio, patio}),
-                "Voltio + Café Patio",
-                (
-                    (1, "Combo post-entreno", "", 3490),
-                    (2, "Dúo post-entreno", " x2", 5990),
-                    (3, "Trío post-entreno", " x3", 8490),
-                    (4, "Pack x4 post-entreno", " x4", 10990),
-                ),
-            ),
-            *_tiers(
-                frozenset({rayo, patio}),
-                "Rayo + Café Patio",
-                ((1, "Combo", "", 3290), (2, "Dúo", " x2", 5790), (3, "Trío", " x3", 7990)),
-            ),
+            offer
+            for basket in demo_catalog.BASKETS
+            for offer in _tiers(
+                frozenset(brand_by_slug[slug] for slug in basket.slugs),
+                basket.names,
+                basket.tiers,
+            )
         ]
     )
-    co_brand_partners: tuple[frozenset[BrandId], ...] = (
-        frozenset({kits[1].brand_id}),
-        frozenset({kits[0].brand_id, kits[3].brand_id}),
-        frozenset(),
-        frozenset({kits[1].brand_id}),
-    )
-    # Rates are CLP per attention-second (docs/auction-plan.md D4b). Rayo is
-    # Voltio's in-category rival, so the energy slot has a real price (D6).
+    # Rates are CLP per attention-second (docs/auction-plan.md D4b).
     bidders = tuple(
         Bidder(
             campaign_id=CampaignId.create(ids.new_uuid7()),
-            brand_id=kit.brand_id,
-            category=category,
-            age_restricted=age_restricted,
+            brand_id=brand_by_slug[brand.slug],
+            category=brand.category,
+            age_restricted=brand.age_restricted,
             segment_bids=tuple(
-                SegmentBid(segment_id=segment, rate=_clp_per_as(rate)) for segment in segments
+                SegmentBid(
+                    segment_id=SegmentId.create(segment), rate=_clp_per_as(brand.rate_clp_per_as)
+                )
+                for segment in brand.segments
             ),
-            partners=partners,
+            partners=frozenset(
+                brand_by_slug[slug] for slug in demo_catalog.partners_of(brand.slug)
+            ),
             budget_remaining=Money.create(currency="CLP", amount=budget_clp),
         )
-        for kit, (category, age_restricted, segments, rate), partners in zip(
-            kits,
-            (
-                ("sports_goods", False, (fitness,), "8"),
-                # Café Patio also sells something to eat: "qué hambre" reaches it.
-                ("coffee", False, (coffee, food), "5"),
-                ("alcohol", True, (beer,), "12"),
-                ("sports_goods", False, (fitness,), "6.5"),
-            ),
-            co_brand_partners,
-            strict=True,
-        )
+        for brand in demo_catalog.BRANDS
     )
     book = LiveCampaignBook(bidders)
     return LiveMarket(
@@ -369,6 +343,12 @@ def register_demo(
             coffee: Angle.COFFEE_BREAK,
             beer: Angle.SOCIAL,
             food: Angle.HUNGER,
+            SegmentId.create(demo_catalog.PASTRY): Angle.HUNGER,
+            SegmentId.create(demo_catalog.SOFT_DRINKS): Angle.HUNGER,
+            SegmentId.create(demo_catalog.SNACKS): Angle.HUNGER,
+            SegmentId.create(demo_catalog.SALTY_SNACKS): Angle.HUNGER,
+            SegmentId.create(demo_catalog.WATER): Angle.POST_WORKOUT,
+            SegmentId.create(demo_catalog.ENERGY_DRINKS): Angle.ENERGY,
         },
     )
     studio = CreativeStudio(
