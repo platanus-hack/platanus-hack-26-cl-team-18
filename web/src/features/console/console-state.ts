@@ -114,5 +114,7 @@ export function consoleReducer(state: ConsoleState, event: ConsoleEvent): Consol
             }));
         case "system.error":
             return { ...state, lastError: `${m.code}: ${m.message}` };
+        case "live.status":
+            return state; // the live switch is shown by LiveInputStatus, which polls /health
     }
 }

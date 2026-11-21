@@ -1,9 +1,9 @@
 {
   "name": "speech-refreshes-copy",
-  "beat": "A new spoken need changes the copy even when the winning brand stays",
+  "beat": "A new spoken need re-auctions the screen and refreshes the copy (hunger brings the burger, docs/demo.md beat 2)",
   "steps": [
     {"scene": "coffee", "expect": {"brands": ["Café Patio"], "copy_contains": "café"}},
-    {"scene": "coffee", "speech": ["hambre"], "expect": {"brands": ["Café Patio"], "copy_contains": "hambre"}},
+    {"scene": "coffee", "speech": ["hambre"], "expect": {"brands": ["Brasa Burger"], "copy_contains": "hambre"}},
     {"scene": "coffee", "expect": {"no_change": true}},
     {"scene": "empty", "expect": {"brands": []}}
   ]

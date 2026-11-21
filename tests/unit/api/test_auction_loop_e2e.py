@@ -725,3 +725,98 @@ def test_sensing_boundaries_survive_the_agent_to_player_path(loop: Loop) -> None
     assert trace.candidate_at == snapshot.candidate_at
     assert trace.measured_at == now
     assert trace.detected_at == trace.published_at == now
+
+
+# ---------------------------------------------------------------- auto-bidding + invalid attention
+
+
+def autobid(loop: Loop, brand: str, *, enabled: bool = True) -> Any:
+    return loop.client.post(
+        "/api/advertiser/autobid",
+        json={
+            "type": "advertiser.autobid",
+            "v": 1,
+            "campaign_id": campaign_of(loop, brand),
+            "enabled": enabled,
+        },
+    )
+
+
+def book_line(loop: Loop, brand: str) -> Any:
+    book = ConsoleBook.model_validate(loop.client.get("/api/book").json())
+    return next(line for line in book.lines if line.brand_name == brand)
+
+
+def test_auto_bidding_chases_an_outbid_brand_until_it_wins_then_yields_to_a_human(
+    loop: Loop,
+) -> None:
+    shown = loop.send("fitness")
+    loop.auction()
+    assert paid_brands(loop.creative()) == ("Voltio",)
+    assert autobid(loop, "Rayo").json() == {"enabled": True}
+    flipped_at = None
+    for tick in range(1, 9):  # Rayo keeps losing to Voltio while auto-bidding learns
+        loop.clock.set(shown + timedelta(seconds=5 * tick))
+        loop.send("fitness", after_s=0)  # a heartbeat: same moment, re-observed
+        loop.container.demo.reauction_bids()
+        loop.scheduler.fire_due()  # the 5 s auto-bid tick (and any due releases)
+        line = book_line(loop, "Rayo")
+        if Decimal(line.multiplier) * Decimal("6.5") > Decimal("8") * Decimal("1.02"):
+            flipped_at = tick
+            break
+    rayo = book_line(loop, "Rayo")
+    assert rayo.autobid and rayo.autobid_rule == "chase_outbid"
+    assert "Outbid" in (rayo.autobid_reason or "")
+    assert flipped_at is not None and Decimal(rayo.multiplier) <= Decimal("1.5")  # small steps
+    # A human takes the slider: auto-bidding turns off and the human value stands.
+    assert slide(loop, "Rayo", "0.5", 1_763_740_000_000).json() == {"outcome": "applied"}
+    rayo = book_line(loop, "Rayo")
+    assert not rayo.autobid and rayo.multiplier == "0.5"
+
+
+def test_a_far_away_viewer_is_filtered_off_the_bill(loop: Loop) -> None:
+    from app.contract.messages import DistanceBand
+
+    sent = loop.send("fitness")
+    loop.auction()
+    creative = loop.creative()
+    far = snapshot_for("fitness", 50, sent + timedelta(seconds=0.2))
+    far = far.model_copy(
+        update={
+            "tracklets": [far.tracklets[0].model_copy(update={"distance_band": DistanceBand.FAR})]
+        }
+    )
+    loop.clock.advance(timedelta(seconds=0.2))
+    loop.agent.send_text(far.model_dump_json())
+    loop.clock.advance(timedelta(seconds=4))
+    played(loop, creative, seconds=4)
+    receipt = loop.next_of(ConsoleReceipt)
+    # 0.2 s near (a glance) then 3.8 s far: nothing billable, every second explained.
+    assert receipt.attention_seconds == "0.000" and receipt.total.amount == "0"
+    assert {item.reason for item in receipt.filtered} == {"far", "glance"}
+
+
+def test_a_failing_auto_bid_tick_keeps_the_loop_alive(
+    loop: Loop, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A2: one bad tick must never stop auto-bidding until a restart."""
+    from app.modules.campaigns.application.autobidder import AutoBidder
+
+    loop.send("fitness")
+    loop.auction(), loop.creative()
+    calls = {"n": 0}
+    real = AutoBidder.tick
+
+    def flaky(self, *, at):  # type: ignore[no-untyped-def]
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("bad tick")
+        return real(self, at=at)
+
+    monkeypatch.setattr(AutoBidder, "tick", flaky)
+    autobid(loop, "Rayo")
+    autobid(loop, "Rayo")  # enabling twice still runs one loop
+    for n in range(1, 4):
+        loop.clock.advance(timedelta(seconds=5))
+        loop.scheduler.fire_due()
+        assert calls["n"] == n  # exactly one tick per period, even after the failure

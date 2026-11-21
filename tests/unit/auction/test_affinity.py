@@ -6,6 +6,7 @@ demo's credibility (who won, why, and what they paid), so these never go red.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from decimal import Decimal
 
 import pytest
@@ -17,11 +18,22 @@ from app.modules.auction.domain.affinity import (
     SegmentLink,
 )
 from app.modules.auction.domain.clearing import clear
-from app.modules.auction.domain.result import ExclusionReason, NoFillReason
-from app.modules.auction.domain.valuation import SegmentMatch
-from app.modules.audience.domain.value_objects.segment import SegmentId
+from app.modules.auction.domain.opportunity import CategoryMultiplier, HeldProduct
+from app.modules.auction.domain.result import AuctionResult, ExclusionReason, NoFillReason
+from app.modules.auction.domain.valuation import SegmentMatch, Valuation, valuate
+from app.modules.audience.domain.value_objects.segment import SegmentEstimate, SegmentId
 from app.modules.audience.infrastructure.catalog.loader import load_catalog
-from tests.unit.auction.builders import basket, bidder, moment, opportunity, segment
+from app.modules.campaigns.domain.book import Bidder
+from app.modules.common.domain.value_objects.percentage import Percentage
+from tests.unit.auction.builders import (
+    basket,
+    bidder,
+    brand,
+    campaign,
+    moment,
+    opportunity,
+    segment,
+)
 
 SPORTS = SegmentId.create("607")
 CYCLING = SegmentId.create("625")
@@ -281,7 +293,7 @@ def test_a_related_match_completes_a_basket_and_counts_partial_coverage() -> Non
     assert result.coverage == Decimal("0.75")  # (1 · 0.8 + 1 · 0.7) / 2
 
 
-def test_minor_safety_still_blocks_an_age_restricted_bid_reached_by_affinity() -> None:
+def test_affinity_never_widens_an_age_restricted_bid_even_toward_a_minor() -> None:
     table = SegmentAffinity.build(
         paths=PATHS,
         related=(RelatedSegments(left=BEER, right=WATER, weight=Decimal("0.6")),),
@@ -290,6 +302,15 @@ def test_minor_safety_still_blocks_an_age_restricted_bid_reached_by_affinity() -
     result = clear(
         opportunity(moment(segment(WATER, 2), minor_likely=True), brewer, affinity=table)
     )
+    # Stricter than a SAFETY exclusion: age-restricted campaigns match exactly only,
+    # so a related segment never even produces a bid (valuation.match_segments).
+    assert not result.filled
+    assert all(bid.campaign_id != brewer.campaign_id for bid in result.bids)
+
+
+def test_minor_safety_blocks_an_exact_age_restricted_bid() -> None:
+    brewer = bidder(0, "alcohol", {BEER: "20"}, age_restricted=True)
+    result = clear(opportunity(moment(segment(BEER, 2), minor_likely=True), brewer))
     assert not result.filled
     blocked = result.exclusion_for(brewer.campaign_id)
     assert blocked is not None and blocked.reason is ExclusionReason.SAFETY
@@ -335,3 +356,172 @@ def test_shipped_catalog_never_widens_alcohol_reach() -> None:
     table = _catalog_affinity()
     assert reach(table, BEER) == {BEER: (MatchKind.EXACT, 1)}
     assert all(link.moment_segment != BEER and link.bid_segment != BEER for link in table.links)
+
+
+# ---------------------------------------------------------------- edge cases
+
+
+@pytest.mark.parametrize(
+    ("parent", "child", "linked"),
+    [
+        ("Interest | Sports", "Interest | Sports | Cycling", True),
+        # Spacing and case never change the hierarchy.
+        ("interest|sports", "  Interest |  SPORTS | Cycling ", True),
+        # A string prefix is not a path prefix.
+        ("Interest | Sport", "Interest | Sports | Cycling", False),
+        # Identical paths are not ancestors of each other.
+        ("Interest | Sports", "Interest | Sports", False),
+        # Different tiers share no ancestry.
+        ("Purchase Intent | Sports", "Interest | Sports | Cycling", False),
+    ],
+)
+def test_hierarchy_compares_whole_path_parts(parent: str, child: str, linked: bool) -> None:
+    table = SegmentAffinity.build(paths={SPORTS: parent, CYCLING: child})
+    assert (CYCLING in reach(table, SPORTS)) is linked
+    assert (SPORTS in reach(table, CYCLING)) is linked
+
+
+def test_deep_hierarchy_compounds_the_weight_per_level() -> None:
+    root, a, b, leaf = (SegmentId.create(f"L{index}") for index in range(4))
+    table = SegmentAffinity.build(
+        paths={root: "R", a: "R | A", b: "R | A | B", leaf: "R | A | B | C"}
+    )
+    assert reach(table, root)[leaf] == (MatchKind.BROADER, Decimal("0.512"))
+    assert reach(table, leaf)[root] == (MatchKind.NARROWER, Decimal("0.064"))
+    assert reach(table, a)[b] == (MatchKind.BROADER, Decimal("0.8"))
+
+
+def test_custom_hierarchy_weights() -> None:
+    table = SegmentAffinity.build(
+        paths=PATHS, broader_weight=Decimal("0.9"), narrower_weight=Decimal("0.2")
+    )
+    assert reach(table, SPORTS)[CYCLING] == (MatchKind.BROADER, Decimal("0.9"))
+    assert reach(table, CYCLING)[SPORTS] == (MatchKind.NARROWER, Decimal("0.2"))
+
+
+def test_a_pair_listed_twice_keeps_its_strongest_weight_both_ways() -> None:
+    table = SegmentAffinity.build(
+        paths={},
+        related=(
+            RelatedSegments(left=COFFEE, right=WATER, weight=Decimal("0.3")),
+            RelatedSegments(left=WATER, right=COFFEE, weight=Decimal("0.6")),
+        ),
+    )
+    assert reach(table, COFFEE)[WATER] == (MatchKind.RELATED, Decimal("0.6"))
+    assert reach(table, WATER)[COFFEE] == (MatchKind.RELATED, Decimal("0.6"))
+
+
+def test_related_pairs_need_no_path() -> None:
+    table = SegmentAffinity.build(
+        paths={},
+        related=(RelatedSegments(left=COFFEE, right=WATER, weight=Decimal("0.5")),),
+    )
+    assert reach(table, COFFEE)[WATER] == (MatchKind.RELATED, Decimal("0.5"))
+
+
+def _valuation(
+    bidder_: Bidder, *segments: SegmentEstimate, looking: int | None = None, **changes: object
+) -> Valuation:
+    base = opportunity(moment(*segments, looking=looking), bidder_, affinity=AFFINITY)
+    return valuate(bidder_, replace(base, **changes))  # type: ignore[arg-type]
+
+
+def test_relevance_boosts_lift_an_approximate_value_but_never_its_ceiling() -> None:
+    fan = bidder(0, "bikes", {SPORTS: "10"}, partners=(1,))
+    plain = _valuation(fan, segment(CYCLING, 2))
+    spoken = _valuation(fan, segment(CYCLING, 2, speech_intent=100))
+    context = _valuation(
+        fan,
+        segment(CYCLING, 2),
+        category_multipliers=(CategoryMultiplier(category="bikes", multiplier=Decimal(2)),),
+    )
+    held = _valuation(
+        fan,
+        segment(CYCLING, 2),
+        held_products=(HeldProduct(brand_id=brand(1), confidence=Percentage.create(100)),),
+        approved_baskets=frozenset({basket(0, 1)}),
+    )
+    assert plain.value == 16 and plain.ceiling_rate == 8
+    assert spoken.value == 24  # 8 · 1.5 speech boost · 2 viewers
+    assert context.value == 32
+    assert held.value == 24  # + 50 % complete-the-basket boost
+    assert {spoken.ceiling_rate, context.ceiling_rate, held.ceiling_rate} == {Decimal(8)}
+
+
+def test_the_live_multiplier_scales_an_approximate_ceiling() -> None:
+    fan = bidder(0, "bikes", {SPORTS: "10"}, multiplier="2")
+    valuation = _valuation(fan, segment(CYCLING, 2))
+    assert (valuation.value, valuation.ceiling_rate) == (32, 16)
+
+
+def test_parent_and_child_bids_each_take_their_best_route_and_stay_capped() -> None:
+    fan = bidder(0, "bikes", {SPORTS: "10", CYCLING: "5"})
+    valuation = _valuation(fan, segment(SPORTS, 1), segment(CYCLING, 1), looking=2)
+    routes = {(m.moment_segment, m.bid_segment, m.kind) for m in valuation.matches}
+    assert routes == {(SPORTS, SPORTS, MatchKind.EXACT), (CYCLING, SPORTS, MatchKind.BROADER)}
+    assert valuation.value == 18  # 10 + 8, under the 10 · 2 looking cap
+    assert valuation.ceiling_rate == 10
+
+
+def test_overlapping_segments_never_count_a_viewer_twice() -> None:
+    fan = bidder(0, "bikes", {SPORTS: "10", CYCLING: "10"})
+    valuation = _valuation(fan, segment(SPORTS, 2), segment(CYCLING, 2))
+    assert valuation.value == 20  # capped at the best rate × 2 looking
+
+
+def test_budget_exposure_uses_the_discounted_ceiling() -> None:
+    # One play exposes ceiling × looking × 15 s: 8 · 1 · 15 = 120 at the 0.8 broader weight.
+    def run(budget: int) -> AuctionResult:
+        fan = bidder(0, "bikes", {SPORTS: "10"}, budget=budget)
+        return clear(opportunity(moment(segment(CYCLING, 1)), fan, affinity=AFFINITY))
+
+    assert run(120).filled
+    starved = run(119)
+    assert not starved.filled
+    excluded = starved.exclusion_for(campaign(0))
+    assert excluded is not None and excluded.reason is ExclusionReason.BUDGET
+
+
+def test_a_foreign_currency_bid_reached_by_affinity_is_excluded_not_crashed() -> None:
+    fan = bidder(0, "bikes", {SPORTS: "10"}, currency="USD")
+    result = clear(opportunity(moment(segment(CYCLING, 1)), fan, affinity=AFFINITY))
+    excluded = result.exclusion_for(campaign(0))
+    assert excluded is not None and excluded.reason is ExclusionReason.INVALID_BID
+    assert not result.filled
+
+
+def test_an_age_restricted_campaign_matches_exactly_even_when_adults_are_present() -> None:
+    table = SegmentAffinity.build(
+        paths=PATHS,
+        related=(RelatedSegments(left=BEER, right=WATER, weight=Decimal("0.9")),),
+    )
+    brewer = bidder(0, "alcohol", {BEER: "20"}, age_restricted=True)
+    result = clear(opportunity(moment(segment(WATER, 2)), brewer, affinity=table))
+    assert result.bids == () and not result.filled
+    beer_drinkers = clear(opportunity(moment(segment(BEER, 2)), brewer, affinity=table))
+    assert beer_drinkers.winner_ids == {brewer.campaign_id}
+
+
+def test_partners_reaching_the_same_viewers_by_affinity_keep_only_their_share() -> None:
+    # Both reach the cyclists (one exactly, one broadly): a duo adds nobody, so the
+    # slots keep screen share, not efficiency, and the solo wins (auction plan D1).
+    fan = bidder(0, "bikes", {SPORTS: "10"}, partners=(1,))
+    shop = bidder(1, "repairs", {CYCLING: "6"}, partners=(0,))
+    result = clear(
+        opportunity(
+            moment(segment(CYCLING, 2)), fan, shop, baskets=(basket(0, 1),), affinity=AFFINITY
+        )
+    )
+    assert result.layout is not None and result.layout.name == "solo"
+    assert result.winner_ids == {fan.campaign_id}
+
+
+def test_nobody_looking_sells_nothing_whatever_the_table() -> None:
+    fan = bidder(0, "bikes", {SPORTS: "10"})
+    result = clear(opportunity(moment(segment(CYCLING, 0), looking=0), fan, affinity=AFFINITY))
+    assert result.no_fill is NoFillReason.NO_AUDIENCE and result.coverage == 0
+
+
+def test_low_confidence_scales_an_approximate_value_linearly() -> None:
+    fan = bidder(0, "bikes", {SPORTS: "10"})
+    assert _valuation(fan, segment(CYCLING, 2, confidence=50)).value == 8

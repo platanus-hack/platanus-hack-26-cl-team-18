@@ -1,12 +1,27 @@
 import type { BookLine } from "@/contract";
-import { setBidMultiplier, useBook } from "@/lib/market-api";
-import { StatusBadge } from "@/shared/ui/StatusBadge";
-import { WorkspaceHeader } from "@/shared/ui/WorkspaceHeader";
+import { decimalCl, moneyCl } from "@/lib/format";
+import { setAutoBid, setBidMultiplier, useBook } from "@/lib/market-api";
+import { Badge } from "@/shared/ui/badge";
+import { Button } from "@/shared/ui/button";
+import { Card } from "@/shared/ui/card";
+import { AppShell, EmptyState, PageHeader } from "@/shared/ui/page";
+import { ChevronRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { BidQueue, type BidState } from "./bid-queue";
 
 const MIN = 0.2;
 const MAX = 5;
+
+const CATEGORY: Record<string, string> = {
+    sports_goods: "Deportes",
+    coffee: "Café",
+    alcohol: "Alcohol",
+    energy_drink: "Bebida energética",
+    food: "Comida",
+};
+const category = (key: string) => CATEGORY[key] ?? key.replaceAll("_", " ");
+
+const decimal = (value: number) => decimalCl(value.toFixed(1));
 
 /** `/advertiser?brand=Rayo`: a judge's phone becomes one brand's bid slider (beat 4). */
 export function AdvertiserPage() {
@@ -16,27 +31,40 @@ export function AdvertiserPage() {
     );
     const line = book?.lines.find((l) => l.brand_name === brand) ?? null;
     return (
-        <div className="paper-theme">
-            <WorkspaceHeader />
-            <main className="operator-page flex flex-col gap-6 text-body">
-                <header className="border-b border-rule pb-6">
-                    <p className="eyebrow mb-3">Mercado en vivo</p>
-                    <h1 className="page-heading">Bidding war</h1>
-                    <p className="mt-3 text-muted">Tu marca, en el momento indicado.</p>
-                </header>
-                {error && <StatusBadge tone="danger" label="Can't reach the market" />}
-                {!line ? (
-                    <BrandPicker lines={book?.lines ?? []} onPick={setBrand} />
-                ) : (
-                    <Slider
-                        key={line.campaign_id}
-                        line={line}
-                        rivals={book?.lines ?? []}
-                        onSent={refresh}
-                    />
-                )}
-            </main>
-        </div>
+        <AppShell width="narrow">
+            <PageHeader
+                title={line ? line.brand_name : "Pujas"}
+                description={line ? category(line.category) : "Elige la marca por la que pujas."}
+                actions={
+                    line && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                                setBrand(null);
+                            }}
+                        >
+                            Cambiar marca
+                        </Button>
+                    )
+                }
+            />
+            {error && (
+                <Badge tone="danger" appearance="soft">
+                    Sin conexión con el mercado
+                </Badge>
+            )}
+            {!line ? (
+                <BrandPicker lines={book?.lines ?? []} onPick={setBrand} />
+            ) : (
+                <Slider
+                    key={line.campaign_id}
+                    line={line}
+                    rivals={book?.lines ?? []}
+                    onSent={refresh}
+                />
+            )}
+        </AppShell>
     );
 }
 
@@ -47,28 +75,46 @@ function BrandPicker({
     lines: readonly BookLine[];
     onPick: (b: string) => void;
 }) {
+    if (lines.length === 0) {
+        return (
+            <Card>
+                <EmptyState
+                    title="Sin marcas todavía"
+                    description="Aparecen cuando el mercado publica su libro."
+                />
+            </Card>
+        );
+    }
     return (
-        <div className="flex flex-col gap-3">
-            <p className="text-muted">Elige la marca por la que quieres pujar.</p>
-            {lines.length === 0 && (
-                <p className="tool-card text-muted" role="status">
-                    Esperando marcas del mercado. Aparecerán aquí cuando estén disponibles.
-                </p>
-            )}
+        <Card className="divide-y divide-border-subtle overflow-hidden">
             {lines.map((l) => (
                 <button
                     key={l.campaign_id}
                     type="button"
-                    className="rounded-container border border-border bg-surface px-5 py-5 text-left font-medium hover:bg-accent-soft"
-                    style={{ borderLeft: `6px solid ${l.accent_color ?? "transparent"}` }}
+                    className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-surface-hover"
                     onClick={() => {
                         onPick(l.brand_name);
                     }}
                 >
-                    {l.brand_name} <span className="text-muted">· {l.category}</span>
+                    <span
+                        aria-hidden
+                        className="size-2.5 shrink-0 rounded-full"
+                        style={{ background: l.accent_color ?? "var(--palette-gris-oscuro)" }}
+                    />
+                    <span className="font-medium">{l.brand_name}</span>
+                    <span className="text-compact text-muted">{category(l.category)}</span>
+                    {l.on_air && (
+                        <Badge tone="success" className="ml-auto">
+                            Al aire
+                        </Badge>
+                    )}
+                    <ChevronRight
+                        aria-hidden
+                        className={l.on_air ? "size-4 text-muted" : "ml-auto size-4 text-muted"}
+                    />
                 </button>
             ))}
-        </div>
+        </Card>
     );
 }
 
@@ -85,6 +131,7 @@ function Slider({
     const [bid, setBid] = useState<BidState>({ kind: "idle", value: null });
     const queue = useRef<BidQueue | null>(null);
     const [confirmedSeq, setConfirmedSeq] = useState(0);
+    const [autoFailed, setAutoFailed] = useState(false);
     const refresh = useRef(onSent);
     const observedSeq = useRef(line.multiplier_seq);
     useEffect(() => {
@@ -122,82 +169,113 @@ function Slider({
         queue.current?.set(next);
     };
     return (
-        <section className="tool-card flex flex-col gap-6">
+        <Card className="flex flex-col gap-6 p-4">
             <div className="flex items-center justify-between">
-                <span className="text-section font-semibold">{line.brand_name}</span>
+                <label htmlFor="bid" className="text-compact text-muted">
+                    Multiplicador de puja
+                </label>
                 {line.on_air ? (
-                    <StatusBadge tone="success" label="En pantalla" />
+                    <Badge tone="success" appearance="soft">
+                        Al aire
+                    </Badge>
                 ) : (
-                    <StatusBadge tone="neutral" label="Fuera de pantalla" />
+                    <Badge appearance="soft">En espera</Badge>
                 )}
             </div>
-            <label className="flex flex-col gap-2">
-                <span className="text-muted">Multiplicador de puja</span>
-                <span className="text-kpi font-semibold tabular-nums">×{value.toFixed(1)}</span>
+            <div className="flex flex-col gap-3">
+                <output htmlFor="bid" className="text-kpi leading-none font-medium tabular-nums">
+                    ×{decimal(value)}
+                </output>
                 <input
+                    id="bid"
                     type="range"
                     min={MIN}
                     max={MAX}
                     step={0.1}
                     value={value}
-                    aria-label="Bid multiplier"
                     className="h-10 w-full"
                     onChange={(e) => {
                         send(Number(e.target.value));
                     }}
                 />
-            </label>
-            <div role="status" aria-live="polite">
-                {bid.kind === "sending" && (
-                    <StatusBadge tone="neutral" label="Enviando última puja…" />
-                )}
-                {bid.kind === "idle" && (
+                <div className="flex justify-between text-metadata text-muted tabular-nums">
+                    <span>×{decimal(MIN)}</span>
+                    <span>×{decimal(MAX)}</span>
+                </div>
+            </div>
+            <div role="status" aria-live="polite" className="flex flex-wrap items-center gap-3">
+                {bid.kind === "sending" && <Badge appearance="soft">Enviando última puja…</Badge>}
+                {bid.kind === "idle" && bid.value !== null && (
                     <span className="text-metadata text-muted">
-                        Puja confirmada ×{value.toFixed(1)}
+                        Puja confirmada ×{decimal(bid.value)}
                     </span>
                 )}
                 {bid.kind === "failed" && (
-                    <button
-                        type="button"
-                        className="button-secondary"
+                    <Button
+                        size="sm"
+                        variant="outline"
                         onClick={() => {
                             send(bid.value);
                         }}
                     >
-                        No enviada · Reintentar ×{bid.value.toFixed(1)}
-                    </button>
+                        No enviada · Reintentar ×{decimal(bid.value)}
+                    </Button>
+                )}
+                {autoFailed && (
+                    <Badge tone="warning" appearance="soft">
+                        No se pudo cambiar la puja automática.
+                    </Badge>
                 )}
             </div>
-            <button
-                type="button"
-                className="button-secondary"
-                onClick={() => {
-                    send(1);
-                }}
-            >
-                Restablecer ×1.0
-            </button>
-            <p className="text-metadata text-muted tabular-nums">
-                Saldo {line.remaining.amount} {line.remaining.currency} · gastado{" "}
-                {line.spent.amount}
-            </p>
+            <div className="flex flex-col gap-2">
+                <Button
+                    variant={line.autobid ? "primary" : "outline"}
+                    aria-pressed={line.autobid}
+                    onClick={() => {
+                        setAutoFailed(false);
+                        setAutoBid(line.campaign_id, !line.autobid)
+                            .then(onSent)
+                            .catch(() => {
+                                setAutoFailed(true);
+                            });
+                    }}
+                >
+                    {line.autobid ? "Puja automática: activa" : "Activar puja automática"}
+                </Button>
+                {line.autobid && line.autobid_reason && (
+                    <p className="text-metadata text-muted">{line.autobid_reason}</p>
+                )}
+            </div>
+            <dl className="grid grid-cols-2 gap-4 border-t border-border-subtle pt-4 text-compact">
+                <div>
+                    <dt className="text-muted">Presupuesto disponible</dt>
+                    <dd className="font-medium tabular-nums">{moneyCl(line.remaining.amount)}</dd>
+                </div>
+                <div>
+                    <dt className="text-muted">Gastado</dt>
+                    <dd className="font-medium tabular-nums">{moneyCl(line.spent.amount)}</dd>
+                </div>
+            </dl>
             {competitors.length > 0 && (
-                <ul className="flex flex-col gap-1 text-metadata">
-                    {competitors.map((r) => (
-                        <li key={r.campaign_id} className="flex justify-between">
-                            <span>Rival {r.brand_name}</span>
-                            <span className="tabular-nums">
-                                ×{r.multiplier} {r.on_air ? "· en pantalla" : ""}
-                            </span>
-                        </li>
-                    ))}
-                </ul>
+                <div className="flex flex-col gap-2 border-t border-border-subtle pt-4">
+                    <p className="text-compact text-muted">Competidores</p>
+                    <ul className="flex flex-col gap-1 text-compact">
+                        {competitors.map((r) => (
+                            <li key={r.campaign_id} className="flex items-center justify-between">
+                                <span>{r.brand_name}</span>
+                                <span className="flex items-center gap-3 tabular-nums">
+                                    {r.on_air && <Badge tone="success">Al aire</Badge>}×
+                                    {decimalCl(r.multiplier, 1)}
+                                </span>
+                            </li>
+                        ))}
+                    </ul>
+                    <p className="text-metadata text-muted">
+                        Los competidores nunca comparten canasta. El cambio espera a que termine el
+                        aviso actual.
+                    </p>
+                </div>
             )}
-            <p className="text-metadata text-muted">
-                Una puja mayor compite por el momento actual; no garantiza ganar. La relevancia,
-                seguridad, stock y saldo siguen aplicando. El cambio espera el tiempo mínimo del
-                anuncio.
-            </p>
-        </section>
+        </Card>
     );
 }

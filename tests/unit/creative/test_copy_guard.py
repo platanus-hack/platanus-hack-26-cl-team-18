@@ -169,3 +169,16 @@ def test_stock_copy_is_always_guard_clean(
     draft = StockCopywriter().compose(b)
     verdict = check_copy(draft, b)
     assert verdict.passed, (draft, verdict.violations)
+
+
+def test_reused_matching_rules_still_check_current_minor_safety_and_price() -> None:
+    from tests.unit.creative.factory import clp
+
+    risky = replace(GOOD, close="Cerveza para el grupo")
+    assert check_copy(risky, GROUP).passed
+    protected = replace(GROUP, minor_likely=True)
+    assert ViolationKind.RESTRICTED_FOR_MINOR in check_copy(risky, protected).kinds()
+    assert check_copy(GOOD, GROUP).passed
+    changed = replace(GROUP, offer=replace(GROUP.offer, price=clp(9990)))
+    assert ViolationKind.PRICE_CHANGED in check_copy(GOOD, changed).kinds()
+    assert check_copy(GOOD, GROUP).passed

@@ -28,7 +28,9 @@ RUN uv sync --frozen --no-dev --extra yolo --no-install-project --python python3
 # TensorRT export needs the TensorRT Python wheels; opt in at build time with
 # --build-arg TENSORRT=1 and at run time with -e GPU_TENSORRT=1 (falls back to .pt).
 ARG TENSORRT=0
-RUN if [ "$TENSORRT" = "1" ]; then uv pip install --python /opt/venv/bin/python "tensorrt-cu12>=10.3" "onnx>=1.16" onnxslim; fi
+# TensorRT must match torch's CUDA major: the locked torch (2.15) ships CUDA 13
+# wheels (nvidia-cuda-runtime 13.x in uv.lock), so use the cu13 TensorRT build.
+RUN if [ "$TENSORRT" = "1" ]; then uv pip install --python /opt/venv/bin/python "tensorrt-cu13>=11.4" "onnx>=1.16" onnxslim; fi
 
 COPY service ./service
 

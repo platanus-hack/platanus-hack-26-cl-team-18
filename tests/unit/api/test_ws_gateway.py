@@ -229,23 +229,11 @@ def test_agent_duplicate_and_stale_seq_are_dropped(
         rec.wait_for(1)
         ws.send_text(snapshot_json(5))
         ws.send_text(snapshot_json(4))
-        # A distinct stream proves the socket processed the frames before it.
-        ws.send_text(
-            json.dumps(
-                {
-                    "type": "audience.utterance",
-                    "v": 1,
-                    "screen_id": "mall-01",
-                    "seq": 1,
-                    "measured_at": T0.isoformat(),
-                    "text": "qué hambre",
-                    "language": "es",
-                    "keyterms_hit": ["hambre"],
-                }
-            )
-        )
+        # A distinct stream proves the socket processed the frames before it. (Not an
+        # utterance: with speech mode off the live gate drops those, as it must.)
+        ws.send_text(snapshot_json(1).replace('"mall-01"', '"mall-02"'))
         items = rec.wait_for(2)
-    assert [type(m).__name__ for m, _ in items] == ["AudienceSnapshot", "AudienceUtterance"]
+    assert [(m.screen_id, m.seq) for m, _ in items] == [("mall-01", 5), ("mall-02", 1)]
 
 
 def test_invalid_frame_answers_system_error_and_keeps_the_socket(

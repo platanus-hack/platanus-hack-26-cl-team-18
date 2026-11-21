@@ -14,7 +14,7 @@ from fastapi import APIRouter, Body, HTTPException, Query, Request
 
 from app.bootstrap.container import Container
 from app.bootstrap.demo import DemoControls, UnknownBrand
-from app.contract.messages import AdvertiserBidMultiplier, ConsoleBook, StockSet
+from app.contract.messages import AdvertiserAutoBid, AdvertiserBidMultiplier, ConsoleBook, StockSet
 from app.modules.campaigns.application.live_book import (
     ConflictingMultiplierSeq,
     UnknownCampaign,
@@ -65,3 +65,18 @@ async def clerk_stock(request: Request, message: Annotated[StockSet, Body()]) ->
     except UnknownBrand as exc:
         raise HTTPException(status_code=404, detail="no such brand at this screen") from exc
     return {"changed": changed}
+
+
+@router.post("/advertiser/autobid")
+async def autobid(
+    request: Request, message: Annotated[AdvertiserAutoBid, Body()]
+) -> dict[str, bool]:
+    """Rule-based auto-bidding on/off for one campaign (a manual slider move turns it off)."""
+    controls = _controls(request)
+    if controls.set_autobid is None:
+        raise HTTPException(status_code=404, detail="auto-bidding is not available")
+    try:
+        enabled = await anyio.to_thread.run_sync(controls.set_autobid, message)
+    except UnknownCampaign as exc:
+        raise HTTPException(status_code=404, detail=exc.msg) from exc
+    return {"enabled": enabled}

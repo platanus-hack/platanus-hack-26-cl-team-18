@@ -1,5 +1,6 @@
 import {
     ConsoleBookSchema,
+    type AdvertiserAutoBid,
     type AdvertiserBidMultiplier,
     type ConsoleBook,
     type StockSet,
@@ -62,6 +63,18 @@ export async function setBidMultiplier(
         throw new Error("Bid superseded by another controller; retry against the latest market");
     }
     return message.seq;
+}
+
+/** Rule-based auto-bidding on/off; a manual slider move turns it off server-side. */
+export async function setAutoBid(campaignId: string, enabled: boolean): Promise<unknown> {
+    const message: AdvertiserAutoBid = {
+        type: "advertiser.autobid",
+        v: 1,
+        campaign_id: campaignId,
+        enabled,
+        target_cost_per_redemption: null,
+    };
+    return post("/api/advertiser/autobid", message);
 }
 
 export async function setStock(

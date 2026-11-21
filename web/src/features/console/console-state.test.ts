@@ -121,6 +121,7 @@ describe("market and receipts", () => {
             attention_seconds: total === "0" ? "0.000" : "8.000",
             charges: [],
             total: money(total),
+            filtered: [],
         });
 
     it("keeps receipts newest first, every play window separately", () => {
@@ -195,6 +196,9 @@ describe("market and receipts", () => {
                     spent: money("26"),
                     reserved: money("0"),
                     remaining: money("49974"),
+                    autobid: false,
+                    autobid_rule: null,
+                    autobid_reason: null,
                 },
             ],
         });

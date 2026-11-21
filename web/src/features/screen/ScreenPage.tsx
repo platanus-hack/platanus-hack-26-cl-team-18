@@ -43,6 +43,7 @@ export function ScreenPage() {
                         return;
                     }
                     if (message.screen_id !== screenId) return;
+                    if (message.type === "live.status") return;
                     if (message.type === "screen.attention") {
                         if (message.screen_id === screenId) {
                             attention.dispatch(toAttentionSample(message, Date.now()));

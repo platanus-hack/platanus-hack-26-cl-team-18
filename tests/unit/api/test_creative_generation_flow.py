@@ -115,7 +115,8 @@ def test_it_heard_me_hungry_turns_the_copy_to_food(tmp_path: Path) -> None:
             ).model_dump_json()
         )
         flipped = ready(player)
-        assert set(paid_brands(flipped)) == {"Voltio", "Café Patio"}
+        # docs/demo.md beat 2: hunger brings the burger partner (Trío post-gym).
+        assert set(paid_brands(flipped)) == {"Voltio", "Brasa Burger"}
         assert flipped.spec.angle == "hunger"
         assert "hambre" in flipped.spec.stages[0].copy_text.lower()
 

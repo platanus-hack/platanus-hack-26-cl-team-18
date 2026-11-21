@@ -79,7 +79,7 @@ def utterance(seq: int, *keyterms: str) -> str:
         screen_id="demo-01",
         seq=seq,
         measured_at=T0,
-        text="uf, qué hambre",
+        text="un café, porfa",
         language="es",
         keyterms_hit=list(keyterms),
     ).model_dump_json()
@@ -110,7 +110,7 @@ def test_it_heard_me_speech_flips_the_auction_to_a_co_brand(speech_app) -> None:
             console.receive_json()
 
         clock.advance(timedelta(milliseconds=500))
-        agent.send_text(utterance(1, "café"))  # "uf, qué hambre… un café"
+        agent.send_text(utterance(1, "café"))  # "un café, porfa"
         flipped = creative(player)
         assert set(paid_brands(flipped)) == {"Voltio", "Café Patio"}
         moment = ConsoleMoment.model_validate(console.receive_json())
@@ -254,11 +254,17 @@ def test_cached_voiceover_rides_in_creative_ready_without_a_new_call(tmp_path: P
 def test_prewarmed_offers_play_with_their_voice_from_the_first_frame(tmp_path: Path) -> None:
     synth = FakeSynth()
     app, clock = app_for(tmp_path, synth=synth, voiceover_prewarm=True)
+    warmed = threading.Event()
+    startup = tuple(app.state.container.startup)
+
+    async def complete_startup() -> None:
+        for hook in startup:
+            await hook()
+        warmed.set()
+
+    app.state.container.startup[:] = [complete_startup]
     with TestClient(app) as client:
-        deadline = datetime.now() + timedelta(seconds=5)
-        while datetime.now() < deadline:  # startup pre-generation runs in the background
-            if client.get("/health").status_code == 200 and synth.requests:
-                break
+        assert warmed.wait(5), "all prewarm results must be persisted before playback"
         with (
             client.websocket_connect("/ws/screen/demo-01") as player,
             client.websocket_connect("/ws/agent") as agent,

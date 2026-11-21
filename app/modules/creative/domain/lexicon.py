@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from collections.abc import Iterable, Mapping
+from functools import lru_cache
 
 from app.modules.creative.domain.angle import Angle
 
@@ -19,13 +20,20 @@ def normalize(text: str) -> str:
     return re.sub(r"\s+", " ", stripped).strip()
 
 
-def contains_term(normalized_text: str, term: str) -> bool:
-    """Word-boundary match of an already-normalized term (a prefix if it ends in `*`)."""
+@lru_cache(maxsize=512)
+def _term_pattern(term: str) -> re.Pattern[str] | None:
+    """Cache bounded matching rules, never the copy being checked or its verdict."""
     needle = normalize(term.rstrip("*"))
     if not needle:
-        return False
+        return None
     tail = r"\w*" if term.endswith("*") else r"(?!\w)"
-    return re.search(rf"(?<!\w){re.escape(needle)}{tail}", normalized_text) is not None
+    return re.compile(rf"(?<!\w){re.escape(needle)}{tail}")
+
+
+def contains_term(normalized_text: str, term: str) -> bool:
+    """Word-boundary match of a normalized term (a prefix if it ends in `*`)."""
+    pattern = _term_pattern(term)
+    return pattern is not None and pattern.search(normalized_text) is not None
 
 
 def any_term(normalized_text: str, terms: Iterable[str]) -> str | None:

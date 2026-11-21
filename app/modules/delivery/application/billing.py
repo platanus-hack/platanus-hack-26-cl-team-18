@@ -24,9 +24,7 @@ from app.modules.common.domain.value_objects.money import Money
 from app.modules.delivery.application.ports.budget import BudgetGate
 from app.modules.delivery.application.ports.ledger import ChargeLedger
 from app.modules.delivery.domain.attention import (
-    Attention,
     LookSample,
-    measure_attention,
     seconds_of,
 )
 from app.modules.delivery.domain.charge import (
@@ -36,6 +34,7 @@ from app.modules.delivery.domain.charge import (
     ChargeReason,
     price_play,
 )
+from app.modules.delivery.domain.validity import ValidatedAttention, validate_attention
 
 # Attention samples older than this are useless for any play still reporting.
 SAMPLE_RETENTION = timedelta(minutes=10)
@@ -68,7 +67,7 @@ class PlayRecord:
 class Receipt:
     play: PlayRecord
     played_s: Decimal
-    attention: Attention
+    attention: ValidatedAttention
     charges: tuple[Charge, ...]
 
     @property
@@ -87,10 +86,16 @@ class AttentionLog:
         self._lock = Lock()
         self._samples: dict[str, deque[LookSample]] = {}
 
-    def record(self, screen_id: str, at: datetime, looking: Iterable[str]) -> None:
+    def record(
+        self,
+        screen_id: str,
+        at: datetime,
+        looking: Iterable[str],
+        far: Iterable[str] = (),
+    ) -> None:
         with self._lock:
             samples = self._samples.setdefault(screen_id, deque())
-            samples.append(LookSample(at=at, looking=frozenset(looking)))
+            samples.append(LookSample(at=at, looking=frozenset(looking), far=frozenset(far)))
             while samples and samples[0].at < at - SAMPLE_RETENTION:
                 samples.popleft()
 
@@ -157,7 +162,8 @@ class DeliveryDesk:
             start = max(started_at, play.aired_at, self._billed_until.get(creative_id, started_at))
             if start >= ended_at:
                 return None
-            attention = measure_attention(
+            # Invalid-attention filtering runs before any money is computed.
+            attention = validate_attention(
                 self.attention.samples(screen_id), start=start, end=ended_at
             )
             priced_slots = price_play(play.slots, attention.attention_seconds)

@@ -1,51 +1,34 @@
-import {
-    ConsoleOutboundSchema,
-    type ConsoleOutbound,
-    type ExclusionReason,
-    type SegmentMatchKind,
-} from "@/contract";
+import { ConsoleOutboundSchema, type ConsoleOutbound } from "@/contract";
 import { backendWsUrl } from "@/lib/config";
+import { decimalCl, moneyCl } from "@/lib/format";
 import { createStore, useStore } from "@/lib/store";
-import { TypedSocket, type ConnectionState } from "@/lib/ws/typed-socket";
-import { Empty, Panel } from "@/shared/ui/Panel";
-import { StatusBadge, type Tone } from "@/shared/ui/StatusBadge";
-import { WorkspaceHeader } from "@/shared/ui/WorkspaceHeader";
+import { TypedSocket } from "@/lib/ws/typed-socket";
+import { Badge } from "@/shared/ui/badge";
+import { Button } from "@/shared/ui/button";
+import { Card } from "@/shared/ui/card";
+import { Metric } from "@/shared/ui/metric";
+import { AppShell, EmptyState, PageHeader } from "@/shared/ui/page";
+import { Panel } from "@/shared/ui/Panel";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/shared/ui/table";
 import { Monitor } from "lucide-react";
 import { useEffect, useState } from "react";
 import { consoleReducer, initialConsoleState, type ScreenView } from "./console-state";
+import {
+    affinityRoutes,
+    CONNECTION,
+    count,
+    DEGRADATION,
+    EXCLUSION,
+    money,
+    ms,
+    signedPct,
+    SOURCE,
+    stepLabel,
+} from "./labels";
 import { LiveInputStatus } from "./LiveInputStatus";
 import { coBrandLift, percentile, serverDecisionMs, traceSteps } from "./metrics";
 
-const CONNECTION: Record<ConnectionState["status"], { tone: Tone; label: string }> = {
-    open: { tone: "success", label: "Live" },
-    connecting: { tone: "info", label: "Connecting" },
-    reconnecting: { tone: "warning", label: "Reconnecting" },
-    closed: { tone: "danger", label: "Offline" },
-};
-
-const EXCLUSION_LABEL: Record<ExclusionReason, string> = {
-    competitor: "Competitor",
-    safety: "Minor safety",
-    budget: "Budget",
-    below_reserve: "Below reserve",
-    no_layout: "No layout",
-    not_partner: "Not a partner",
-    out_of_stock: "Out of stock",
-    inactive: "Inactive",
-    no_basket_offer: "No basket offer",
-    outbid: "Outbid",
-    invalid_bid: "Invalid bid",
-};
-
-const MATCH_LABEL: Record<SegmentMatchKind, string> = {
-    exact: "exact",
-    broader: "broader",
-    narrower: "narrower",
-    related: "related",
-};
-
-const fmtMs = (value: number | null) =>
-    value === null ? "—" : value === 0 ? "<1 ms" : `${Math.round(value)} ms`;
+const pct = (ratio: number) => `${Math.round(ratio * 100)} %`;
 
 const DEMO_BRANDS: Readonly<Record<string, string>> = {
     "cafe-patio": "Café Patio",
@@ -86,152 +69,145 @@ export function ConsolePage() {
     );
 
     return (
-        <div className="paper-theme">
-            <WorkspaceHeader />
-            <main className="workspace-content flex flex-col gap-6">
-                <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-6">
-                    <div>
-                        <p className="eyebrow mb-2">Operación en vivo</p>
-                        <h1 className="page-heading">Console</h1>
-                        <p className="mt-2 text-body text-muted">
-                            Cada momento. Cada decisión. Cada segundo de atención.
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                        {lastError && <StatusBadge tone="danger" label={lastError} />}
-                        <StatusBadge tone={tone} label={label} />
-                    </div>
-                </header>
-                <LiveInputStatus screen={screenFilter ?? "demo-01"} />
-                {shownScreens.length === 0 ? (
-                    <Panel title="Waiting for screens">
-                        <div className="flex flex-col items-center gap-4 py-14 text-center">
-                            <span className="workspace-mark">
-                                <Monitor className="size-5" aria-hidden />
-                            </span>
-                            <div>
-                                <p className="mb-2 text-section font-medium">
-                                    Todo listo para el próximo momento
-                                </p>
-                                <Empty>
-                                    No screen activity yet. Start the agent or the simulator.
-                                </Empty>
-                            </div>
-                            <a
-                                className="rounded-control border border-border px-4 py-2 text-body text-accent hover:bg-accent-soft"
-                                href="/screen?id=demo-01"
-                            >
-                                Abrir pantalla
-                            </a>
-                        </div>
-                    </Panel>
-                ) : (
-                    shownScreens.map(([screenId, view]) => (
-                        <ScreenRow key={screenId} screenId={screenId} view={view} />
-                    ))
-                )}
-            </main>
-        </div>
+        <AppShell>
+            <PageHeader
+                title="Consola"
+                actions={
+                    <>
+                        {lastError && (
+                            <Badge tone="danger" appearance="soft" title={lastError}>
+                                Error del servidor
+                            </Badge>
+                        )}
+                        <Badge tone={tone} appearance="soft">
+                            {label}
+                        </Badge>
+                    </>
+                }
+            />
+            <LiveInputStatus screen={screenFilter ?? "demo-01"} />
+            {shownScreens.length === 0 ? (
+                <Card>
+                    <EmptyState
+                        icon={<Monitor />}
+                        title="Sin pantallas activas"
+                        description="Inicia el agente o el simulador para ver la primera decisión."
+                        action={
+                            <Button asChild size="sm">
+                                <a href="/screen?id=demo-01">Abrir pantalla</a>
+                            </Button>
+                        }
+                    />
+                </Card>
+            ) : (
+                shownScreens.map(([screenId, view]) => (
+                    <ScreenSection key={screenId} screenId={screenId} view={view} />
+                ))
+            )}
+        </AppShell>
     );
 }
 
-function ScreenRow({ screenId, view }: { screenId: string; view: ScreenView }) {
-    const moment = view.moment;
-    const auction = view.auction?.moment_id === moment?.moment_id ? view.auction : null;
-    const redemption = view.redemptions[0];
+function ScreenSection({ screenId, view }: { screenId: string; view: ScreenView }) {
     return (
-        <div className="grid gap-4 lg:grid-cols-[1fr_1.4fr_1fr]">
-            {moment && (
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-container border border-border bg-surface p-4 text-section lg:col-span-3">
-                    <strong>{moment.looking} mirando</strong>
-                    {auction && (
-                        <>
-                            <span aria-hidden>→</span>
-                            <span>
-                                {auction.swap === "held" ? "Próximo: " : ""}
-                                {auction.winners.map((winner) => winner.brand_name).join(" + ") ||
-                                    "Anuncio de la tienda"}
-                            </span>
-                            {auction.offer && (
-                                <strong className="tabular-nums">
-                                    {auction.offer.label} · $
-                                    {Number(auction.offer.price.amount).toLocaleString("es-CL")}
-                                </strong>
-                            )}
-                        </>
-                    )}
-                    {redemption && (
-                        <StatusBadge
-                            tone="success"
-                            label={`Último canje · ${redemption.brands.length} marcas acreditadas · ${redemption.code}`}
-                        />
-                    )}
-                </div>
-            )}
-            <MomentPanel screenId={screenId} view={view} />
-            <AuctionPanel view={view} />
-            <LatencyPanel view={view} />
-            <ReceiptPanel view={view} />
-            <MarketPanel view={view} />
-            {view.degradation.length > 0 && (
-                <div className="flex flex-wrap gap-2 lg:col-span-3">
-                    {view.degradation.map((flag) => (
-                        <StatusBadge key={flag} tone="warning" label={flag.replaceAll("_", " ")} />
-                    ))}
-                </div>
-            )}
-        </div>
+        <section aria-label={`Pantalla ${screenId}`} className="flex flex-col gap-4">
+            <div className="flex flex-wrap items-center gap-3">
+                <h2 className="text-compact text-muted">
+                    Pantalla <span className="font-mono text-fg">{screenId}</span>
+                </h2>
+                {view.degradation.map((flag) => (
+                    <Badge key={flag} tone="warning">
+                        {DEGRADATION[flag]}
+                    </Badge>
+                ))}
+            </div>
+            <Headline view={view} />
+            <div className="grid gap-4 lg:grid-cols-[1fr_1.4fr_1fr]">
+                <AudiencePanel view={view} />
+                <AuctionPanel view={view} />
+                <LatencyPanel view={view} />
+                <ReceiptPanel view={view} />
+                <MarketPanel view={view} />
+            </div>
+        </section>
     );
 }
 
-function MomentPanel({ screenId, view }: { screenId: string; view: ScreenView }) {
+/** The four numbers the demo is judged on, in one row. */
+function Headline({ view }: { view: ScreenView }) {
+    const a = view.auction?.moment_id === view.moment?.moment_id ? view.auction : null;
+    const revenueLift =
+        a?.bundle_revenue && a.single_brand_revenue && a.winners.length > 1
+            ? coBrandLift(a.bundle_revenue.amount, a.single_brand_revenue.amount)
+            : null;
+    const p50 = percentile(view.glassToGlassMs, 50);
+    // Session total: presentation only (ADR 0008 D5); each amount stays a decimal string.
+    const billed = view.receipts.reduce((sum, r) => sum + Number(r.total.amount), 0);
+    return (
+        <Card className="grid grid-cols-2 gap-6 p-4 md:grid-cols-4">
+            <Metric label="Cobertura de la audiencia" value={a ? pct(a.coverage) : "—"} />
+            <Metric
+                label="Ingreso vs. una sola marca"
+                value={revenueLift === null ? "—" : signedPct(revenueLift)}
+            />
+            <Metric
+                label="Cámara a pantalla (p50)"
+                value={ms(p50)}
+                tone={p50 !== null && p50 > 1500 ? "warning" : "default"}
+                hint={p50 !== null && p50 > 1500 ? "Sobre la meta de 1,5 s" : undefined}
+            />
+            <Metric label="Cobrado en la sesión" value={moneyCl(String(billed))} />
+        </Card>
+    );
+}
+
+function AudiencePanel({ view }: { view: ScreenView }) {
     const m = view.moment;
     return (
         <Panel
-            title={`Audience · ${screenId}`}
-            aside={
-                m && (
-                    <span className="text-metadata text-muted tabular-nums">
-                        {m.people} people · {m.looking} looking
-                    </span>
-                )
-            }
+            title="Audiencia"
+            aside={m && `${count(m.people, "persona", "personas")} · ${m.looking} mirando`}
         >
             {!m ? (
-                <Empty>No moment yet.</Empty>
+                <p className="text-compact text-muted">Sin momento todavía.</p>
             ) : (
-                <ul className="flex flex-col gap-2">
+                <ul className="flex flex-col gap-3">
                     {m.held_products.map((product) => (
                         <li key={`${product.brand_ref ?? ""}:${product.category}`}>
-                            <StatusBadge
-                                tone="info"
-                                label={`En mano · ${(product.brand_ref && DEMO_BRANDS[product.brand_ref]) || product.brand_ref || product.category}`}
-                            />
+                            <Badge tone="info" appearance="soft">
+                                En mano ·{" "}
+                                {(product.brand_ref && DEMO_BRANDS[product.brand_ref]) ||
+                                    product.brand_ref ||
+                                    product.category}
+                            </Badge>
                         </li>
                     ))}
                     {m.minor_likely.value && (
                         <li>
-                            <StatusBadge
+                            <Badge
                                 tone="warning"
-                                label="Protección de menores: alcohol y categorías restringidas bloqueados"
-                            />
+                                appearance="soft"
+                                className="rounded-container whitespace-normal"
+                            >
+                                Posible menor: categorías restringidas bloqueadas
+                            </Badge>
                         </li>
                     )}
                     {m.segments.length === 0 && (
-                        <li className="text-muted">No matching segments</li>
+                        <li className="text-compact text-muted">Sin intereses detectados.</li>
                     )}
                     {m.segments.map((s) => (
-                        <li key={s.segment_id} className="flex flex-col gap-1">
-                            <div className="flex justify-between gap-2">
+                        <li key={s.segment_id} className="flex flex-col gap-1.5">
+                            <div className="flex justify-between gap-2 text-compact">
                                 <span>{s.label}</span>
-                                <span className="text-metadata text-muted tabular-nums">
-                                    {Math.round(s.score * 100)}% · {s.sources.join(", ")}
+                                <span className="text-muted tabular-nums">
+                                    {pct(s.score)} · {s.sources.map((x) => SOURCE[x]).join(", ")}
                                 </span>
                             </div>
-                            <div className="h-1.5 rounded-control bg-surface-raised">
+                            <div className="h-0.5 rounded-full bg-border-subtle">
                                 <div
-                                    className="h-full rounded-control bg-accent"
-                                    style={{ width: `${Math.round(s.score * 100)}%` }}
+                                    className="h-full rounded-full bg-accent"
+                                    style={{ width: pct(s.score).replace(" ", "") }}
                                 />
                             </div>
                         </li>
@@ -245,108 +221,94 @@ function MomentPanel({ screenId, view }: { screenId: string; view: ScreenView })
 function AuctionPanel({ view }: { view: ScreenView }) {
     const a = view.auction?.moment_id === view.moment?.moment_id ? view.auction : null;
     const lift = a ? coBrandLift(a.bundle_value.amount, a.single_brand_value.amount) : null;
-    // Like-for-like revenue lift (R-O3); shown only when it is real (D6).
-    const revenueLift =
-        a?.bundle_revenue && a.single_brand_revenue
-            ? coBrandLift(a.bundle_revenue.amount, a.single_brand_revenue.amount)
-            : null;
     const holdUntil = a?.swap === "held" ? a.trace.swap_not_before : null;
     return (
-        <Panel
-            title="Bundle auction"
-            aside={
-                a &&
-                Boolean(view.moment?.segments.length) && (
-                    <span className="text-metadata text-muted tabular-nums">
-                        Viewer coverage (est.) {Math.round(a.coverage * 100)}%
-                    </span>
-                )
-            }
-        >
+        <Panel title="Subasta" aside={a && count(a.bids.length, "puja", "pujas")}>
             {!a ? (
-                <Empty>No auction yet.</Empty>
+                <p className="text-compact text-muted">Sin subasta todavía.</p>
             ) : (
-                <div className="flex flex-col gap-3">
-                    {holdUntil && (
-                        <StatusBadge
-                            tone="neutral"
-                            label={`Swapping at ${new Date(holdUntil).toLocaleTimeString()} (min ad time)`}
-                        />
-                    )}
+                <div className="flex flex-col gap-4">
                     {a.winners.length === 0 ? (
-                        <StatusBadge tone="neutral" label="No fill: house ad" />
+                        <Badge appearance="soft">Sin ganador: aviso de la casa</Badge>
                     ) : (
-                        a.winners.map((w) => (
-                            <div key={w.campaign_id} className="flex justify-between">
-                                <span className="font-medium">{w.brand_name}</span>
-                                <span className="tabular-nums">
-                                    Clears at {w.price_per_as.amount} {w.price_per_as.currency}/AS
-                                </span>
-                            </div>
-                        ))
-                    )}
-                    <div className="flex flex-wrap justify-between gap-2 border-t border-border pt-2 text-metadata text-muted tabular-nums">
-                        <span>
-                            Bundle value {a.bundle_value.amount} {a.bundle_value.currency} · Best
-                            solo {a.single_brand_value.amount} {a.single_brand_value.currency}
-                        </span>
-                        {a.winners.length > 1 && lift !== null && (
-                            <StatusBadge
-                                tone="success"
-                                label={`+${(lift * 100).toFixed(0)}% value vs. solo`}
-                            />
-                        )}
-                        {a.winners.length > 1 && revenueLift !== null && revenueLift > 0 && (
-                            <StatusBadge
-                                tone="success"
-                                label={`+${(revenueLift * 100).toFixed(0)}% revenue vs. solo`}
-                            />
-                        )}
-                    </div>
-                    {a.bids.length > 0 && (
-                        <ul
-                            className="flex flex-col gap-2 border-t border-border pt-2"
-                            aria-label="Bids"
-                        >
-                            {a.bids.map((bid) => {
-                                const exclusion = a.exclusions.find(
-                                    (e) => e.campaign_id === bid.campaign_id,
-                                );
-                                const approximate = bid.matches.filter((m) => m.kind !== "exact");
-                                return (
-                                    <li
-                                        key={bid.campaign_id}
-                                        className="flex flex-wrap items-center justify-between gap-2 text-metadata"
-                                    >
-                                        <span>{bid.brand_name}</span>
-                                        <span className="ml-auto text-muted tabular-nums">
-                                            Bid {bid.bid_per_as.amount} {bid.bid_per_as.currency}/AS
-                                        </span>
-                                        {approximate.length > 0 && (
-                                            <span
-                                                className="basis-full text-muted"
-                                                aria-label="Matched by segment affinity"
-                                            >
-                                                {approximate
-                                                    .map(
-                                                        (m) =>
-                                                            `via ${m.bid_segment_label || m.bid_segment_id} → ${m.segment_label || m.segment_id} · ${MATCH_LABEL[m.kind]} ${Math.round(m.weight * 100)}%`,
-                                                    )
-                                                    .join(" · ")}
-                                            </span>
-                                        )}
-                                        {exclusion && (
-                                            <span title={exclusion.detail || undefined}>
-                                                <StatusBadge
-                                                    tone="warning"
-                                                    label={EXCLUSION_LABEL[exclusion.reason]}
-                                                />
-                                            </span>
-                                        )}
-                                    </li>
-                                );
-                            })}
+                        <ul className="flex flex-col gap-1">
+                            {a.winners.map((w) => (
+                                <li key={w.campaign_id} className="flex justify-between gap-2">
+                                    <span className="font-semibold">{w.brand_name}</span>
+                                    <span className="tabular-nums">
+                                        {money(w.price_per_as)}
+                                        <span className="text-muted"> por s de atención</span>
+                                    </span>
+                                </li>
+                            ))}
                         </ul>
+                    )}
+                    {holdUntil && (
+                        <p className="text-compact text-muted">
+                            Cambia a las {new Date(holdUntil).toLocaleTimeString("es-CL")} por el
+                            tiempo mínimo en pantalla.
+                        </p>
+                    )}
+                    <p className="text-compact text-muted tabular-nums">
+                        Valor de la canasta {money(a.bundle_value)} · mejor marca sola{" "}
+                        {money(a.single_brand_value)}
+                        {a.winners.length > 1 && lift !== null && (
+                            <span className={lift < 0 ? "text-warning" : "text-success"}>
+                                {" "}
+                                ({signedPct(lift)})
+                            </span>
+                        )}
+                    </p>
+                    {a.bids.length > 0 && (
+                        <Table aria-label="Pujas">
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Marca</TableHead>
+                                    <TableHead className="text-right">Puja</TableHead>
+                                    <TableHead>Resultado</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {a.bids.map((bid) => {
+                                    const exclusion = a.exclusions.find(
+                                        (e) => e.campaign_id === bid.campaign_id,
+                                    );
+                                    const won = a.winners.some(
+                                        (w) => w.campaign_id === bid.campaign_id,
+                                    );
+                                    const routes = affinityRoutes(bid.matches);
+                                    return (
+                                        <TableRow key={bid.campaign_id}>
+                                            <TableCell>
+                                                {bid.brand_name}
+                                                {routes && (
+                                                    <span
+                                                        className="block text-metadata text-muted"
+                                                        aria-label="Coincidencia por afinidad de segmento"
+                                                    >
+                                                        {routes}
+                                                    </span>
+                                                )}
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                {money(bid.bid_per_as)}
+                                            </TableCell>
+                                            <TableCell title={exclusion?.detail || undefined}>
+                                                {exclusion ? (
+                                                    <Badge tone="warning">
+                                                        {EXCLUSION[exclusion.reason]}
+                                                    </Badge>
+                                                ) : won ? (
+                                                    <Badge tone="success">Gana</Badge>
+                                                ) : (
+                                                    <Badge>Pierde</Badge>
+                                                )}
+                                            </TableCell>
+                                        </TableRow>
+                                    );
+                                })}
+                            </TableBody>
+                        </Table>
                     )}
                 </div>
             )}
@@ -355,64 +317,52 @@ function AuctionPanel({ view }: { view: ScreenView }) {
 }
 
 function LatencyPanel({ view }: { view: ScreenView }) {
-    const p50 = percentile(view.glassToGlassMs, 50);
     const p95 = percentile(view.glassToGlassMs, 95);
     const steps = view.lastTrace ? traceSteps(view.lastTrace) : [];
     const decisionMs = view.lastTrace ? serverDecisionMs(view.lastTrace) : null;
     const perception = view.lastTrace?.perception;
     return (
-        <Panel
-            title="Latency"
-            aside={
-                decisionMs !== null && (
-                    <span className="text-metadata text-muted">
-                        Server decision {fmtMs(decisionMs)}
-                    </span>
-                )
-            }
-        >
+        <Panel title="Latencia" aside={decisionMs !== null && `Decisión ${ms(decisionMs)}`}>
             {perception && (
-                <dl className="mb-3 grid grid-cols-2 gap-x-6 gap-y-1 text-metadata tabular-nums">
+                <dl className="mb-3 grid grid-cols-2 gap-x-6 gap-y-1 text-compact tabular-nums">
                     <dt className="text-muted">Detector</dt>
                     <dd>{perception.detector}</dd>
-                    <dt className="text-muted">Inference + fallback</dt>
-                    <dd>{fmtMs(perception.inference_ms)}</dd>
+                    <dt className="text-muted">Inferencia + respaldo</dt>
+                    <dd>{ms(perception.inference_ms)}</dd>
                     {perception.round_trip_ms !== null && (
                         <>
-                            <dt className="text-muted">GPU round trip</dt>
-                            <dd>{fmtMs(perception.round_trip_ms)}</dd>
+                            <dt className="text-muted">Ida y vuelta GPU</dt>
+                            <dd>{ms(perception.round_trip_ms)}</dd>
                         </>
                     )}
                     {perception.primary_attempt_ms !== null && (
                         <>
-                            <dt className="text-muted">GPU attempt before fallback</dt>
-                            <dd>{fmtMs(perception.primary_attempt_ms)}</dd>
+                            <dt className="text-muted">Intento GPU antes del respaldo</dt>
+                            <dd>{ms(perception.primary_attempt_ms)}</dd>
                         </>
                     )}
                 </dl>
             )}
-            {view.glassToGlassMs.length > 0 && (
-                <div className="flex gap-6">
-                    <Kpi
-                        label="Glass-to-glass p50"
-                        value={fmtMs(p50)}
-                        tone={p50 !== null && p50 > 1500 ? "warning" : "neutral"}
-                    />
-                    <Kpi
-                        label="Glass-to-glass p95"
-                        value={fmtMs(p95)}
-                        tone={p95 !== null && p95 > 2500 ? "warning" : "neutral"}
-                    />
-                </div>
+            {steps.length === 0 ? (
+                <p className="text-compact text-muted">Sin mediciones todavía.</p>
+            ) : (
+                <>
+                    <ol className="flex flex-col gap-1 text-compact tabular-nums">
+                        {steps.map((s) => (
+                            <li key={s.step} className="flex justify-between">
+                                <span className="text-muted">{stepLabel(s.step)}</span>
+                                <span>{s.deltaMs > 0 ? `+${s.deltaMs}` : s.deltaMs} ms</span>
+                            </li>
+                        ))}
+                    </ol>
+                    <p className="mt-3 border-t border-border-subtle pt-3 text-compact text-muted tabular-nums">
+                        p95 cámara a pantalla{" "}
+                        <span className={p95 !== null && p95 > 2500 ? "text-warning" : "text-fg"}>
+                            {ms(p95)}
+                        </span>
+                    </p>
+                </>
             )}
-            <ol className="mt-3 flex flex-col gap-1 text-metadata tabular-nums">
-                {steps.map((s) => (
-                    <li key={s.step} className="flex justify-between">
-                        <span className="text-muted">{s.step}</span>
-                        <span>{s.deltaMs > 0 ? `+${s.deltaMs}` : s.deltaMs} ms</span>
-                    </li>
-                ))}
-            </ol>
         </Panel>
     );
 }
@@ -420,42 +370,38 @@ function LatencyPanel({ view }: { view: ScreenView }) {
 /** The last moment receipt: who looked, for how long, and what each brand paid. */
 function ReceiptPanel({ view }: { view: ScreenView }) {
     const [last] = view.receipts;
-    // Session total: presentation only (ADR 0008 D5); each amount stays a decimal string.
-    const session = view.receipts.reduce((sum, r) => sum + Number(r.total.amount), 0);
     return (
-        <Panel
-            title="Moment receipt"
-            aside={
-                view.receipts.length > 0 && (
-                    <span className="text-metadata text-muted tabular-nums">
-                        Session {session} {last?.total.currency}
-                    </span>
-                )
-            }
-        >
+        <Panel title="Recibo del momento" className="lg:col-span-1">
             {!last ? (
-                <Empty>No play has been billed yet.</Empty>
+                <p className="text-compact text-muted">Ningún aviso cobrado todavía.</p>
             ) : (
-                <div className="flex flex-col gap-2">
-                    <p className="tabular-nums">
-                        {last.people} people · {last.looking} looked · {last.attention_seconds} AS ·{" "}
-                        {last.played_s} s on screen
+                <div className="flex flex-col gap-3">
+                    <p className="text-compact text-muted tabular-nums">
+                        {count(last.people, "persona", "personas")} · {last.looking} miraron ·{" "}
+                        {decimalCl(last.attention_seconds, 1)} s de atención ·{" "}
+                        {decimalCl(last.played_s, 1)} s al aire
                     </p>
+                    {last.filtered.length > 0 && (
+                        <p className="text-metadata text-muted tabular-nums">
+                            No cobrado:{" "}
+                            {last.filtered.map((f) => `${f.reason} ${f.seconds} s`).join(" · ")}
+                        </p>
+                    )}
                     {last.total.amount === "0" ? (
-                        <StatusBadge tone="info" label="Charged $0: nobody looked" />
+                        <Badge tone="info" appearance="soft">
+                            Cobrado $0: nadie miró
+                        </Badge>
                     ) : (
-                        <ul className="flex flex-col gap-1">
+                        <ul className="flex flex-col gap-1 text-compact tabular-nums">
                             {last.charges.map((c) => (
-                                <li
-                                    key={c.campaign_id}
-                                    className="flex justify-between tabular-nums"
-                                >
+                                <li key={c.campaign_id} className="flex justify-between gap-2">
                                     <span>{c.brand_name}</span>
                                     <span>
-                                        {c.attention_seconds} AS × {c.price_per_as.amount} ={" "}
-                                        <strong>
-                                            ${c.amount.amount} {c.amount.currency}
-                                        </strong>
+                                        <span className="text-muted">
+                                            {decimalCl(c.attention_seconds, 1)} s ×{" "}
+                                            {money(c.price_per_as)} ={" "}
+                                        </span>
+                                        <span className="font-semibold">{money(c.amount)}</span>
                                     </span>
                                 </li>
                             ))}
@@ -464,13 +410,15 @@ function ReceiptPanel({ view }: { view: ScreenView }) {
                 </div>
             )}
             {view.redemptions.length > 0 && (
-                <ul className="mt-3 flex flex-col gap-1" aria-label="Redemptions">
+                <ul
+                    className="mt-3 flex flex-col gap-1 border-t border-border-subtle pt-3"
+                    aria-label="Canjes"
+                >
                     {view.redemptions.map((r) => (
                         <li key={`${r.code}:${r.redeemed_at}`}>
-                            <StatusBadge
-                                tone="success"
-                                label={`Canjeado · ${r.brands.join(" + ")} · ${r.code}`}
-                            />
+                            <Badge tone="success">
+                                Canje {r.code} · {r.brands.join(" + ")}
+                            </Badge>
                         </li>
                     ))}
                 </ul>
@@ -479,63 +427,53 @@ function ReceiptPanel({ view }: { view: ScreenView }) {
     );
 }
 
-/** Live bids (the bidding war), stock (the clerk) and budgets (reserved while on air). */
+/** Live bids, stock and budgets (reserved while on air). */
 function MarketPanel({ view }: { view: ScreenView }) {
     const book = view.book;
     return (
-        <Panel
-            title="Market"
-            aside={<span className="text-metadata text-muted">/advertiser · /clerk</span>}
-        >
+        <Panel title="Mercado" className="lg:col-span-2">
             {!book ? (
-                <Empty>The book appears after the first decision.</Empty>
+                <p className="text-compact text-muted">Sin datos del mercado todavía.</p>
             ) : (
-                <table className="w-full text-metadata tabular-nums">
-                    <thead className="text-muted">
-                        <tr>
-                            <th className="text-left font-normal">Brand</th>
-                            <th className="text-right font-normal">Bid ×</th>
-                            <th className="text-right font-normal">Spent</th>
-                            <th className="text-right font-normal">Held</th>
-                            <th className="text-right font-normal">Left</th>
-                        </tr>
-                    </thead>
-                    <tbody>
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Marca</TableHead>
+                            <TableHead>Estado</TableHead>
+                            <TableHead className="text-right">Puja</TableHead>
+                            <TableHead className="text-right">Gastado</TableHead>
+                            <TableHead className="text-right">Reservado</TableHead>
+                            <TableHead className="text-right">Disponible</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
                         {book.lines.map((l) => (
-                            <tr key={l.campaign_id}>
-                                <td>
-                                    {l.brand_name}
-                                    {l.on_air && <span className="ml-1 text-success">●</span>}
-                                    {!l.in_stock && (
-                                        <span className="ml-1 text-warning">out of stock</span>
+                            <TableRow key={l.campaign_id}>
+                                <TableCell className="font-medium">{l.brand_name}</TableCell>
+                                <TableCell>
+                                    {!l.in_stock ? (
+                                        <Badge tone="danger">Sin stock</Badge>
+                                    ) : l.on_air ? (
+                                        <Badge tone="success">Al aire</Badge>
+                                    ) : (
+                                        <Badge>En espera</Badge>
                                     )}
-                                </td>
-                                <td className="text-right">{l.multiplier}</td>
-                                <td className="text-right">{l.spent.amount}</td>
-                                <td className="text-right">{l.reserved.amount}</td>
-                                <td className="text-right">{l.remaining.amount}</td>
-                            </tr>
+                                </TableCell>
+                                <TableCell
+                                    className="text-right"
+                                    title={l.autobid_reason ?? undefined}
+                                >
+                                    ×{decimalCl(l.multiplier, 1)}
+                                    {l.autobid && <Badge tone="info">auto</Badge>}
+                                </TableCell>
+                                <TableCell className="text-right">{money(l.spent)}</TableCell>
+                                <TableCell className="text-right">{money(l.reserved)}</TableCell>
+                                <TableCell className="text-right">{money(l.remaining)}</TableCell>
+                            </TableRow>
                         ))}
-                    </tbody>
-                </table>
+                    </TableBody>
+                </Table>
             )}
         </Panel>
-    );
-}
-
-function Kpi({ label, value, tone }: { label: string; value: string; tone: Tone }) {
-    return (
-        <div className="flex flex-col">
-            <span className="text-metadata text-muted uppercase">{label}</span>
-            <span
-                className={
-                    tone === "warning"
-                        ? "text-kpi font-semibold text-warning tabular-nums"
-                        : "text-kpi font-semibold tabular-nums"
-                }
-            >
-                {value}
-            </span>
-        </div>
     );
 }

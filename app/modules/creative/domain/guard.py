@@ -11,6 +11,7 @@ import re
 import unicodedata
 from dataclasses import dataclass
 from enum import StrEnum
+from functools import lru_cache
 
 from app.modules.common.domain.primitives.specification import Specification
 from app.modules.creative.domain.brief import CreativeBrief
@@ -86,13 +87,19 @@ _LOUD_PUNCTUATION = re.compile(r"[!¡…—]|\.\.\.")
 _SOCIAL = re.compile(r"\b(?:instagram|insta|tiktok|facebook|whatsapp|twitter|youtube)\b")
 
 
-def brand_mentioned(normalized: str, name: str) -> bool:
-    """A brand at a word start, letters possibly split by separators ("R-a-y-o", "Rayos")."""
+@lru_cache(maxsize=256)
+def _brand_pattern(name: str) -> re.Pattern[str] | None:
     letters = [ch for ch in normalize(name) if ch.isalnum()]
     if not letters:
-        return False
+        return None
     pattern = r"[\W_]*".join(re.escape(ch) for ch in letters)
-    return re.search(rf"(?<![a-z0-9]){pattern}", normalized) is not None
+    return re.compile(rf"(?<![a-z0-9]){pattern}")
+
+
+def brand_mentioned(normalized: str, name: str) -> bool:
+    """A brand at a word start, letters possibly split by separators ("R-a-y-o", "Rayos")."""
+    pattern = _brand_pattern(name)
+    return pattern is not None and pattern.search(normalized) is not None
 
 
 _LINK = re.compile(r"https?://|www\.|\.(?:cl|com|net)\b|@\w|\+?\d[\d\s-]{7,}\d")
@@ -187,6 +194,15 @@ def check_copy(draft: CopyDraft, brief: CreativeBrief) -> GuardVerdict:
         )
     )
     approved_price = _digits(str(offer.price.amount)) if offer else None
+    basket = {normalize(name) for name in brief.names}
+    competitors = tuple(
+        name
+        for name in sorted(brief.avoid_names | set(KNOWN_BRANDS))
+        if normalize(name) not in basket
+    )
+    allowed_party = party_mentions(approved_text)
+    if brief.addressed_party is not None:
+        allowed_party.add(brief.addressed_party)
 
     for where, text in lines.items():
         norm = normalize(text)
@@ -224,9 +240,8 @@ def check_copy(draft: CopyDraft, brief: CreativeBrief) -> GuardVerdict:
                         kind=ViolationKind.UNAPPROVED_CLAIM, where=where, detail=match.group(0)
                     )
                 )
-        basket = {normalize(n) for n in brief.names}
-        for name in sorted(brief.avoid_names | set(KNOWN_BRANDS)):
-            if normalize(name) not in basket and brand_mentioned(norm, name):
+        for name in competitors:
+            if brand_mentioned(norm, name):
                 out.append(Violation(kind=ViolationKind.COMPETITOR_NAME, where=where, detail=name))
         if _SOCIAL.search(norm):
             out.append(Violation(kind=ViolationKind.CONTACT_OR_LINK, where=where, detail="social"))
@@ -252,9 +267,6 @@ def check_copy(draft: CopyDraft, brief: CreativeBrief) -> GuardVerdict:
             out.append(Violation(kind=ViolationKind.SENSITIVE_INFERENCE, where=where, detail=term))
         # Only the exact group the offer is priced for may be named (or numbers the brand
         # itself put in the offer label/text): never "Para los 5" next to a 4-pack price.
-        allowed_party = party_mentions(approved_text)
-        if brief.addressed_party is not None:
-            allowed_party.add(brief.addressed_party)
         for size in sorted(party_mentions(norm) - allowed_party):
             out.append(
                 Violation(kind=ViolationKind.PARTY_MISMATCH, where=where, detail=f"says {size}")

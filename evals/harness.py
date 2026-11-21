@@ -307,15 +307,15 @@ def _check(source: str, step: int, expect: Expect, d: Decision) -> list[Check]:
             checks.append(
                 check(f"no_bid:{brand}", brand not in lines, f"{brand} bid on this moment")
             )
-        for brand, specs in expect.matches.items():
-            line = lines.get(brand)
-            got = sorted(_match_specs(line)) if line is not None else []
-            for spec in specs:
+        for brand, wanted in expect.matches.items():
+            bid_line = lines.get(brand)
+            matched = sorted(_match_specs(bid_line)) if bid_line is not None else []
+            for match in wanted:
                 checks.append(
                     check(
-                        f"match:{brand}:{spec}",
-                        spec in got,
-                        f"got {got or 'no bid'}, want {spec}",
+                        f"match:{brand}:{match}",
+                        match in matched,
+                        f"got {matched or 'no bid'}, want {match}",
                     )
                 )
         prices = {w.brand_name: Decimal(w.price_per_as.amount) for w in d.auction.winners}

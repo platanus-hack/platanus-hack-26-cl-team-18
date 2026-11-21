@@ -8,13 +8,14 @@ import {
 } from "@/contract";
 import { CreativeView } from "@/features/screen";
 import { assetUrl, backendHttpUrl } from "@/lib/config";
-import { WorkspaceHeader } from "@/shared/ui/WorkspaceHeader";
+import { Badge } from "@/shared/ui/badge";
+import { Button } from "@/shared/ui/button";
+import { AppShell, PageHeader } from "@/shared/ui/page";
 import {
     ArrowDownToLine,
     ArrowLeftRight,
     ArrowRight,
     Check,
-    ChevronRight,
     Film,
     Image,
     Plus,
@@ -136,7 +137,7 @@ async function readJson(
         throw new Error(
             typeof detail === "string"
                 ? detail
-                : "No pudimos preparar la campaña. Intenta nuevamente.",
+                : "No se pudo preparar la campaña. Inténtalo otra vez.",
         );
     }
     return data;
@@ -145,7 +146,7 @@ async function readJson(
 function explainFailure(reason: unknown): string {
     return reason instanceof Error && reason.name !== "ZodError" && reason.name !== "TypeError"
         ? reason.message
-        : "No pudimos preparar la vista previa. Intenta nuevamente.";
+        : "No se pudo preparar la vista previa. Inténtalo otra vez.";
 }
 
 export function CampaignsPage() {
@@ -238,36 +239,23 @@ export function CampaignsPage() {
         (slug) => catalog?.brands.find((brand) => brand.slug === slug) ?? [],
     );
     return (
-        <main className="paper-theme campaign-studio">
-            <WorkspaceHeader />
-            <div className="studio-page">
-                <div className="studio-breadcrumb">
-                    Workspace <ChevronRight size={13} /> Campañas <ChevronRight size={13} /> Nueva
-                    campaña
-                </div>
-                <section className="studio-heading">
-                    <div>
-                        <p className="eyebrow">NUEVA CAMPAÑA</p>
-                        <h1>
-                            Tú armas la oferta.
-                            <br />
-                            <span>La pantalla elige el momento.</span>
-                        </h1>
-                        <p>
-                            Elige las marcas, la situación y la hora. La vista previa muestra el
-                            anuncio tal como sale en tienda, con el precio aprobado.
-                        </p>
-                    </div>
-                    <button
-                        className="studio-export"
-                        onClick={download}
-                        disabled={
-                            campaign === null || busy || error !== null || brands.length === 0
-                        }
-                    >
-                        <ArrowDownToLine size={17} /> Exportar campaña
-                    </button>
-                </section>
+        <AppShell>
+            <div className="campaign-studio flex flex-col gap-6">
+                <PageHeader
+                    title="Nueva campaña"
+                    description="Elige dos marcas complementarias, el momento y el formato."
+                    actions={
+                        <Button
+                            variant="primary"
+                            onClick={download}
+                            disabled={
+                                campaign === null || busy || error !== null || brands.length === 0
+                            }
+                        >
+                            <ArrowDownToLine size={16} aria-hidden /> Exportar
+                        </Button>
+                    }
+                />
                 <div className="studio-starters" aria-label="Campañas sugeridas">
                     {STARTERS.map((starter) => (
                         <button
@@ -364,17 +352,15 @@ export function CampaignsPage() {
                         )}
                         <div className="studio-partner-note">
                             <ShieldCheck size={16} />
-                            <span>
-                                Solo combinaciones complementarias con una oferta del catálogo.
-                            </span>
+                            <span>Solo se combinan marcas socias con una oferta aprobada.</span>
                         </div>
                         <div className="studio-rule" />
                         <div className="studio-step">
                             <span>02</span>
-                            <h2>El momento</h2>
+                            <h2>Momento</h2>
                         </div>
                         <label className="studio-label" htmlFor="campaign-moment">
-                            ¿Qué está pasando?
+                            Situación
                         </label>
                         <select
                             id="campaign-moment"
@@ -404,7 +390,7 @@ export function CampaignsPage() {
                             ))}
                         </div>
                         <div className="studio-label studio-party-label">
-                            <Users size={14} /> Personas mirando <strong>{party}</strong>
+                            <Users size={14} /> Personas <strong>{party}</strong>
                         </div>
                         <div className="studio-party-options">
                             {[1, 2, 3, 4, 6, 12].map((count) => (
@@ -433,14 +419,15 @@ export function CampaignsPage() {
                                 }}
                             />
                             <span>
-                                Proteger a menores<small>Excluye categorías restringidas</small>
+                                Posible menor
+                                <small>Bloquea alcohol y categorías restringidas</small>
                             </span>
                             <ShieldCheck size={17} />
                         </label>
                         <div className="studio-rule" />
                         <div className="studio-step">
                             <span>03</span>
-                            <h2>El formato</h2>
+                            <h2>Formato</h2>
                         </div>
                         <div className="studio-format">
                             {(["photo", "video"] as const).map((format) => (
@@ -452,17 +439,15 @@ export function CampaignsPage() {
                                     }}
                                 >
                                     {format === "photo" ? <Image size={17} /> : <Film size={17} />}
-                                    {format === "photo" ? "Fotografía" : "Video loop"}
+                                    {format === "photo" ? "Foto" : "Video"}
                                 </button>
                             ))}
                         </div>
                     </aside>
                     <section className="studio-result" aria-label="Vista previa de campaña">
                         <div className="studio-preview-heading">
-                            <span>
-                                <span className="studio-live-dot" /> Vista previa
-                            </span>
-                            <span>16:9 · Pantalla en tienda</span>
+                            <span>Vista previa</span>
+                            <span>16:9</span>
                         </div>
                         <div className="studio-preview" aria-busy={busy}>
                             {campaign && brands.length > 0 ? (
@@ -480,14 +465,12 @@ export function CampaignsPage() {
                                         {brands.length === 0
                                             ? "Selecciona las marcas para empezar."
                                             : error
-                                              ? "Tu campaña estará aquí"
-                                              : "Preparando tu momento…"}
+                                              ? "Sin vista previa"
+                                              : "Cargando…"}
                                     </p>
                                 </div>
                             )}
-                            {busy && campaign && (
-                                <span className="studio-updating">Actualizando…</span>
-                            )}
+                            {busy && campaign && <span className="studio-updating">Cargando…</span>}
                         </div>
                         <div className="studio-preview-bottom">
                             <div className="studio-stages">
@@ -549,9 +532,11 @@ export function CampaignsPage() {
                             </div>
                             <span>
                                 {busy
-                                    ? "Componiendo…"
+                                    ? "Cargando…"
                                     : campaign && !error
-                                      ? `Lista en ${campaign.compose_ms.toFixed(1)} ms`
+                                      ? campaign.compose_ms < 1
+                                          ? "Compuesta en <1 ms"
+                                          : `Compuesta en ${campaign.compose_ms.toFixed(0)} ms`
                                       : "Sin vista previa"}
                             </span>
                         </div>
@@ -563,7 +548,7 @@ export function CampaignsPage() {
                                         setReload((value) => value + 1);
                                     }}
                                 >
-                                    Reintentar <ArrowRight size={14} />
+                                    Reintentar
                                 </button>
                             </div>
                         )}
@@ -590,12 +575,10 @@ export function CampaignsPage() {
                                 <p>
                                     {selected.map((brand) => brand.name).join(" + ")} · {party}{" "}
                                     {party === 1 ? "persona" : "personas"} ·{" "}
-                                    {media === "video"
-                                        ? "Loop de 6 segundos"
-                                        : "Fotografía de producto"}
+                                    {media === "video" ? "Video de 6 s" : "Foto de producto"}
                                 </p>
                             </div>
-                            <span className="studio-draft">Borrador</span>
+                            <Badge appearance="soft">Borrador</Badge>
                         </div>
                         {campaign && !error && (
                             <section className="studio-checks" aria-label="Revisión del anuncio">
@@ -626,12 +609,12 @@ export function CampaignsPage() {
                             </section>
                         )}
                         <p className="studio-disclosure">
-                            Imágenes ilustrativas generadas con IA. El pack exportado es un borrador
-                            para revisión; no activa campañas ni cambia presupuestos.
+                            Imágenes de producto generadas con IA. Logos, precios y textos vienen
+                            del kit de cada marca. Exportar no activa la campaña.
                         </p>
                     </section>
                 </div>
             </div>
-        </main>
+        </AppShell>
     );
 }

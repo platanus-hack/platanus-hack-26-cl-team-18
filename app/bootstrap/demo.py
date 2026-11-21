@@ -1,17 +1,21 @@
 """Compose one screen's live snapshot-to-creative flow and the shared seed market."""
 
+import logging
 from base64 import b64encode
 from collections.abc import Awaitable, Callable, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from decimal import ROUND_CEILING, Decimal
 from pathlib import Path
-from threading import RLock
+from threading import Lock, RLock
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
+from app.bootstrap import demo_catalog
+from app.bootstrap.demo_catalog import wordmark
 from app.bootstrap.demo_console import decision_messages
 from app.contract.messages import (
+    AdvertiserAutoBid,
     AdvertiserBidMultiplier,
     AudienceKeyframe,
     AudienceSnapshot,
@@ -29,6 +33,7 @@ from app.contract.messages import (
     CreativeUpgraded,
     DegradationFlag,
     DistanceBand,
+    FilteredAttention,
     LatencyTrace,
     MinorLikely,
     MoneyDTO,
@@ -49,7 +54,7 @@ from app.modules.auction.domain.opportunity import (
     HeldProduct as BidHeldProduct,
     Layout,
 )
-from app.modules.auction.domain.result import AuctionResult, NoFillReason
+from app.modules.auction.domain.result import AuctionResult, ExclusionReason, NoFillReason
 from app.modules.auction.domain.swap import Trigger
 from app.modules.auction.infrastructure.auction_log import InMemoryAuctionLog
 from app.modules.auction.infrastructure.engines.in_process import InProcessBundleEngine
@@ -69,12 +74,14 @@ from app.modules.audience.domain.speech_evidence import (
 from app.modules.audience.domain.value_objects.ids import MomentId
 from app.modules.audience.domain.value_objects.segment import SegmentId, SegmentSource
 from app.modules.audience.infrastructure.catalog.loader import load_catalog
+from app.modules.campaigns.application.autobidder import AutoBidder
 from app.modules.campaigns.application.live_book import (
     LiveCampaignBook,
     MultiplierOutcome,
     UnknownCampaign,
 )
 from app.modules.campaigns.application.stock import StockBoard
+from app.modules.campaigns.domain.autobid import AutoBidGoal
 from app.modules.campaigns.domain.book import (
     Bidder,
     BidMultiplier,
@@ -104,7 +111,10 @@ from app.modules.creative.domain.brief import CreativeBrief, daypart_for_hour
 from app.modules.creative.domain.cost import GenerationBudget, GenerationKind, UsdCost
 from app.modules.creative.domain.draft import CopyDraft, CopySource
 from app.modules.creative.domain.offer import BasketOffer, OfferBook
-from app.modules.creative.infrastructure.campaign_assets import load_campaign_media
+from app.modules.creative.infrastructure.campaign_assets import (
+    CAMPAIGN_ASSETS,
+    load_campaign_media,
+)
 from app.modules.delivery.application.billing import DeliveryDesk, PlayRecord, Receipt
 from app.modules.delivery.application.ports.ledger import ChargeLedger
 from app.modules.delivery.application.redemptions import RedemptionDesk, RedemptionLedger
@@ -124,6 +134,7 @@ DEMO_SCREEN = "demo-01"
 MAX_MEASUREMENT_SKEW = timedelta(seconds=10)
 # Worst-case play length held against a winner's budget while it is on air (R-B6/R-B7).
 MAX_PLAY_SECONDS = 15
+logger = logging.getLogger(__name__)
 
 
 class UnknownBrand(Exception):
@@ -140,6 +151,7 @@ class DemoControls:
     offer_for: Callable[[str], RedeemableOffer | None]
     redeem: Callable[[str, str], tuple[ConsoleRedemption, bool]]
     reauction_bids: Callable[[], None]
+    set_autobid: Callable[[AdvertiserAutoBid], bool] | None = None
     book_for: Callable[[str], ConsoleBook] | None = None
     # The live switch (app/realtime/live_switch.py): standby airs what an empty room
     # gets; forget_speech drops spoken topics when the mic goes off mid-moment.
@@ -166,6 +178,9 @@ class LiveMarket:
     lock: RLock
     campaign_media: dict[str, CampaignMedia]
     house_logo_url: str
+    # One learner for the whole market: every screen's auctions and plays feed it.
+    autobidder: AutoBidder
+    autobid_lock: Lock = field(default_factory=Lock)
 
 
 def seed_market(
@@ -180,126 +195,62 @@ def seed_market(
     # mock marks included with their kits.
     logo = Path(__file__).resolve().parents[2].joinpath("project-logo.png").read_bytes()
     logo_url = "data:image/png;base64," + b64encode(logo).decode("ascii")
+    # Brands use their own wordmarks (demo_catalog.wordmark); never AI-drawn logos.
 
-    # Real IAB Audience Taxonomy 1.1 IDs (source in the audience catalog JSON).
-    fitness = SegmentId.create("408")  # Interest | Healthy Living | Fitness and Exercise
-    coffee = SegmentId.create("977")  # Purchase Intent | CPG | Edible | Beverages | Coffee
-    beer = SegmentId.create("369")  # Interest | Food & Drink | Alcoholic Beverages
-    food = SegmentId.create("1404")  # Purchase Intent | Food and Beverage Services | Fast Food
+    # One brand catalog (app/bootstrap/demo_catalog.py, docs/demo.md): rivals in each
+    # category, pre-approved partner pairs, offers sized to the group (architecture §6.1).
+    # Project mark on the house ad; brands with a mock mark in the campaign assets use it,
+    # the rest get a generated wordmark. Never an AI-drawn logo.
+    logo = Path(__file__).resolve().parents[2].joinpath("project-logo.png").read_bytes()
+    logo_url = "data:image/png;base64," + b64encode(logo).decode("ascii")
     kits = tuple(
         BrandKit(
             brand_id=BrandId.create(ids.new_uuid7()),
-            name=name,
-            logo_url=f"/campaign-assets/logos/{_slug(name)}.svg",
-            stock_copy=copy,
-            accent_color=color,
+            name=brand.name,
+            logo_url=_brand_logo(brand.slug, brand.name, brand.color),
+            stock_copy=brand.stock_copy,
+            accent_color=brand.color,
         )
-        for name, copy, color in (
-            ("Voltio", "Voltio · Energía para tu próximo entrenamiento.", "#c6f26b"),
-            ("Café Patio", "Café Patio · Café de grano y algo para acompañar.", "#f5bb84"),
-            ("Malta Sur", "Malta Sur · Cerveza artesanal.", "#f6d15a"),
-            ("Rayo", "Rayo · Energía para tu día.", "#b9adff"),
-        )
+        for brand in demo_catalog.BRANDS
     )
-    voltio, patio, rayo = kits[0].brand_id, kits[1].brand_id, kits[3].brand_id
-    # Every mutual-partner pair gets an approved basket (docs/demo.md), so Rayo competes
-    # for the energy slot inside a basket and prices it. Offers are sized to the group
-    # looking (architecture §6.1); the price is the brands', never the copywriter's.
+    # Stable brand slugs: prop markers (edge/props/markers.json, ADR 0008 D2), the
+    # audience catalog's brand_refs and the bundle loop files all use them.
+    brand_by_slug = {
+        brand.slug: kit.brand_id for brand, kit in zip(demo_catalog.BRANDS, kits, strict=True)
+    }
+    # Every mutual-partner pair gets an approved basket (docs/demo.md), so a rival
+    # competes for its slot inside a basket and prices it. The price is the brands',
+    # never the copywriter's.
     offer_book = OfferBook.of(
         [
-            *_tiers(
-                frozenset({voltio, patio}),
-                "Voltio + Café Patio",
-                # Moment-neutral labels: the same tiers air after the gym, on a coffee break
-                # or in the queue, and the hook carries the moment.
-                (
-                    (1, "Combo", "", 3490),
-                    (2, "Dúo", " x2", 5990),
-                    (3, "Trío", " x3", 8490),
-                    (4, "Pack x4", " x4", 10990),
-                ),
-            ),
-            *_tiers(
-                frozenset({rayo, patio}),
-                "Rayo + Café Patio",
-                ((1, "Combo", "", 3290), (2, "Dúo", " x2", 5790), (3, "Trío", " x3", 7990)),
-            ),
-            # Solo offers: most real moments sell one brand (a coffee group, one runner),
-            # and an ad without a price has nothing to redeem. Sized to the group too.
-            *_tiers(
-                frozenset({voltio}),
-                "Voltio",
-                (
-                    (1, "Voltio helado", "", 1490),
-                    (2, "Dúo Voltio", " x2", 2690),
-                    (3, "Trío Voltio", " x3", 3790),
-                    (4, "Pack x4 Voltio", " x4", 4690),
-                ),
-            ),
-            *_tiers(
-                frozenset({patio}),
-                "Café Patio",
-                (
-                    (1, "Café del día", "", 1990),
-                    (2, "Dos cafés", " x2", 3590),
-                    (3, "Tres cafés", " x3", 4990),
-                    (4, "Cuatro cafés", " x4", 6290),
-                ),
-            ),
-            *_tiers(
-                frozenset({rayo}),
-                "Rayo",
-                (
-                    (1, "Rayo helado", "", 1390),
-                    (2, "Dúo Rayo", " x2", 2490),
-                    (3, "Trío Rayo", " x3", 3490),
-                    (4, "Pack x4 Rayo", " x4", 4390),
-                ),
-            ),
-            *_tiers(
-                frozenset({kits[2].brand_id}),
-                "Malta Sur",
-                (
-                    (1, "Malta Sur", "", 1890),
-                    (2, "Dos Malta Sur", " x2", 3490),
-                    (3, "Tres Malta Sur", " x3", 4890),
-                    (4, "Cuatro Malta Sur", " x4", 5990),
-                ),
-            ),
+            offer
+            for basket in demo_catalog.BASKETS
+            for offer in _tiers(
+                frozenset(brand_by_slug[slug] for slug in basket.slugs),
+                basket.names,
+                basket.tiers,
+            )
         ]
     )
-    co_brand_partners: tuple[frozenset[BrandId], ...] = (
-        frozenset({kits[1].brand_id}),
-        frozenset({kits[0].brand_id, kits[3].brand_id}),
-        frozenset(),
-        frozenset({kits[1].brand_id}),
-    )
-    # Rates are CLP per attention-second (docs/auction-plan.md D4b). Rayo is
-    # Voltio's in-category rival, so the energy slot has a real price (D6).
+    # Rates are CLP per attention-second (docs/auction-plan.md D4b).
     bidders = tuple(
         Bidder(
             campaign_id=CampaignId.create(ids.new_uuid7()),
-            brand_id=kit.brand_id,
-            category=category,
-            age_restricted=age_restricted,
+            brand_id=brand_by_slug[brand.slug],
+            category=brand.category,
+            age_restricted=brand.age_restricted,
             segment_bids=tuple(
-                SegmentBid(segment_id=segment, rate=_clp_per_as(rate)) for segment in segments
+                SegmentBid(
+                    segment_id=SegmentId.create(segment), rate=_clp_per_as(brand.rate_clp_per_as)
+                )
+                for segment in brand.segments
             ),
-            partners=partners,
+            partners=frozenset(
+                brand_by_slug[slug] for slug in demo_catalog.partners_of(brand.slug)
+            ),
             budget_remaining=Money.create(currency="CLP", amount=budget_clp),
         )
-        for kit, (category, age_restricted, segments, rate), partners in zip(
-            kits,
-            (
-                ("sports_goods", False, (fitness,), "8"),
-                # Café Patio also sells something to eat: "qué hambre" reaches it.
-                ("coffee", False, (coffee, food), "5"),
-                ("alcohol", True, (beer,), "12"),
-                ("sports_goods", False, (fitness,), "6.5"),
-            ),
-            co_brand_partners,
-            strict=True,
-        )
+        for brand in demo_catalog.BRANDS
     )
     book = LiveCampaignBook(bidders)
     return LiveMarket(
@@ -314,6 +265,7 @@ def seed_market(
         lock=RLock(),
         campaign_media=load_campaign_media(),
         house_logo_url=logo_url,
+        autobidder=AutoBidder(book),
     )
 
 
@@ -362,6 +314,10 @@ def register_demo(
     reserve = _clp_per_as("1.5")
     desk = AuctionDesk(InProcessBundleEngine(), holds_enabled=swap_holds)
     book, stock, auctions = market.book, market.stock, market.auctions
+    # Rule-based auto-bidding (opt-in per campaign from /advertiser).
+    autobidder = market.autobidder
+    autobid_running = False
+    autobid_lock = market.autobid_lock
     delivery, redemptions = market.delivery, market.redemptions
     loops = BundleLoopLibrary(media_dir) if media_dir is not None else None
     campaign_of = {bidder.campaign_id: bidder for bidder in bidders}
@@ -425,6 +381,12 @@ def register_demo(
             coffee: Angle.COFFEE_BREAK,
             beer: Angle.SOCIAL,
             food: Angle.HUNGER,
+            SegmentId.create(demo_catalog.PASTRY): Angle.HUNGER,
+            SegmentId.create(demo_catalog.SOFT_DRINKS): Angle.HUNGER,
+            SegmentId.create(demo_catalog.SNACKS): Angle.HUNGER,
+            SegmentId.create(demo_catalog.SALTY_SNACKS): Angle.HUNGER,
+            SegmentId.create(demo_catalog.WATER): Angle.POST_WORKOUT,
+            SegmentId.create(demo_catalog.ENERGY_DRINKS): Angle.ENERGY,
         },
     )
     studio = CreativeStudio(
@@ -527,6 +489,11 @@ def register_demo(
                     wire_screen_id,
                     measured_at.value,
                     (tracklet.id for tracklet in snapshot.tracklets if tracklet.looking),
+                    far=(
+                        tracklet.id
+                        for tracklet in snapshot.tracklets
+                        if tracklet.looking and tracklet.distance_band.value == "far"
+                    ),
                 )
                 looks = [t.dwell_s for t in snapshot.tracklets if t.looking]
                 hub.send_to_screen_threadsafe(
@@ -683,6 +650,7 @@ def register_demo(
                 cleared_at=cleared_at,
             )
         )
+        observe_for_autobid(outcome.result)
         trace = LatencyTrace(
             perception=snapshot.perception,
             candidate_at=snapshot.candidate_at,
@@ -926,6 +894,13 @@ def register_demo(
                     spent=_money(account.spent if account else zero),
                     reserved=_money(account.reserved if account else zero),
                     remaining=_money(account.remaining if account else zero),
+                    autobid=autobidder.enabled(bidder.campaign_id),
+                    autobid_rule=(
+                        d.rule.value
+                        if (d := autobidder.last_decision(bidder.campaign_id))
+                        else None
+                    ),
+                    autobid_reason=d.reason if d else None,
                 )
             )
         return ConsoleBook(screen_id=wire_screen_id, lines=lines)
@@ -938,8 +913,64 @@ def register_demo(
             campaign_id, BidMultiplier.create(message.multiplier), message.seq
         )
         if outcome is MultiplierOutcome.APPLIED:
+            autobidder.disable(campaign_id)  # a human took the slider: the human wins
             reauction(Trigger.BID_CHANGED)
         return outcome
+
+    # ------------------------------------------------------------ auto-bidding (rules)
+
+    def observe_for_autobid(result: AuctionResult) -> None:
+        values = {bid.campaign_id: bid.value_per_s.amount for bid in result.bids}
+        rival = max((w.value_per_s.amount for w in result.winners), default=Decimal(0))
+        for campaign_id, value in values.items():
+            exclusion = result.exclusion_for(campaign_id)
+            outbid = exclusion is not None and exclusion.reason in (
+                ExclusionReason.OUTBID,
+                ExclusionReason.COMPETITOR,
+            )
+            autobidder.observe_auction(
+                campaign_id,
+                won=campaign_id in result.winner_ids,
+                outbid=outbid,
+                multiplier_needed=(rival / value) if outbid and value > 0 else None,
+            )
+
+    def set_autobid(message: AdvertiserAutoBid) -> bool:
+        nonlocal autobid_running
+        campaign_id = _campaign_id(message.campaign_id)
+        if campaign_id not in campaign_of:
+            raise UnknownCampaign()
+        if not message.enabled:
+            autobidder.disable(campaign_id)
+            return False
+        target = message.target_cost_per_redemption
+        autobidder.enable(
+            campaign_id,
+            AutoBidGoal(
+                target_cost_per_redemption=None
+                if target is None
+                else Money.create(currency=target.currency, amount=target.amount)
+            ),
+            at=clock.now_utc(),
+        )
+        with autobid_lock:  # one loop, however many concurrent enables
+            start = not autobid_running
+            autobid_running = True
+        if start:
+            scheduler(AUTOBID_TICK_S, autobid_tick)
+        return True
+
+    def autobid_tick() -> None:
+        try:
+            changed = autobidder.tick(at=clock.now_utc())
+            if changed:
+                reauction(Trigger.BID_CHANGED)
+            else:
+                hub.broadcast_console_threadsafe(book_view())
+        except Exception:  # a bad tick must never stop auto-bidding for good
+            logger.exception("auto-bid tick failed")
+        finally:
+            scheduler(AUTOBID_TICK_S, autobid_tick)
 
     def set_stock(message: StockSet) -> bool:
         if message.screen_id != wire_screen_id:
@@ -1081,6 +1112,9 @@ def register_demo(
 
     def redeem(code: str, nonce: str) -> tuple[ConsoleRedemption, bool]:
         redemption, created = redemptions.redeem(code, nonce, at=clock.now_utc())
+        if created:
+            for campaign in redemption.campaign_ids:
+                autobidder.observe_redemption(campaign)
         offer = redemptions.offer(code)
         message = ConsoleRedemption(
             screen_id=redemption.screen_id,
@@ -1132,6 +1166,12 @@ def register_demo(
         if receipt is None:
             return  # house ad, unknown creative or a retry already billed
         # The charge was booked (and capped) against budgets inside billing.
+        for charge in receipt.charges:
+            autobidder.observe_play(
+                charge.campaign_id,
+                charge=charge.amount,
+                attention_seconds=charge.attention_seconds,
+            )
         hub.broadcast_console_threadsafe(receipt_message(receipt), book_view())
         # That spend may leave the brand on air unable to cover its current lease.
         with lock:
@@ -1169,6 +1209,11 @@ def register_demo(
                 for charge in receipt.charges
             ],
             total=_money(receipt.total),
+            filtered=[
+                FilteredAttention(reason=reason.value, seconds=format(seconds, "f"))
+                for reason, seconds in receipt.attention.invalid_seconds.items()
+                if seconds > 0
+            ],
         )
 
     # ------------------------------------------------------------ speech (opt-in screens)
@@ -1478,9 +1523,11 @@ def register_demo(
         reauction_bids=lambda: reauction(Trigger.BID_CHANGED),
         standby=standby,
         forget_speech=forget_speech,
+        set_autobid=set_autobid,
     )
 
 
+AUTOBID_TICK_S = 5.0  # how often the auto-bidding rules re-evaluate
 _CEILING = RoundingPolicy.create(money_rounding=ROUND_CEILING)
 # The first market is Chilean convenience stores (ADR 0008): hooks follow Santiago's clock.
 VENUE_TZ = ZoneInfo("America/Santiago")
@@ -1493,6 +1540,12 @@ def nearest_band(tracklets: Sequence[Tracklet]) -> DistanceBand | None:
     """The nearest looking viewer's distance band; the layout serves whoever can read it."""
     bands = {t.distance_band for t in tracklets if t.looking}
     return next((band for band in _NEAREST_FIRST if band in bands), None)
+
+
+def _brand_logo(slug: str, name: str, color: str) -> str:
+    if (CAMPAIGN_ASSETS / "logos" / f"{slug}.svg").is_file():
+        return f"/campaign-assets/logos/{slug}.svg"
+    return wordmark(name, color)
 
 
 def _slug(name: str) -> str:

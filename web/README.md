@@ -23,7 +23,8 @@ src/
   features/
     screen/       player: player-machine.ts (pure A/B state machine), preload, CreativeView, house ad
     console/      console-state.ts (pure reducer), metrics.ts, ConsolePage panels
-  shared/ui/      visual primitives used by several features (StatusBadge, Panel, ErrorBoundary)
+  shared/ui/      Relvo design-system primitives (Button, Card, Badge, Table, Metric,
+                  AppShell/PageHeader/EmptyState, Panel, ErrorBoundary)
   lib/            infrastructure: TypedSocket, external store, config, cn()
   contract/       messages.gen.ts (GENERATED) + index.ts barrel
   styles/         global.css: design tokens (@theme) and base styles
@@ -105,16 +106,21 @@ semantic roles → Tailwind utilities (`bg-surface`, `text-muted`, `text-kpi`,
   or z-index values. If you need a new value, add a token. Viewport-relative
   layout sizes (`h-[14vh]`) are the only exception.
 - There are exactly two elevations: `shadow-resting` and `shadow-overlay`.
-- **Never show status by color alone.** Use `StatusBadge` (icon, label and
-  color together).
+- **Reuse Relvo's design system.** Tokens and primitives are ported from
+  `relvo/frontend` (Puchworks palette, `--state-*` families, Instrument Sans +
+  Geist Mono). Add a variant to a primitive before styling a one-off.
+- **Never show status by color alone.** `Badge` always carries a label.
+- **Copy follows Relvo's `docs/ui-wording.md`:** Spanish (tú), sentence case,
+  verb-first buttons of 1–3 words, no slogans, no filler intros, no raw enum
+  or field names. Numbers use es-CL format (`lib/format.ts`).
 - Numbers use `tabular-nums`. KPIs use the `text-kpi` tier.
 - Use the one global `:focus-visible` ring, and never `outline-none` without a
   replacement.
 - Every data view handles its empty state. During a reconnect, keep showing
   the last data with a "Reconnecting" badge. Never blank it.
 - Each console panel has its own error boundary (`Panel`).
-- The workspace is white-first: white surfaces, ink text, fine dividers and teal
-  accents. Status colors use accessible dark text on pale backgrounds. Player
+- The workspace is a light cream canvas with white cards, ink text and the
+  morado selection hue; the one primary action per page is ink-filled. Player
   creatives own their presentation independently of the workspace theme.
 
 ## Tooling

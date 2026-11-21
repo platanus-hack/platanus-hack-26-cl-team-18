@@ -151,7 +151,7 @@ it("renders the real shared player with both brands, product photography and opt
     expect(host.querySelector(".creative-brands")?.textContent).toContain("Voltio");
     expect(host.querySelector(".creative-brands")?.textContent).toContain("Café Patio");
     expect(host.querySelector(".creative-offer-line")?.textContent).toBe("Oferta para 2");
-    await click(button("Fotografía"));
+    await click(button("Foto"));
     await settle();
     expect(host.querySelector("video")).toBeNull();
     expect(host.querySelector("img.creative-media")).not.toBeNull();
@@ -170,7 +170,7 @@ it("drops a late campaign result after a newer group size is ready", async () =>
             : Promise.resolve(generated(request));
     await click(host.querySelectorAll<HTMLButtonElement>(".studio-party-options button")[2]!);
     await settle();
-    expect(button("Exportar campaña").disabled).toBe(true);
+    expect(button("Exportar").disabled).toBe(true);
     await click(host.querySelectorAll<HTMLButtonElement>(".studio-party-options button")[3]!);
     await settle();
     expect(host.querySelector(".creative-offer-line")?.textContent).toBe("Oferta para 4");
@@ -197,17 +197,17 @@ it("drops a late campaign result after a newer group size is ready", async () =>
 it("handles malformed generator output and disables exporting the previous draft", async () => {
     await settle();
     generateResponse = () => Promise.resolve({ broken: true });
-    await click(button("Fotografía"));
+    await click(button("Foto"));
     await settle();
     expect(host.querySelector('[role="alert"]')).not.toBeNull();
-    expect(button("Exportar campaña").disabled).toBe(true);
+    expect(button("Exportar").disabled).toBe(true);
 });
 
 it("can clear a selection and excludes restricted brands when minors are protected", async () => {
     await settle();
     await click(host.querySelectorAll<HTMLButtonElement>(".studio-brand-card")[0]!);
     await click(host.querySelectorAll<HTMLButtonElement>(".studio-brand-card")[1]!);
-    expect(button("Exportar campaña").disabled).toBe(true);
+    expect(button("Exportar").disabled).toBe(true);
     expect(host.querySelectorAll<HTMLButtonElement>(".studio-brand-card")[2]!.disabled).toBe(false);
     await click(host.querySelector<HTMLInputElement>('input[type="checkbox"]')!);
     expect(host.querySelectorAll<HTMLButtonElement>(".studio-brand-card")[2]!.disabled).toBe(true);
