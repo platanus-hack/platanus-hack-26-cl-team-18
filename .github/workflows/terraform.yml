@@ -1,0 +1,36 @@
+name: terraform
+
+# Offline gate only: fmt, validate and terraform test against a mocked Render
+# provider. No credentials and no state live in CI; plan/apply run locally
+# through `make tf-plan` / `make tf-apply` (docs/terraform.md).
+on:
+  pull_request:
+    paths:
+      - "terraform/**"
+      - "Makefile"
+      - ".github/workflows/terraform.yml"
+  push:
+    branches: [main]
+    paths:
+      - "terraform/**"
+      - ".github/workflows/terraform.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_INPUT: "false"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: 1.8.5
+          terraform_wrapper: false
+
+      - name: Terraform gate
+        run: make tf-check

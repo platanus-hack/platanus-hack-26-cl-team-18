@@ -1,0 +1,62 @@
+[project]
+name = "team18-backend"
+version = "0.1.0"
+description = "Platanus Hack 26 — team 18 backend"
+requires-python = ">=3.14"
+dependencies = [
+    "psycopg2-binary>=2.9.0",
+    "uuid-utils",
+    "httpx>=0.27",
+    "pydantic>=2.7",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic-settings>=2.6",
+    "anthropic>=2.12",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-timeout>=2.3.0",
+    "anyio>=4.0",
+    "ruff>=0.16.0",
+    "mypy>=2.4.0",
+    "pyright[nodejs]>=1.1.414",
+]
+
+[tool.ruff]
+line-length = 100
+src = ["app", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "C4", "PERF", "RUF"]
+ignore = [
+    "E501",                          # line length: formatter handles it
+    "RUF001", "RUF002", "RUF003",    # Spanish text is intentional
+    "E741", "SIM102", "SIM105", "SIM117", "SIM108", "E731", "B904",
+    "UP040", "UP046", "UP047", "PERF401", "RUF005", "C408",     # TypeAlias / Generic kept for readability
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+combine-as-imports = true
+
+[tool.ruff.lint.per-file-ignores]
+"app/**/__init__.py" = ["F401"]
+"app/**/api/**/*.py" = ["B008"]
+"tests/**/*.py" = ["E402", "F841", "B007", "B017", "RUF012"]
+
+[tool.mypy]
+ignore_missing_imports = true
+namespace_packages = true
+explicit_package_bases = true
+check_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+timeout = 40
+addopts = "-q"
+markers = [
+    "unit: Fast, in-memory unit tests (no DB, no network)",
+    "integration: Tests that require a real database connection",
+]

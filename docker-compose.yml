@@ -1,0 +1,22 @@
+# Local Postgres. Migrations in db/migrations/ run once, on the first start of
+# an empty volume. To re-run them: make db-reset.
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: team18
+      POSTGRES_USER: team18
+      POSTGRES_PASSWORD: team18
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U team18 -d team18"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  pgdata:

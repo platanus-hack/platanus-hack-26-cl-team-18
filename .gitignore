@@ -1,0 +1,108 @@
+# ---------------------------------------------------------------------------
+# Secrets and local config. Never commit keys, tokens or real env files.
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+!.env.render.example
+# Codex config holds a team token URL.
+.codex/
+# Per-user agent/editor settings (may hold tokens or local paths).
+.claude/settings.local.json
+.vscode/*.local.json
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+credentials*.json
+service-account*.json
+secrets.*
+!secrets.example.*
+
+# ---------------------------------------------------------------------------
+# Python (app/ and edge/ are separate uv projects; patterns match at any depth)
+# ---------------------------------------------------------------------------
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyright/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.hypothesis/
+.ipynb_checkpoints/
+
+# ---------------------------------------------------------------------------
+# Web (Vite + React + TS)
+# ---------------------------------------------------------------------------
+node_modules/
+web/dist/
+web/coverage/
+*.tsbuildinfo
+.vite/
+.eslintcache
+.next/
+
+# ---------------------------------------------------------------------------
+# Perception models: download/export locally, never commit weights.
+# ---------------------------------------------------------------------------
+*.pt
+*.pth
+*.onnx
+*.engine
+*.trt
+*.tflite
+*.safetensors
+
+# ---------------------------------------------------------------------------
+# Privacy (CLAUDE.md invariant 3): raw frames, audio and transcripts are never
+# stored, so local captures must never reach git either.
+# ---------------------------------------------------------------------------
+captures/
+recordings/
+*.wav
+*.pcm
+
+# Local media cache (app/config/settings.py media_dir)
+var/
+
+# ---------------------------------------------------------------------------
+# Terraform
+# .terraform.lock.hcl is deliberately NOT ignored: it pins the exact provider
+# build (and checksums for every team platform) so every init matches.
+# ---------------------------------------------------------------------------
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+# Saved plans embed a full state snapshot, including the DB password.
+tfplan
+tfplan*
+*.tfplan
+# Local overrides are invisible to reviewers; put config in the tracked
+# terraform.tfvars instead.
+*.auto.tfvars
+override.tf
+*_override.tf
+
+# ---------------------------------------------------------------------------
+# Logs, OS and editor junk
+# ---------------------------------------------------------------------------
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/

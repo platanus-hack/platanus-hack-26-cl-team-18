@@ -1,0 +1,1 @@
+"""Screen identifiers and values."""
