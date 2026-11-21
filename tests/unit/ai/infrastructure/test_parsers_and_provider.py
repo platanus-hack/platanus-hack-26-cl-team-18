@@ -11,6 +11,7 @@ import pytest
 from app.modules.ai.domain.errors import InvalidInferenceParams
 from app.modules.ai.domain.llm.enums import ProviderRole
 from app.modules.ai.domain.llm.provider import (
+    ImageContent,
     InferenceParams,
     ProviderMessage,
     StructuredOutput,
@@ -183,3 +184,24 @@ def test_inference_params_validate_max_tokens() -> None:
         InferenceParams.create(max_tokens=0)
     with pytest.raises(InvalidInferenceParams):
         InferenceParams.create(max_tokens=True)  # type: ignore[arg-type]
+
+
+def test_build_request_sends_images_as_base64_blocks_before_the_text() -> None:
+    provider = AnthropicProvider(api_key="test-key")
+    image = ImageContent.create(media_type="image/jpeg", data=b"\xff\xd8\xff")
+    request = provider.build_request(
+        [
+            ProviderMessage.create(role=ProviderRole.SYSTEM, content="tag it"),
+            ProviderMessage.create(role=ProviderRole.USER, content="keyframe", images=(image,)),
+        ],
+        InferenceParams.create(),
+    )
+    (message,) = request["messages"]
+    assert message["content"] == [
+        {
+            "type": "image",
+            "source": {"type": "base64", "media_type": "image/jpeg", "data": "/9j/"},
+        },
+        {"type": "text", "text": "keyframe"},
+    ]
+    assert "\xff" not in repr(image)
