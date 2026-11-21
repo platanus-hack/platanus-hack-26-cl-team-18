@@ -51,7 +51,7 @@ export class TypedSocket<In, Out = never> {
     private socket: WebSocket | null = null;
     private retryTimer: ReturnType<typeof setTimeout> | null = null;
     private attempt = 0;
-    private stopped = false;
+    private stopped = true;
     private stats_: SocketStats = { received: 0, invalid: 0, reconnects: 0 };
     private state_: ConnectionState = { status: "connecting", attempt: 0 };
 
@@ -66,7 +66,9 @@ export class TypedSocket<In, Out = never> {
     }
 
     start(): void {
+        if (!this.stopped) return;
         this.stopped = false;
+        this.attempt = 0;
         this.connect();
     }
 
@@ -74,8 +76,9 @@ export class TypedSocket<In, Out = never> {
         this.stopped = true;
         if (this.retryTimer !== null) clearTimeout(this.retryTimer);
         this.retryTimer = null;
-        this.socket?.close(1000, "client stop");
-        this.socket = null;
+        const socket = this.socket;
+        this.socket = null; // Invalidate callbacks before close (which may fire synchronously).
+        socket?.close(1000, "client stop");
         this.setState({ status: "closed" });
     }
 
@@ -87,20 +90,24 @@ export class TypedSocket<In, Out = never> {
     }
 
     private connect(): void {
+        if (this.stopped || this.socket !== null || this.retryTimer !== null) return;
         this.setState({ status: "connecting", attempt: this.attempt });
         const create = this.options.createSocket ?? ((url: string) => new WebSocket(url));
         const socket = create(this.options.url);
         this.socket = socket;
 
         socket.onopen = () => {
+            if (this.stopped || this.socket !== socket) return;
             this.attempt = 0;
             this.setState({ status: "open", since: Date.now() });
         };
         socket.onmessage = (event: MessageEvent) => {
+            if (this.stopped || this.socket !== socket) return;
             this.handleFrame(event.data);
         };
         socket.onclose = () => {
-            if (this.socket === socket) this.socket = null;
+            if (this.stopped || this.socket !== socket) return;
+            this.socket = null;
             this.scheduleReconnect();
         };
         socket.onerror = () => {

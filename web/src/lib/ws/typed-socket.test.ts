@@ -90,3 +90,54 @@ describe("TypedSocket", () => {
         expect(backoffDelay(20, 250, 5000, 1)).toBe(5000);
     });
 });
+
+describe("socket lifecycle races", () => {
+    it("start is idempotent while connecting or connected", () => {
+        const { socket, sockets } = setup();
+        socket.start();
+        socket.start();
+        expect(sockets).toHaveLength(1);
+        sockets[0]!.open();
+        socket.start();
+        expect(sockets).toHaveLength(1);
+        socket.stop();
+    });
+
+    it("ignores late callbacks from a stopped connection after restart", () => {
+        vi.useFakeTimers();
+        try {
+            const { socket, sockets, messages } = setup();
+            socket.start();
+            const retired = sockets[0]!;
+            socket.stop();
+            socket.start();
+            sockets[1]!.open();
+            retired.open();
+            retired.emit(JSON.stringify({ type: "ping", n: 99 }));
+            retired.close();
+            expect(socket.state.status).toBe("open");
+            expect(messages).toEqual([]);
+            vi.runOnlyPendingTimers();
+            expect(sockets).toHaveLength(2);
+            socket.stop();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it("does not open another socket when start is called during reconnect backoff", () => {
+        vi.useFakeTimers();
+        try {
+            const { socket, sockets } = setup();
+            socket.start();
+            sockets[0]!.close();
+            socket.start();
+            expect(sockets).toHaveLength(1);
+            vi.runOnlyPendingTimers();
+            expect(sockets).toHaveLength(2);
+            socket.stop();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+});

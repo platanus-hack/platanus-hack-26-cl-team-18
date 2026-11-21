@@ -79,7 +79,7 @@ describe("player machine", () => {
         expect(s.queued?.creativeId).toBe("c3");
         s = playerReducer(s, { type: "crossfadeDone", creativeId: "c1", at: 250 });
         expect(frontCreative(s).creativeId).toBe("c1");
-        expect(s.phase).toEqual({ kind: "preloading", creativeId: "c3" });
+        expect(s.phase).toMatchObject({ kind: "preloading", creativeId: "c3" });
     });
 
     it("reports a creative's play window when it leaves the screen", () => {
@@ -105,5 +105,94 @@ describe("player machine", () => {
         s = playerReducer(s, { type: "crossfadeDone", creativeId: "c1", at: 1350 });
         expect(s.completed).toBeNull();
         expect(s.shownSince).toBe(250);
+    });
+});
+
+describe("progressive upgrades", () => {
+    const upgraded = (id: string): Playable => ({
+        ...ad(id),
+        spec: {
+            ...spec,
+            slots: [{ ...spec.slots[0]!, copy_text: "Fresh offer" }],
+            voiceover_url: "/voice.mp3",
+        },
+    });
+    function showing() {
+        let s = initialPlayerState(house, 0);
+        s = playerReducer(s, { type: "received", creative: ad("c1"), at: 1 });
+        s = playerReducer(s, { type: "preloaded", creativeId: "c1", at: 2 });
+        return playerReducer(s, { type: "crossfadeDone", creativeId: "c1", at: 252 });
+    }
+
+    it("updates visible copy and voice immediately without a new play or crossfade", () => {
+        const before = showing();
+        const s = playerReducer(before, { type: "upgraded", creative: upgraded("c1"), at: 1000 });
+        expect(s.phase.kind).toBe("showing");
+        expect(s.front).toBe(before.front);
+        expect(frontCreative(s).spec.voiceover_url).toBe("/voice.mp3");
+        expect(s.shownSince).toBe(before.shownSince);
+        expect(s.completed).toBeNull();
+    });
+
+    it("does not replace a newer queued ad with an upgrade to the fading ad", () => {
+        let s = showing();
+        s = playerReducer(s, { type: "received", creative: ad("c2"), at: 1000 });
+        s = playerReducer(s, { type: "preloaded", creativeId: "c2", at: 1001 });
+        s = playerReducer(s, { type: "received", creative: ad("c3"), at: 1002 });
+        s = playerReducer(s, { type: "upgraded", creative: upgraded("c2"), at: 1003 });
+        expect(s.queued?.creativeId).toBe("c3");
+        expect(s.layers[s.front === "a" ? "b" : "a"]?.spec.voiceover_url).toBe("/voice.mp3");
+        s = playerReducer(s, { type: "crossfadeDone", creativeId: "c2", at: 1251 });
+        expect(frontCreative(s).creativeId).toBe("c2");
+        expect(s.phase).toMatchObject({ kind: "preloading", creativeId: "c3" });
+    });
+
+    it("keeps a pending creative's upgrade and reports one continuous prior play", () => {
+        let s = showing();
+        s = playerReducer(s, { type: "received", creative: ad("c2"), at: 1000 });
+        s = playerReducer(s, { type: "upgraded", creative: upgraded("c2"), at: 1001 });
+        expect(s.phase).toMatchObject({ kind: "preloading", creativeId: "c2" });
+        expect(frontCreative(s).creativeId).toBe("c1");
+        s = playerReducer(s, { type: "preloaded", creativeId: "c2", at: 1002 });
+        s = playerReducer(s, { type: "crossfadeDone", creativeId: "c2", at: 1252 });
+        expect(frontCreative(s).spec.voiceover_url).toBe("/voice.mp3");
+        expect(s.completed).toEqual({ seq: 1, creativeId: "c1", startedAt: 252, endedAt: 1252 });
+    });
+
+    it("ignores stale upgrades instead of bringing retired ads back", () => {
+        const before = showing();
+        expect(
+            playerReducer(before, { type: "upgraded", creative: upgraded("retired"), at: 1000 }),
+        ).toBe(before);
+    });
+
+    it("does not apply an upgrade that changes required logos or auction ownership", () => {
+        const before = showing();
+        for (const creative of [
+            { ...upgraded("c1"), auctionId: "different-auction" },
+            {
+                ...upgraded("c1"),
+                spec: { ...spec, slots: [{ ...spec.slots[0]!, logo_url: "/unverified.svg" }] },
+            },
+        ]) {
+            expect(playerReducer(before, { type: "upgraded", creative, at: 1000 })).toBe(before);
+        }
+    });
+
+    it("refreshes a queued creative without losing the current transition", () => {
+        let s = showing();
+        s = playerReducer(s, { type: "received", creative: ad("c2"), at: 1000 });
+        s = playerReducer(s, { type: "preloaded", creativeId: "c2", at: 1001 });
+        s = playerReducer(s, { type: "received", creative: ad("c3"), at: 1002 });
+        s = playerReducer(s, { type: "upgraded", creative: upgraded("c3"), at: 1003 });
+        expect(s.phase).toEqual({ kind: "crossfading", creativeId: "c2" });
+        expect(s.queued?.spec.voiceover_url).toBe("/voice.mp3");
+    });
+
+    it("a repeated ready message for the on-air creative does not restart its video layer", () => {
+        const before = showing();
+        const s = playerReducer(before, { type: "received", creative: ad("c1"), at: 1000 });
+        expect(s.phase.kind).toBe("showing");
+        expect(s.front).toBe(before.front);
     });
 });

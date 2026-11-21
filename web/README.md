@@ -55,6 +55,11 @@ fails CI when they drift.
 
 ## State
 
+`TypedSocket.start()` is idempotent. Only the active connection's callbacks may
+change state, deliver frames or schedule a reconnect. Stopping invalidates the
+connection before closing it, so late callbacks from a previous React effect
+cannot open duplicate sockets or deliver stale creatives.
+
 - Realtime state lives in an **external store driven by a pure reducer**
   (`lib/store.ts`, `useSyncExternalStore`). Socket data never goes through
   `useState` or `useEffect` copies.
@@ -73,6 +78,13 @@ fails CI when they drift.
 - The front layer always holds the bundled house ad or the last good creative.
   If a preload fails, the current creative stays on screen.
 - Latest wins: a newer creative replaces one that is still preloading.
+- Copy/voice upgrades update the matching creative in its existing layer when
+  auction ownership, brand ids and logo URLs match. They keep the current video,
+  dwell stage and play window, without another decode or crossfade. An upgrade
+  never replaces a newer queued creative or revives a retired one. Changed brand
+  assets require a new `creative.ready` and the normal logo checks.
+- An in-flight preload retains its original asset request when copy/voice is
+  upgraded, so warm work cannot keep restarting the logo decode.
 - Voice preparation runs independently when the creative reaches the front.
   Cached audio plays immediately; late audio plays only if its creative is
   still on air. Replacing the creative cancels pending audio and stops playback.

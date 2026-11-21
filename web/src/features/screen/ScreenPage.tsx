@@ -5,13 +5,7 @@ import { TypedSocket } from "@/lib/ws/typed-socket";
 import { useEffect, useState } from "react";
 import { CreativeView } from "./CreativeView";
 import { HOUSE_AD } from "./house-ad";
-import {
-    frontCreative,
-    initialPlayerState,
-    other,
-    playerReducer,
-    type Playable,
-} from "./player-machine";
+import { frontCreative, initialPlayerState, playerReducer, type Playable } from "./player-machine";
 import { preloadCreative } from "./preload";
 import { VoicePlayer } from "./voice";
 
@@ -46,7 +40,7 @@ export function ScreenPage() {
                         return;
                     }
                     store.dispatch({
-                        type: "received",
+                        type: message.type === "creative.upgraded" ? "upgraded" : "received",
                         creative: toPlayable(message),
                         at: Date.now(),
                     });
@@ -64,25 +58,35 @@ export function ScreenPage() {
     }, [socket]);
 
     // Preload the back layer; a newer creative aborts the previous preload.
-    const preloadingId = state.phase.kind === "preloading" ? state.phase.creativeId : null;
-    const back = state.layers[other(state.front)];
+    const preloading = state.phase.kind === "preloading" ? state.phase : null;
     useEffect(() => {
-        if (preloadingId === null || back === null) return;
+        if (preloading === null) return;
         const controller = new AbortController();
-        preloadCreative(back.spec, controller.signal).then(
+        preloadCreative(preloading.spec, controller.signal).then(
             () => {
-                store.dispatch({ type: "preloaded", creativeId: preloadingId, at: Date.now() });
+                if (controller.signal.aborted) return;
+                store.dispatch({
+                    type: "preloaded",
+                    creativeId: preloading.creativeId,
+                    at: Date.now(),
+                });
             },
             (error: unknown) => {
                 if (controller.signal.aborted) return;
-                console.warn(`[screen] preload failed for ${preloadingId}: ${String(error)}`);
-                store.dispatch({ type: "preloadFailed", creativeId: preloadingId, at: Date.now() });
+                console.warn(
+                    `[screen] preload failed for ${preloading.creativeId}: ${String(error)}`,
+                );
+                store.dispatch({
+                    type: "preloadFailed",
+                    creativeId: preloading.creativeId,
+                    at: Date.now(),
+                });
             },
         );
         return () => {
             controller.abort();
         };
-    }, [preloadingId, back, store]);
+    }, [preloading, store]);
 
     // Prepare voice independently of visual readiness; late audio may still play
     // while its creative is on air. A replacement cancels the old line.

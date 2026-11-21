@@ -23,7 +23,7 @@ export interface Playable {
 
 export type Phase =
     | { readonly kind: "showing" }
-    | { readonly kind: "preloading"; readonly creativeId: string }
+    | { readonly kind: "preloading"; readonly creativeId: string; readonly spec: CreativeSpec }
     | { readonly kind: "crossfading"; readonly creativeId: string };
 
 /** A creative that left the screen; reported to the backend as playback.report. */
@@ -44,7 +44,7 @@ export interface PlayerState {
 }
 
 export type PlayerEvent =
-    | { readonly type: "received"; readonly creative: Playable; readonly at: number }
+    | { readonly type: "received" | "upgraded"; readonly creative: Playable; readonly at: number }
     | { readonly type: "preloaded"; readonly creativeId: string; readonly at: number }
     | { readonly type: "preloadFailed"; readonly creativeId: string; readonly at: number }
     | { readonly type: "crossfadeDone"; readonly creativeId: string; readonly at: number };
@@ -72,13 +72,44 @@ function loadIntoBack(state: PlayerState, creative: Playable): PlayerState {
     return {
         ...state,
         layers: { ...state.layers, [other(state.front)]: creative },
-        phase: { kind: "preloading", creativeId: creative.creativeId },
+        phase: { kind: "preloading", creativeId: creative.creativeId, spec: creative.spec },
     };
+}
+
+/** Reuse a known creative only while its auction and required brand assets match. */
+function updateKnownCreative(state: PlayerState, creative: Playable): PlayerState | null {
+    const compatible = (previous: Playable) =>
+        previous.auctionId === creative.auctionId &&
+        previous.kind === creative.kind &&
+        previous.spec.slots.length === creative.spec.slots.length &&
+        previous.spec.slots.every((slot, index) => {
+            const incoming = creative.spec.slots[index];
+            return (
+                incoming !== undefined &&
+                slot.brand_id === incoming.brand_id &&
+                slot.logo_url === incoming.logo_url
+            );
+        });
+    if (state.queued?.creativeId === creative.creativeId) {
+        return compatible(state.queued) ? { ...state, queued: creative } : null;
+    }
+    for (const layer of [other(state.front), state.front]) {
+        const previous = state.layers[layer];
+        if (previous?.creativeId !== creative.creativeId) continue;
+        if (!compatible(previous)) return null;
+        return { ...state, layers: { ...state.layers, [layer]: creative } };
+    }
+    return null;
 }
 
 export function playerReducer(state: PlayerState, event: PlayerEvent): PlayerState {
     switch (event.type) {
+        case "upgraded":
+            // An upgrade cannot introduce a new play or revive a retired creative.
+            return updateKnownCreative(state, event.creative) ?? state;
         case "received": {
+            const updated = updateKnownCreative(state, event.creative);
+            if (updated !== null) return updated;
             if (state.phase.kind === "crossfading") return { ...state, queued: event.creative };
             return loadIntoBack(state, event.creative);
         }

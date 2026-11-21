@@ -68,7 +68,10 @@ afterEach(async () => {
     vi.unstubAllGlobals();
 });
 
-function message(id: string, voice: string | null): PlayerOutbound {
+function message(
+    id: string,
+    voice: string | null,
+): Extract<PlayerOutbound, { type: "creative.ready" }> {
     return {
         type: "creative.ready",
         v: 1,
@@ -192,6 +195,117 @@ describe("screen display and voice lifecycle", () => {
         });
         expect(video.style.opacity).toBe("0");
         expect(host.textContent).toContain("Esta pantalla");
+    });
+
+    it("applies a copy upgrade immediately without decoding logos or replacing the mounted video", async () => {
+        const ready = message("on-air", null);
+        ready.spec.video_url = "/loop.mp4";
+        await act(async () => {
+            harness.receive(ready);
+            await Promise.resolve();
+        });
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(250);
+        });
+        const video = host.querySelector('[aria-hidden="false"] video');
+        const decode = vi.fn(() => Promise.reject(new Error("must reuse the verified logo")));
+        vi.stubGlobal(
+            "Image",
+            class {
+                decode = decode;
+            },
+        );
+        const upgrade: PlayerOutbound = {
+            ...ready,
+            type: "creative.upgraded",
+            upgrade_kind: "copy",
+            spec: {
+                ...ready.spec,
+                slots: [{ ...ready.spec.slots[0]!, copy_text: "improved-now" }],
+            },
+        };
+        await act(async () => {
+            harness.receive(upgrade);
+            await Promise.resolve();
+        });
+        expect(visibleCopy()).toContain("improved-now");
+        expect(decode).not.toHaveBeenCalled();
+        expect(host.querySelector('[aria-hidden="false"] video')).toBe(video);
+    });
+
+    it("preserves the dwell stage when copy is upgraded after the offer begins", async () => {
+        const ready = message("dwell", null);
+        ready.spec.stages = [
+            { name: "teaser", copy_text: "teaser" },
+            { name: "offer", copy_text: "original-offer" },
+            { name: "close", copy_text: "close" },
+        ];
+        await act(async () => {
+            harness.receive(ready);
+            await Promise.resolve();
+        });
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(3250);
+        });
+        expect(visibleCopy()).toContain("original-offer");
+        await act(async () => {
+            harness.receive({
+                ...ready,
+                type: "creative.upgraded",
+                upgrade_kind: "copy",
+                spec: {
+                    ...ready.spec,
+                    stages: [
+                        { name: "teaser", copy_text: "new-teaser" },
+                        { name: "offer", copy_text: "new-offer" },
+                        { name: "close", copy_text: "new-close" },
+                    ],
+                },
+            });
+            await Promise.resolve();
+        });
+        expect(visibleCopy()).toContain("new-offer");
+        expect(visibleCopy()).not.toContain("new-teaser");
+    });
+
+    it("does not restart an in-flight logo decode when a warm upgrade arrives", async () => {
+        let finish = () => {};
+        const pending = new Promise<void>((resolve) => {
+            finish = resolve;
+        });
+        const decode = vi.fn(() => pending);
+        vi.stubGlobal(
+            "Image",
+            class {
+                decode = decode;
+            },
+        );
+        const ready = message("pending", null);
+        await act(async () => {
+            harness.receive(ready);
+            await Promise.resolve();
+        });
+        await act(async () => {
+            harness.receive({
+                ...ready,
+                type: "creative.upgraded",
+                upgrade_kind: "copy",
+                spec: {
+                    ...ready.spec,
+                    slots: [{ ...ready.spec.slots[0]!, copy_text: "latest-copy" }],
+                },
+            });
+            await Promise.resolve();
+        });
+        expect(decode).toHaveBeenCalledTimes(1);
+        await act(async () => {
+            finish();
+            await Promise.resolve();
+        });
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(250);
+        });
+        expect(visibleCopy()).toContain("latest-copy");
     });
 
     it("keeps the ad visible when audio fails", async () => {

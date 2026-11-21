@@ -278,3 +278,62 @@ edge publication/debounce, browser scheduling, logo downloads and the TV.
 Those require a hardware rehearsal. The eval's glass-to-glass metric remains
 unavailable until the player reports `displayed_at`; the browser measurements
 above do not fill that missing production trace.
+
+## 9. Upgrade latency and connection races (2026-11-21)
+
+The next investigation tested three ranked hypotheses: already-visible copy
+and voice upgrades unnecessarily repeat decoding/crossfade; upgrades can
+replace a newer queued creative; and retired WebSocket callbacks can create
+duplicate connections after a stop/start cycle. Regression tests reproduced
+the real React upgrade failure and all three socket lifecycle failures before
+implementation. The player was discarding the distinction between
+`creative.ready` and `creative.upgraded`.
+
+Upgrades now patch the matching front, back or queued creative. A visible
+upgrade retains the same layer, mounted video, dwell stage and play window.
+It does not run another required-logo decode or 250 ms transition. Repeated
+ready messages for a known compatible creative also reuse that layer. The
+auction id, brand ids, slot order and logo URLs must match: an incompatible
+upgrade is ignored, and a new ready message with changed assets still takes
+the ordinary preload path. Retired upgrades are dropped; upgrading the
+fading creative preserves any newer queued ad.
+
+The preload phase retains its original request while a compatible upgrade
+changes the back layer's copy. A regression found that depending on the whole
+back-layer object restarted decoding on an upgrade (two decode calls instead
+of one); retaining the request prevents warm work from delaying hot readiness.
+A superseded preload's completion also checks its abort signal before it can
+advance the player.
+
+`TypedSocket` now treats start as idempotent through connecting, open and
+backoff states. Stop invalidates the connection before close, and open,
+message and close callbacks verify connection ownership. Tests inject late
+callbacks after restart and verify that no stale frame or extra reconnect
+escapes. This applies to the console as well as the screen.
+
+A local Chromium comparison against the same real backend pushed five copy
+upgrades with unchanged brand assets, through `/dev/push` and actual player
+WebSockets. A MutationObserver measured inbound upgrade message to updated
+text in the visible front layer:
+
+| Measurement | Original player (`dfb9523`) | Changed player |
+|---|---:|---:|
+| Five observed upgrade latencies (ms) | 252.0, 480.4, 251.9, 495.8, 252.1 | 4.4, 1.7, 2.5, 1.6, 2.4 |
+| Median (ms) | 252.1 | 2.4 |
+| Mounted video retained through every upgrade | No | Yes |
+| Uncaught browser errors | 0 | 0 |
+
+The changed player also ignored a late upgrade for a retired creative.
+These are local DOM-update measurements, not camera-to-TV or physical paint
+percentiles. The original can repeat a transition when lifecycle races
+deliver duplicate messages; the changed player avoids both duplicate
+connection callbacks and repeat transitions. No server timing improvement is
+claimed by these frontend changes.
+
+Regression checks cover pending, visible, fading and queued creatives;
+required-asset/auction mismatches; continuous billing windows; preservation
+of video and dwell stage; decode continuity; stale upgrades; idempotent start;
+and stop/start/backoff races. Run `cd web && npm run check`. Verification also
+ran the production build, both TypeScript compilers, the backend unit suite,
+`make eval`, `make eval-creative`, and `make test-sandbox` (including provider
+quota failure). Product ratchets in the loop eval were unchanged.
