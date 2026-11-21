@@ -146,6 +146,25 @@ bans it at gas stations); the minor-safety beat blocks the "ALTO EN" snacks inst
 affiliation: keep it off the public URL. Logo provenance:
 [`assets/campaigns/logos/SOURCES.md`](../assets/campaigns/logos/SOURCES.md).
 
+The Chile market is deliberately uneven (`MARKET_SHAPE` and `daypart_boosts` in the
+catalog):
+- **Budgets per brand:** Pronto Copec (the house) and Coca-Cola spend big, Score is
+  the challenger, and Benedictino's small budget paces out during a demo.
+- **Core versus secondary rates:** each brand pays its full rate only on its core
+  segment.
+- **Highway dayparts:** coffee and energy are boosted at night, completo + bebida at
+  noon, and water, sports drinks and ice cream in the afternoon. The time is the
+  venue's local time, so a demo at 15:00 shows different winners than one at 23:00.
+- **Named Chilean packs:** "Pack ruta" and "Pack carrete" replace the Combo/Dúo
+  ladder. The hero basket keeps "Dúo".
+
+Photos: relit unbranded cans (Score yellow, Red Bull blue, Monster green) and real
+Commons photos of a completo and café + medialuna, built by
+`scripts/build_chile_photos.py` and credited in
+[`assets/campaigns/photos/SOURCES.md`](../assets/campaigns/photos/SOURCES.md).
+Brands with no fitting photo render without a hero image rather than with another
+brand's product.
+
 **Prop markers:** `edge/props/markers.json` maps marker id → brand slug. Print
 the [Café Patio marker](../edge/props/cafe-patio-marker.svg) at 100% scale. It
 prints with a 4.2 × 4.2 cm code and a white border. Face it toward the camera

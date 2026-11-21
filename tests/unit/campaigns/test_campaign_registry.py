@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from decimal import Decimal
 
 import pytest
@@ -31,8 +31,14 @@ class RestoringRegistry(InMemoryCampaignRegistry):
         self._spent, self._multiplier, self._seq = clp(spent), multiplier, seq
         self.recorded: list[tuple[CampaignId, BidMultiplier, int]] = []
 
-    def open(self, slugs: Sequence[str], *, budget: Money) -> dict[str, StoredCampaign]:
-        fresh = super().open(slugs, budget=budget)
+    def open(
+        self,
+        slugs: Sequence[str],
+        *,
+        budget: Money,
+        budgets: Mapping[str, Money] | None = None,
+    ) -> dict[str, StoredCampaign]:
+        fresh = super().open(slugs, budget=budget, budgets=budgets)
         return {
             slug: StoredCampaign(
                 slug=slug,

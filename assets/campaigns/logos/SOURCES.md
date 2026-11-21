@@ -12,12 +12,13 @@ affiliation. Never AI-drawn or redrawn (CLAUDE.md invariant 4).
 |---|---|
 | `red-bull.svg` | File:Logo of Red bull.svg |
 | `monster.svg` | File:Logo Monster Energy.webp |
-| `juan-valdez.svg` | File:Logo JVC.jpg |
+| `juan-valdez.svg` | File:Logo JVC.jpg (plate set to the file's own #f8f9fd ground so no box shows) |
 | `nescafe.svg` | File:Nescafé logo 2014.svg |
 | `pronto-copec.svg` | File:Copec Logo 2023.svg |
 | `coca-cola.svg` | File:Coca-Cola logo.svg |
 | `pepsi.svg` | File:Pepsi 2023.svg |
 | `lays.svg` | File:Lay's 2025.svg |
+| `cachantun.svg` | Official site, `https://www.cachantun.cl/images/logo-blanco.png` (white mark, trimmed and downscaled, on a blue plate) |
 | `powerade.svg` | File:Powerade-logo-2019.svg |
 | `gatorade.svg` | File:Gatorade logo.svg (rasterized to 240 px) |
 | `soprole.svg` | File:Soprole.png |
@@ -25,5 +26,5 @@ affiliation. Never AI-drawn or redrawn (CLAUDE.md invariant 4).
 | `bresler.svg` | File:Bresler logo 2022.png |
 
 Missing (a plain wordmark is drawn until the brand's press-kit file is dropped in as
-`<slug>.svg`, `.png` or `.webp`): `score`, `cachantun`, `benedictino`, `marco-polo`,
+`<slug>.svg`, `.png` or `.webp`): `score`, `benedictino`, `marco-polo`,
 `super-8`, `ambrosoli`, `bilz-y-pap`, `colun`, `andina-del-valle`, `savory`.

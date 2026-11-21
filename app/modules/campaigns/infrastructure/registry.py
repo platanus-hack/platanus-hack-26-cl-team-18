@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from decimal import Decimal
 from threading import Lock
 from typing import Any
@@ -50,7 +50,13 @@ class InMemoryCampaignRegistry:
         self._lock = Lock()
         self._campaigns: dict[str, StoredCampaign] = {}
 
-    def open(self, slugs: Sequence[str], *, budget: Money) -> dict[str, StoredCampaign]:
+    def open(
+        self,
+        slugs: Sequence[str],
+        *,
+        budget: Money,
+        budgets: Mapping[str, Money] | None = None,
+    ) -> dict[str, StoredCampaign]:
         with self._lock:
             for slug in slugs:
                 if slug not in self._campaigns:
@@ -58,8 +64,8 @@ class InMemoryCampaignRegistry:
                         slug=slug,
                         brand_id=BrandId.create(self._ids.new_uuid7()),
                         campaign_id=CampaignId.create(self._ids.new_uuid7()),
-                        budget=budget,
-                        spent=Money.zero(currency=budget.currency),
+                        budget=(budgets or {}).get(slug, budget),
+                        spent=Money.zero(currency=(budgets or {}).get(slug, budget).currency),
                         multiplier=BidMultiplier.neutral(),
                         multiplier_seq=0,
                     )
@@ -87,21 +93,28 @@ class PostgresCampaignRegistry:
         self._ids = ids
         self._clock = clock
 
-    def open(self, slugs: Sequence[str], *, budget: Money) -> dict[str, StoredCampaign]:
+    def open(
+        self,
+        slugs: Sequence[str],
+        *,
+        budget: Money,
+        budgets: Mapping[str, Money] | None = None,
+    ) -> dict[str, StoredCampaign]:
         now = self._clock.now_utc()
         conn = self._connect()
         try:
             with conn, conn.cursor() as cur:
                 # Concurrent boots (an overlapping deploy) race safely: the slug is unique.
                 for slug in slugs:
+                    opening = (budgets or {}).get(slug, budget)
                     cur.execute(
                         INSERT_CAMPAIGN,
                         (
                             str(self._ids.new_uuid7()),
                             str(self._ids.new_uuid7()),
                             slug,
-                            str(budget.currency),
-                            budget.amount,
+                            str(opening.currency),
+                            opening.amount,
                             now,
                             now,
                         ),

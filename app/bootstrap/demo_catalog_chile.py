@@ -22,6 +22,8 @@ Prices are 2026 shelf anchors in CLP; check them against a real Pronto before de
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from app.bootstrap.demo_catalog import (
     CANDY,
     COFFEE,
@@ -343,6 +345,17 @@ def _sized(one: int, two: int, three: int, four: int) -> tuple[tuple[int, str, s
     )
 
 
+def _pack(name: str, prices: tuple[int, int, int, int]) -> tuple[tuple[int, str, str, int], ...]:
+    """A named Chilean pack sized to the group ("Pack ruta", "Pack ruta para 3"), so
+    baskets don't all read Combo/Dúo/Trío. One idiom at most, and only in the name."""
+    return tuple(
+        (party, name if party == 1 else f"{name} para {party}", suffix, price)
+        for party, suffix, price in zip(
+            (1, 2, 3, 4), ("", " x2", " x3", " x4"), prices, strict=True
+        )
+    )
+
+
 def _solo(
     labels: tuple[str, str, str, str], prices: tuple[int, int, int, int]
 ) -> tuple[tuple[int, str, str, int], ...]:
@@ -390,23 +403,23 @@ BASKETS: tuple[DemoBasket, ...] = (
     DemoBasket(
         slugs=frozenset({"monster", "pronto-copec"}),
         names="Monster + Pronto Copec",
-        tiers=_sized(4490, 8490, 11990, 15490),
+        tiers=_pack("Pack turno noche", (4490, 8490, 11990, 15490)),
     ),
     # Group in the car: chips and a cold drink (both PepsiCo brands).
     DemoBasket(
         slugs=frozenset({"pepsi", "lays"}),
         names="Lay's + Pepsi",
-        tiers=_sized(3490, 6490, 8990, 11490),
+        tiers=_pack("Pack carrete", (3490, 6490, 8990, 11490)),
     ),
     DemoBasket(
         slugs=frozenset({"cachantun", "marco-polo"}),
         names="Cachantun + Marco Polo",
-        tiers=_sized(2990, 5490, 7790, 9990),
+        tiers=_pack("Pack ruta", (2990, 5490, 7790, 9990)),
     ),
     DemoBasket(
         slugs=frozenset({"super-8", "juan-valdez"}),
         names="Juan Valdez + Super 8",
-        tiers=_sized(3290, 5990, 8490, 10990),
+        tiers=_pack("Café + Super 8", (3290, 5990, 8490, 10990)),
     ),
     # The completo's soda slot: Bilz y Pap fights Coca-Cola for it.
     DemoBasket(
@@ -485,7 +498,7 @@ BASKETS: tuple[DemoBasket, ...] = (
     DemoBasket(
         slugs=frozenset({"gatorade", "lays"}),
         names="Lay's + Gatorade",
-        tiers=_sized(3790, 6990, 9790, 12490),
+        tiers=_pack("Pack partido", (3790, 6990, 9790, 12490)),
     ),
     DemoBasket(
         slugs=frozenset({"powerade", "marco-polo"}),
@@ -690,5 +703,77 @@ CHILE = Catalog(
         ("energy drink can", ENERGY_DRINKS),
         ("bottle", WATER),
         ("energía", ENERGY_DRINKS),
+    ),
+    daypart_boosts=(
+        # Highway dayparts (venue local time, creative.domain.brief.daypart_for_hour):
+        # breakfast before the road, completo + bebida at noon, cold drinks in the
+        # afternoon heat, snacks for the evening drive, energy and coffee for the
+        # night shift. Within [0.2, 5] (auction CategoryMultiplier).
+        ("morning", "coffee", "1.4"),
+        ("morning", "pastry", "1.3"),
+        ("morning", "dairy", "1.25"),
+        ("morning", "juice", "1.2"),
+        ("morning", "ice_cream", "0.6"),
+        ("morning", "snacks", "0.8"),
+        ("midday", "pastry", "1.25"),
+        ("midday", "cola", "1.3"),
+        ("midday", "water", "1.1"),
+        ("afternoon", "water", "1.3"),
+        ("afternoon", "sports_drink", "1.3"),
+        ("afternoon", "ice_cream", "1.5"),
+        ("afternoon", "cola", "1.15"),
+        ("afternoon", "coffee", "0.85"),
+        ("evening", "snacks", "1.25"),
+        ("evening", "candy", "1.15"),
+        ("evening", "cola", "1.1"),
+        ("night", "energy_drink", "1.4"),
+        ("night", "coffee", "1.25"),
+        ("night", "dairy", "0.7"),
+        ("night", "ice_cream", "0.6"),
+    ),
+)
+
+# An uneven market, like a real one (docs/demo.md): who spends big, who is a lean
+# challenger, whose budget runs out mid-demo, and what each pays outside its core
+# audience. slug: (opening budget CLP, rate on non-core segments CLP/attention-second;
+# None = the core rate everywhere). The Postgres registry keeps a stored campaign's
+# budget, so a changed budget here applies to campaigns opened after it.
+MARKET_SHAPE: dict[str, tuple[int, str | None]] = {
+    "pronto-copec": (200_000, "3"),  # the house: always fills
+    "coca-cola": (150_000, "3.5"),
+    "red-bull": (120_000, "5.5"),  # premium leader
+    "score": (90_000, None),  # the challenger bids its core rate everywhere
+    "juan-valdez": (80_000, "3.5"),
+    "pepsi": (70_000, "3"),
+    "monster": (60_000, "4.5"),
+    "gatorade": (55_000, "3"),
+    "cachantun": (50_000, "2"),
+    "lays": (45_000, "2.5"),
+    "nescafe": (40_000, "2.5"),
+    "powerade": (40_000, "2.8"),
+    "bilz-y-pap": (35_000, "3"),
+    "savory": (30_000, "2.6"),
+    "colun": (25_000, "2.4"),
+    "soprole": (25_000, "2.2"),
+    "bresler": (22_000, "2.5"),
+    "marco-polo": (20_000, "2.4"),
+    "watts": (20_000, "2.2"),
+    "andina-del-valle": (18_000, "2"),
+    "super-8": (15_000, "2.2"),
+    "ambrosoli": (12_000, "2"),
+    "benedictino": (4_000, None),  # small test budget: paces out during the demo
+}
+
+CHILE = replace(
+    CHILE,
+    brands=tuple(
+        replace(
+            brand,
+            budget_clp=MARKET_SHAPE[brand.slug][0],
+            secondary_rate_clp_per_as=MARKET_SHAPE[brand.slug][1],
+        )
+        if brand.slug in MARKET_SHAPE
+        else brand
+        for brand in CHILE.brands
     ),
 )

@@ -9,7 +9,7 @@ startup into `LiveCampaignBook`, and multiplier changes are written behind.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -29,8 +29,18 @@ class StoredCampaign:
 
 
 class CampaignRegistry(Protocol):
-    def open(self, slugs: Sequence[str], *, budget: Money) -> dict[str, StoredCampaign]:
-        """One campaign per slug: the stored one, or a new one opened with `budget`."""
+    def open(
+        self,
+        slugs: Sequence[str],
+        *,
+        budget: Money,
+        budgets: Mapping[str, Money] | None = None,
+    ) -> dict[str, StoredCampaign]:
+        """One campaign per slug: the stored one, or a new one opened with its budget.
+
+        A new campaign opens with `budgets[slug]` when given, else the shared `budget`.
+        A stored campaign keeps its stored budget (it is the record, not the catalog).
+        """
         ...
 
     def multiplier_changed(

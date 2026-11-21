@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "provenance": "AI-generated illustrative product scenery; existing brand marks and approved offers remain separate overlays. Videos are local photo-motion loops, not generated product motion.",
+  "provenance": "AI-generated illustrative product scenery; existing brand marks and approved offers remain separate overlays. Videos are local photo-motion loops, not generated product motion. Chile catalog photos: assets/campaigns/photos/SOURCES.md (real Commons photos, credited, and relit unbranded studio shots).",
   "campaigns": {
     "voltio": {
       "photo": "energy",
@@ -27,32 +27,52 @@
       "video": "rayo-coffee"
     },
     "score": {
-      "photo": "rayo",
-      "video": "rayo"
+      "photo": "cl-score",
+      "video": "cl-score"
     },
     "red-bull": {
-      "photo": "rayo",
-      "video": "rayo"
+      "photo": "cl-red-bull",
+      "video": "cl-red-bull"
     },
     "monster": {
-      "photo": "energy",
-      "video": "energy"
+      "photo": "cl-monster",
+      "video": "cl-monster"
     },
     "juan-valdez": {
       "photo": "coffee",
       "video": "coffee"
     },
     "nescafe": {
-      "photo": "coffee",
-      "video": "coffee"
+      "photo": "cl-cafe-medialuna",
+      "video": "cl-cafe-medialuna"
+    },
+    "pronto-copec": {
+      "photo": "cl-completo",
+      "video": "cl-completo"
     },
     "juan-valdez+score": {
-      "photo": "rayo-coffee",
-      "video": "rayo-coffee"
+      "photo": "cl-score-cafe",
+      "video": "cl-score-cafe"
     },
     "juan-valdez+red-bull": {
-      "photo": "rayo-coffee",
-      "video": "rayo-coffee"
+      "photo": "cl-red-bull-cafe",
+      "video": "cl-red-bull-cafe"
+    },
+    "juan-valdez+pronto-copec": {
+      "photo": "cl-cafe-medialuna",
+      "video": "cl-cafe-medialuna"
+    },
+    "coca-cola+pronto-copec": {
+      "photo": "cl-completo",
+      "video": "cl-completo"
+    },
+    "monster+pronto-copec": {
+      "photo": "cl-completo",
+      "video": "cl-completo"
+    },
+    "juan-valdez+super-8": {
+      "photo": "coffee",
+      "video": "coffee"
     }
   }
 }

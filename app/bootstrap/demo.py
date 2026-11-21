@@ -57,6 +57,7 @@ from app.modules.auction.application.ports.auction_log import AuctionLog, Auctio
 from app.modules.auction.domain.affinity import RelatedSegments, SegmentAffinity
 from app.modules.auction.domain.opportunity import (
     AdOpportunity,
+    CategoryMultiplier,
     HeldProduct as BidHeldProduct,
     Layout,
 )
@@ -227,9 +228,16 @@ def seed_market(
     # Stable ids, budgets and live bids come from the registry (Postgres in prod), so
     # charges keep pointing at the same campaign and spend survives a restart.
     registry = registry or InMemoryCampaignRegistry(ids)
+    # A brand with its own budget opens with it (the Chile catalog's uneven market);
+    # the rest share `budget_clp`.
     stored = registry.open(
         [brand.slug for brand in catalog.brands],
         budget=Money.create(currency="CLP", amount=budget_clp),
+        budgets={
+            brand.slug: Money.create(currency="CLP", amount=brand.budget_clp)
+            for brand in catalog.brands
+            if brand.budget_clp is not None
+        },
     )
     kits = tuple(
         BrandKit(
@@ -269,11 +277,18 @@ def seed_market(
             brand_id=brand_by_slug[brand.slug],
             category=brand.category,
             age_restricted=brand.age_restricted,
+            # The first segment is the brand's core audience; a secondary rate (when
+            # set) prices the rest lower, so rivals win different moments.
             segment_bids=tuple(
                 SegmentBid(
-                    segment_id=SegmentId.create(segment), rate=_clp_per_as(brand.rate_clp_per_as)
+                    segment_id=SegmentId.create(segment),
+                    rate=_clp_per_as(
+                        brand.rate_clp_per_as
+                        if index == 0 or brand.secondary_rate_clp_per_as is None
+                        else brand.secondary_rate_clp_per_as
+                    ),
                 )
-                for segment in brand.segments
+                for index, segment in enumerate(brand.segments)
             ),
             partners=frozenset(brand_by_slug[slug] for slug in catalog.partners_of(brand.slug)),
             live_multiplier=stored[brand.slug].multiplier,
@@ -745,12 +760,20 @@ def register_demo(
                 else b
                 for b in bidders
             )
+        # Context-aware bids: the catalog's daypart table, at the venue's local hour
+        # (empty for the pinned fictional catalog, so its auctions are unchanged).
+        daypart = daypart_for_hour(moment.measured_at.value.astimezone(VENUE_TZ).hour)
+        boosts = tuple(
+            CategoryMultiplier(category=category, multiplier=multiplier)
+            for category, multiplier in market.catalog.boosts_for(daypart.value)
+        )
         outcome = desk.run(
             AdOpportunity(
                 moment=moment,
                 bidders=bidders,
                 layouts=layouts,
                 reserve=reserve,
+                category_multipliers=boosts,
                 approved_baskets=offer_book.pairings(),
                 out_of_stock=stock.out_of_stock(wire_screen_id),
                 max_play_seconds=Decimal(MAX_PLAY_SECONDS),

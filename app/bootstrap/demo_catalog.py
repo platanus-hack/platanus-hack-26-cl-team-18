@@ -15,6 +15,7 @@ from __future__ import annotations
 import base64
 import html
 from dataclasses import dataclass
+from decimal import Decimal
 
 # Real IAB Audience Taxonomy 1.1 ids (app/modules/audience/infrastructure/catalog).
 FITNESS = "408"  # Interest | Healthy Living | Fitness and Exercise
@@ -51,6 +52,11 @@ class DemoBrand:
     # The audience catalog's product category for a held prop ("product:<slug>").
     # None when iab_audience_1_1_cstore.json already lists the brand.
     product: str | None = None
+    # Market shape (optional; the pinned fictional catalog leaves both unset). A brand's
+    # own opening budget instead of the shared one, and the rate it bids on every segment
+    # after its first (core) one: real campaigns pay most for their core audience.
+    budget_clp: int | None = None
+    secondary_rate_clp_per_as: str | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -382,11 +388,23 @@ class Catalog:
     # The fictional seed reads an energy can as fitness (Voltio is sports goods); a gas
     # station reads it as an energy-drink moment, so the hook isn't "you just trained".
     cue_segments: tuple[tuple[str, str], ...] = ()
+    # Context-aware bids (product.md §4.1): (daypart, brand category, multiplier). The
+    # auction applies them per category (AdOpportunity.category_multipliers): coffee at
+    # dawn, cold drinks in the afternoon. Empty = every category bids flat all day.
+    daypart_boosts: tuple[tuple[str, str, str], ...] = ()
 
     def partners_of(self, slug: str) -> frozenset[str]:
         return frozenset(
             other for basket in self.baskets if slug in basket.slugs for other in basket.slugs
         ) - {slug}
+
+    def boosts_for(self, daypart: str) -> tuple[tuple[str, Decimal], ...]:
+        """The (category, multiplier) pairs this daypart applies, in catalog order."""
+        return tuple(
+            (category, Decimal(multiplier))
+            for part, category, multiplier in self.daypart_boosts
+            if part == daypart
+        )
 
 
 # The pinned fictional catalog: tests, evals and the public URL.
