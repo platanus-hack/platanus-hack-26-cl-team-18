@@ -49,10 +49,23 @@ class AppSettings(BaseSettings):
     # QA and `/dev/push`, reached from the hidden `/demo/<key>` web hub. Unset: off.
     # In prod only with a key of 24+ chars, and never `/dev`; app_env=test needs no key.
     demo_key: SecretStr | None = None
+    # Device tokens for the live loop (app/api/device_auth.py). AGENT_TOKEN: the vision /
+    # speech agent's bearer token on /ws/agent. SCREEN_TOKEN: lets a player's reports
+    # (playback.report → charges) count; without it a player is view-only. Unset: open
+    # outside prod, closed in prod (where each needs 24+ chars).
+    agent_token: SecretStr | None = None
+    screen_token: SecretStr | None = None
     dev_console: bool = True
     # Opt-in: relay the face-blurred keyframe the VLM gets to `/dev` (in memory, never
     # stored). Off by default; refused in prod.
     dev_keyframe_preview: bool = False
+    # Demo only: the console's camera panel shows a face-blurred, downscaled camera
+    # view under the boxes (in memory, never stored). Always off in prod.
+    demo_camera_preview: bool = True
+
+    @property
+    def demo_camera_preview_enabled(self) -> bool:
+        return self.demo_camera_preview and self.app_env != "prod"
 
     @property
     def dev_console_enabled(self) -> bool:

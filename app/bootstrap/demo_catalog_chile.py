@@ -54,7 +54,7 @@ BRANDS: tuple[DemoBrand, ...] = (
         segments=(FITNESS, ENERGY_DRINKS),
         rate_clp_per_as="8",
         color="#f5c400",
-        stock_copy="Score · Helada, para el turno largo.",
+        stock_copy="Score · Original 473 ml, helada para el turno largo.",
         voice=("directo", "chileno", "sin adornos"),
         product="energy_drink",
     ),
@@ -130,7 +130,7 @@ BRANDS: tuple[DemoBrand, ...] = (
         segments=(SOFT_DRINKS, FAST_FOOD),
         rate_clp_per_as="4.5",
         color="#f40009",
-        stock_copy="Coca-Cola · Sin Azúcar 591 ml, helada.",
+        stock_copy="Coca-Cola · Zero Azúcar 591 ml, helada.",
         voice=("alegre", "simple"),
         product="soft_drink",
     ),
@@ -229,7 +229,7 @@ BRANDS: tuple[DemoBrand, ...] = (
         segments=(SOFT_DRINKS, FAST_FOOD),
         rate_clp_per_as="4.2",
         color="#f4c300",
-        stock_copy="Bilz y Pap · Bien heladas, para el completo.",
+        stock_copy="Bilz y Pap · Zero 600 ml, bien heladas para el completo.",
         voice=("nostálgico", "alegre"),
         product="soft_drink",
     ),
@@ -261,13 +261,14 @@ BRANDS: tuple[DemoBrand, ...] = (
     # --- flavoured milk and nectars usually carry ALTO EN AZÚCARES (Ley 20.606) ------
     DemoBrand(
         slug="colun",
-        name="Colún",
+        name="Colun",
         category="dairy",
         age_restricted=True,
         segments=(NON_ALCOHOLIC, PASTRY),
         rate_clp_per_as="3.2",
         color="#2a6ebb",
-        stock_copy="Colún · Leche chocolatada del sur.",
+        stock_copy="Colun · Leche chocolatada de 200 ml, hecha en el sur.",
+        tagline="Colun, toda la magia del sur.",
         voice=("campestre", "cercano"),
         product="dairy",
     ),
@@ -317,6 +318,7 @@ BRANDS: tuple[DemoBrand, ...] = (
         rate_clp_per_as="3.4",
         color="#e4002b",
         stock_copy="Savory · Helado para el calor de la ruta.",
+        tagline="Alarma de helado.",
         voice=("veraniego", "alegre"),
         product="ice_cream",
     ),
@@ -394,7 +396,7 @@ BASKETS: tuple[DemoBasket, ...] = (
         slugs=frozenset({"pronto-copec", "coca-cola"}),
         names="Pronto Copec + Coca-Cola",
         tiers=(
-            (1, "Completo + bebida", "", 3990),
+            (1, "Completo palta + bebida", "", 3990),
             (2, "Dúo completo", " x2", 7490),
             (3, "Trío completo", " x3", 10490),
             (4, "Pack x4 completo", " x4", 13490),
@@ -426,7 +428,7 @@ BASKETS: tuple[DemoBasket, ...] = (
         slugs=frozenset({"pronto-copec", "bilz-y-pap"}),
         names="Pronto Copec + Bilz y Pap",
         tiers=(
-            (1, "Completo + bebida", "", 3790),
+            (1, "Completo palta + bebida", "", 3790),
             (2, "Dúo completo", " x2", 7290),
             (3, "Trío completo", " x3", 10190),
             (4, "Pack x4 completo", " x4", 13190),
@@ -456,7 +458,7 @@ BASKETS: tuple[DemoBasket, ...] = (
     # Breakfast at the counter: medialuna with chocolate milk or a nectar.
     DemoBasket(
         slugs=frozenset({"colun", "pronto-copec"}),
-        names="Pronto Copec + Colún",
+        names="Pronto Copec + Colun",
         tiers=(
             (1, "Medialuna + chocolatada", "", 2290),
             (2, "Medialuna + chocolatada para 2", " x2", 4290),
@@ -516,7 +518,8 @@ BASKETS: tuple[DemoBasket, ...] = (
         slugs=frozenset({"score"}),
         names="Score",
         tiers=_solo(
-            ("Score helada", "Dos Score", "Tres Score", "Cuatro Score"), (1590, 2890, 3990, 4990)
+            ("Score Original 473 ml", "Dos Score", "Tres Score", "Cuatro Score"),
+            (1590, 2890, 3990, 4990),
         ),
     ),
     DemoBasket(
@@ -562,7 +565,7 @@ BASKETS: tuple[DemoBasket, ...] = (
         slugs=frozenset({"coca-cola"}),
         names="Coca-Cola",
         tiers=_solo(
-            ("Coca-Cola Sin Azúcar 591 ml", "Dos Coca-Cola", "Tres Coca-Cola", "Cuatro Coca-Cola"),
+            ("Coca-Cola Zero Azúcar 591 ml", "Dos Coca-Cola", "Tres Coca-Cola", "Cuatro Coca-Cola"),
             (1690, 2990, 4290, 5490),
         ),
     ),
@@ -623,8 +626,9 @@ BASKETS: tuple[DemoBasket, ...] = (
         slugs=frozenset({"bilz-y-pap"}),
         names="Bilz y Pap",
         tiers=_solo(
-            ("Bilz o Pap helada", "Dos Bilz y Pap", "Tres Bilz y Pap", "Cuatro Bilz y Pap"),
-            (1390, 2490, 3590, 4590),
+            # CCU runs a fixed $1.000 price on 600 ml PET sodas (ccu.cl bases legales 2026).
+            ("Bilz o Pap Zero 600 ml", "Dos Bilz y Pap", "Tres Bilz y Pap", "Cuatro Bilz y Pap"),
+            (990, 1890, 2690, 3490),
         ),
     ),
     DemoBasket(
@@ -645,9 +649,9 @@ BASKETS: tuple[DemoBasket, ...] = (
     ),
     DemoBasket(
         slugs=frozenset({"colun"}),
-        names="Colún",
+        names="Colun",
         tiers=_solo(
-            ("Chocolatada Colún", "Dos chocolatadas", "Tres chocolatadas", "Cuatro chocolatadas"),
+            ("Chocolatada Colun", "Dos chocolatadas", "Tres chocolatadas", "Cuatro chocolatadas"),
             (1190, 2190, 2990, 3790),
         ),
     ),
@@ -679,7 +683,7 @@ BASKETS: tuple[DemoBasket, ...] = (
         slugs=frozenset({"savory"}),
         names="Savory",
         tiers=_solo(
-            ("Helado Savory", "Dos helados", "Tres helados", "Cuatro helados"),
+            ("Savory Mega Chocolate Naranja", "Dos helados", "Tres helados", "Cuatro helados"),
             (1490, 2790, 3990, 4990),
         ),
     ),
@@ -697,6 +701,8 @@ CHILE = Catalog(
     name="chile",
     brands=BRANDS,
     baskets=BASKETS,
+    # Every brand airs imagery: its own campaign photos, else its category's scene.
+    category_scenes=True,
     # At a highway shop a can or a bottle means a tired driver or a thirsty one, not
     # someone leaving the gym.
     cue_segments=(

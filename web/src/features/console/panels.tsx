@@ -41,7 +41,7 @@ export const DEMO_BRANDS: Readonly<Record<string, string>> = {
     "bilz-y-pap": "Bilz y Pap",
     powerade: "Powerade",
     gatorade: "Gatorade",
-    colun: "Colún",
+    colun: "Colun",
     soprole: "Soprole",
     watts: "Watt's",
     "andina-del-valle": "Andina del Valle",

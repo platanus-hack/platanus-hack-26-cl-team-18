@@ -67,8 +67,14 @@ SPECS: dict[str, Spec] = {
     "basket_rate": Spec("ratchet", "higher", label="Basket rate (≥2 brands / paid plays)"),
     "mean_coverage": Spec("ratchet", "higher", label="Mean audience coverage"),
     "basket_value_lift": Spec("ratchet", "higher", label="Basket value lift vs best solo"),
+    # Not run-deterministic: the suite runs in real time, so time-weighted confidences
+    # move prices a hair (one sha measured 0.0516 and 0.0544). 0.005 absorbs that; a
+    # real pricing regression (baskets losing their VCG premium) is far larger.
     "basket_revenue_lift": Spec(
-        "ratchet", "higher", label="Revenue lift vs single-brand counterfactual"
+        "ratchet",
+        "higher",
+        tolerance=0.005,
+        label="Revenue lift vs single-brand counterfactual",
     ),
     "decisions_swapped": Spec("info", label="Decisions that swapped the screen"),
     "decisions_kept_on_air": Spec("info", label="Decisions that kept the creative on air"),

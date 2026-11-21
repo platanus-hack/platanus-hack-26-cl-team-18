@@ -1,5 +1,6 @@
 import { PlayerOutboundSchema, type PlayerInbound, type PlayerOutbound } from "@/contract";
 import { backendWsUrl, screenIdFromLocation } from "@/lib/config";
+import { screenProtocols, screenToken } from "@/lib/device";
 import { createStore, useStore } from "@/lib/store";
 import { TypedSocket } from "@/lib/ws/typed-socket";
 import { ErrorBoundary } from "@/shared/ui/ErrorBoundary";
@@ -76,6 +77,8 @@ function ScreenPlayer() {
         () =>
             new TypedSocket<PlayerOutbound, PlayerInbound>({
                 url: `${backendWsUrl}/ws/screen/${encodeURIComponent(screenId)}?attention=1&live=1`,
+                // The screen token makes this player's reports bill; without it, view-only.
+                protocols: screenProtocols(screenToken()),
                 schema: PlayerOutboundSchema,
                 onMessage: (message) => {
                     if (message.type === "system.error") {

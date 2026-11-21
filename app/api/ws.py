@@ -32,6 +32,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 from pydantic import ValidationError
 
 from app.api.demo_access import demo_allowed
+from app.api.device_auth import accepted_subprotocol, agent_allowed, screen_can_report
 from app.bootstrap.container import Container
 from app.contract.messages import (
     AGENT_INBOUND,
@@ -63,6 +64,7 @@ AgentMessage = (
     | AgentHello
     | DevPerception
 )
+_POLICY_VIOLATION = status.WS_1008_POLICY_VIOLATION
 DEV_DISABLED = 4404  # close code: the dev console is off in this environment
 AGENT_SILENCE = timedelta(seconds=5)  # five missed 1 s heartbeats: the agent is gone
 SILENCE_POLL_S = 0.5
@@ -133,6 +135,10 @@ def _empty_room(c: Container, screen_id: str, seq: int) -> tuple[AudienceSnapsho
 @router.websocket("/ws/agent")
 async def agent_socket(ws: WebSocket) -> None:
     c = _container(ws)
+    if not agent_allowed(c.settings, ws):
+        # Refused at the handshake (HTTP 403): a stranger never reaches the loop.
+        await ws.close(code=_POLICY_VIOLATION)
+        return
     await ws.accept()
     gate = SeqGate()
     mailbox: ConflatingMailbox[tuple[Inbound, Received]] = ConflatingMailbox(
@@ -225,6 +231,10 @@ async def agent_socket(ws: WebSocket) -> None:
                     # Anonymous boxes only (no image): relayed to the station console's
                     # camera panel and `/dev`, never routed or stored. Works in prod too.
                     if c.live.sensing(message.screen_id):
+                        if message.preview_jpeg_base64 and not (
+                            c.settings.demo_camera_preview_enabled
+                        ):
+                            message = message.model_copy(update={"preview_jpeg_base64": None})
                         await c.hub.broadcast_perception(message)
                     continue
                 if not _admitted_live(c, message):
@@ -275,7 +285,9 @@ async def screen_socket(ws: WebSocket, screen_id: str) -> None:
         await ws.close(code=status.WS_1008_POLICY_VIOLATION)
         return
     c = _container(ws)
-    await ws.accept()
+    # Without the screen token a player only watches: its reports never bill.
+    can_report = screen_can_report(c.settings, ws)
+    await ws.accept(subprotocol=accepted_subprotocol(ws))
     c.hub.add_player(
         screen_id,
         ws,
@@ -290,6 +302,14 @@ async def screen_socket(ws: WebSocket, screen_id: str) -> None:
             if text is None:
                 await _send_error(
                     ws, "frame.binary_unsupported", "players send JSON text frames only"
+                )
+                continue
+            if not can_report:
+                await _send_error(
+                    ws,
+                    "screen.unauthorized",
+                    "this player is view-only: reports need the screen token",
+                    _peek_type(text),
                 )
                 continue
             try:

@@ -39,8 +39,12 @@ class _Socket(Protocol):
 type Connect = Callable[[str], Awaitable[_Socket]]
 
 
-async def _default_connect(url: str) -> _Socket:
-    return await websockets.connect(url, max_size=2**20, ping_interval=10, ping_timeout=10)  # type: ignore[return-value]
+async def _default_connect(url: str, token: str | None = None) -> _Socket:
+    # The backend's device token (app/api/device_auth.py): a header, never in the URL.
+    headers = {"Authorization": f"Bearer {token}"} if token else None
+    return await websockets.connect(  # type: ignore[return-value]
+        url, max_size=2**20, ping_interval=10, ping_timeout=10, additional_headers=headers
+    )
 
 
 @dataclass(eq=False)
@@ -64,7 +68,8 @@ class BackendLink:
         self,
         url: str,
         *,
-        connect: Connect = _default_connect,
+        connect: Connect | None = None,
+        token: str | None = None,
         max_pending: int = 64,
         backoff_base_s: float = 0.25,
         backoff_max_s: float = 5.0,
@@ -76,7 +81,7 @@ class BackendLink:
         self._url = url
         self._hello = hello
         self._on_status = on_status
-        self._connect = connect
+        self._connect: Connect = connect or (lambda target: _default_connect(target, token))
         self._pending: deque[_Pending] = deque()
         self._now = monotonic
         self._state_max_age_s = state_max_age_s

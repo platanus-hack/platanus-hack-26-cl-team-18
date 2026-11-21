@@ -27,6 +27,8 @@ export interface SocketStats {
 
 interface Options<In> {
     readonly url: string;
+    /** WebSocket subprotocols (e.g. the screen token, lib/device.ts). */
+    readonly protocols?: readonly string[] | undefined;
     readonly schema: z.ZodType<In>;
     readonly onMessage: (message: In) => void;
     readonly onStateChange?: (state: ConnectionState) => void;
@@ -36,7 +38,7 @@ interface Options<In> {
     readonly backoff?: { readonly baseMs: number; readonly maxMs: number };
     readonly connectTimeoutMs?: number;
     /** Injected for tests. */
-    readonly createSocket?: (url: string) => WebSocket;
+    readonly createSocket?: (url: string, protocols?: readonly string[]) => WebSocket;
     readonly random?: () => number;
 }
 
@@ -100,8 +102,11 @@ export class TypedSocket<In, Out = never> {
     private connect(): void {
         if (this.stopped || this.socket !== null || this.retryTimer !== null) return;
         this.setState({ status: "connecting", attempt: this.attempt });
-        const create = this.options.createSocket ?? ((url: string) => new WebSocket(url));
-        const socket = create(this.options.url);
+        const create =
+            this.options.createSocket ??
+            ((url: string, protocols?: readonly string[]) =>
+                new WebSocket(url, protocols ? [...protocols] : undefined));
+        const socket = create(this.options.url, this.options.protocols);
         this.socket = socket;
         this.connectTimer = setTimeout(() => {
             this.connectTimer = null;

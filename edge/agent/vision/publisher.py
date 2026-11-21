@@ -3,19 +3,23 @@
 from __future__ import annotations
 
 import json
+import os
 import queue
 import threading
 from urllib.parse import urlparse
 
 
 class SnapshotPublisher:
-    def __init__(self, url: str) -> None:
+    def __init__(self, url: str, *, token: str | None = None) -> None:
         parsed = urlparse(url)
         if parsed.scheme not in {"ws", "wss"} or not parsed.hostname:
             raise ValueError("Backend URL must be a WebSocket URL")
         if parsed.scheme == "ws" and parsed.hostname not in {"localhost", "127.0.0.1", "::1"}:
             raise ValueError("Non-local WebSocket connections require TLS (wss)")
         self.url = url
+        # The backend's device token (app/api/device_auth.py): a header, never the URL.
+        token = token or os.environ.get("AGENT_TOKEN") or None
+        self.headers = {"Authorization": f"Bearer {token}"} if token else None
         self.pending: queue.Queue[str] = queue.Queue(maxsize=1)
         self.stop = threading.Event()
         self.thread = threading.Thread(target=self._send, daemon=True)
@@ -44,7 +48,12 @@ class SnapshotPublisher:
                     continue
                 try:
                     if connection is None:
-                        connection = connect(self.url, open_timeout=1, close_timeout=1)
+                        connection = connect(
+                            self.url,
+                            open_timeout=1,
+                            close_timeout=1,
+                            additional_headers=self.headers,
+                        )
                     connection.send(payload)
                 except Exception:
                     if connection is not None:

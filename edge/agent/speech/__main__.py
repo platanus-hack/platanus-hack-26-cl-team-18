@@ -76,6 +76,7 @@ async def run(args: argparse.Namespace) -> int:
     link = BackendLink(
         args.backend,
         hello=AgentHello(screen_id=args.screen, role=AgentRole.SPEECH),
+        token=args.agent_token or os.environ.get("AGENT_TOKEN") or None,
         on_status=live.apply,
     )
     pipeline: SpeechPipeline | None = None
@@ -125,6 +126,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(prog="agent.speech")
     parser.add_argument("--screen", default="demo-01")
     parser.add_argument("--backend", default="ws://127.0.0.1:8000/ws/agent")
+    parser.add_argument(
+        "--agent-token", default=None, help="backend device token (default: env AGENT_TOKEN)"
+    )
     parser.add_argument(
         "--speech-mode", action="store_true", help="explicit opt-in for this screen"
     )

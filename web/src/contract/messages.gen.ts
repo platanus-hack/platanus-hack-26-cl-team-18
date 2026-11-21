@@ -637,6 +637,7 @@ export const DevPerceptionSchema = z.strictObject({
   held: z.array(z.string().max(64)).max(16),
   frames: z.number().int().gte(0),
   stale_frames: z.number().int().gte(0),
+  preview_jpeg_base64: z.string().min(1).max(400000).nullable(),
 });
 export type DevPerception = z.infer<typeof DevPerceptionSchema>;
 

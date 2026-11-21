@@ -112,7 +112,12 @@ from app.modules.common.domain.value_objects.percentage import Percentage
 from app.modules.common.domain.value_objects.rounding_policy import RoundingPolicy
 from app.modules.common.domain.value_objects.utc_timestamp import UtcTimestamp
 from app.modules.creative.application.briefing import CreativeCatalog, MomentContext, build_brief
-from app.modules.creative.application.campaigns import CampaignMedia, apply_campaign_media
+from app.modules.creative.application.campaigns import (
+    CampaignMedia,
+    apply_campaign_media,
+    category_key,
+    media_for,
+)
 from app.modules.creative.application.hook_lab import HookLab, HookResult
 from app.modules.creative.application.loops import BundleLoopLibrary
 from app.modules.creative.application.ports.copywriter import CopyWriter
@@ -314,7 +319,11 @@ def seed_market(
         delivery=DeliveryDesk(ledger=ledger or InMemoryChargeLedger(), ids=ids, budgets=book),
         redemptions=RedemptionDesk(ids=ids, ledger=redemption_ledger or InMemoryRedemptionLedger()),
         lock=RLock(),
-        campaign_media=load_campaign_media(),
+        campaign_media={
+            key: media
+            for key, media in load_campaign_media().items()
+            if catalog.category_scenes or not key.startswith(category_key(""))
+        },
         house_logo_url=logo_url,
         autobidder=AutoBidder(book),
         catalog=catalog,
@@ -1295,6 +1304,22 @@ def register_demo(
 
     # ------------------------------------------------------------ QR, redemption, video
 
+    # Photo rotation (CampaignMedia.alternates): a campaign keeps its photo while it
+    # stays on air and shows the next one each time it comes back. Per screen, in memory.
+    airings: dict[str, int] = {}
+    last_media_key: str | None = None
+
+    def airing_of(found: tuple[str, CampaignMedia] | None) -> int:
+        nonlocal last_media_key
+        if found is None:
+            return 0
+        key = found[0]
+        with lock:
+            if key != last_media_key:
+                airings[key] = airings.get(key, -1) + 1
+                last_media_key = key
+            return airings[key]
+
     def with_basket_extras(
         spec: CreativeSpec,
         result: AuctionResult,
@@ -1306,9 +1331,14 @@ def register_demo(
     ) -> CreativeSpec:
         """Add the basket's redemption code + QR and its pre-generated loop (if any)."""
         brands = [winner.bidder.brand_id for winner in result.winners]
-        spec = apply_campaign_media(
-            spec, market.campaign_media.get("+".join(sorted(slug_of[brand] for brand in brands)))
+        found = media_for(
+            market.campaign_media,
+            tuple(
+                (slug_of[winner.bidder.brand_id], winner.bidder.category)
+                for winner in result.winners
+            ),
         )
+        spec = apply_campaign_media(spec, found[1] if found else None, airing=airing_of(found))
         if brief is None or brief.offer is None:
             # No approved offer, nothing to redeem: never show a QR that sells nothing.
             if loops is not None:

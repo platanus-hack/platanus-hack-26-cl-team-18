@@ -66,6 +66,54 @@ COMMONS: tuple[CommonsPhoto, ...] = (
     CommonsPhoto(
         stem="cl-cafe-medialuna", title="File:Taza de café con leche.jpg", focus=(0.5, 0.0)
     ),
+    # Rotation and category scenes (manifest `alternates`, `category:<name>`): more of
+    # the same moment so a returning viewer sees a new frame. Food, drink and road only:
+    # no faces, no third-party marks.
+    CommonsPhoto(
+        stem="cl-completo-palta",
+        title="File:Completo italiano - Flickr - Bárb Santelices.jpg",
+        focus=(0.5, 0.5),
+    ),
+    CommonsPhoto(
+        stem="cl-desayuno",
+        title="File:Coffee-morning-breakfast-croissant (24300690486).jpg",
+        focus=(0.5, 0.5),
+    ),
+    CommonsPhoto(
+        stem="cl-cappuccino",
+        title="File:Cup of frothy coffee, Cafe Express, York Way, London, England.jpg",
+        focus=(0.5, 0.5),
+    ),
+    CommonsPhoto(
+        stem="cl-bebida-noche",
+        title="File:DSC 7821 A tall glass of cola with ice and a white straw sits on a table softly lit against a blurred evening backdrop of warm bokeh lights.jpg",
+        focus=(0.5, 0.5),
+    ),
+    CommonsPhoto(stem="cl-bebida-limon", title="File:Glass cola.jpg", focus=(0.5, 0.5)),
+    CommonsPhoto(
+        stem="cl-helado-playa", title="File:2 ice cream cones 2025-05-02.jpg", focus=(0.5, 0.45)
+    ),
+    CommonsPhoto(
+        stem="cl-paleta", title="File:Patriotic Ice Pop (4685807904).jpg", focus=(0.5, 0.35)
+    ),
+    CommonsPhoto(stem="cl-chocolatada", title="File:Chocolate milk.JPG", focus=(0.55, 0.5)),
+    CommonsPhoto(stem="cl-nectar", title="File:Orange juice 1 edit1.jpg", focus=(0.5, 0.62)),
+    CommonsPhoto(stem="cl-papas", title="File:Papas fritas bowl.jpg", focus=(0.5, 0.5)),
+    CommonsPhoto(stem="cl-papas-rusticas", title="File:Dill pickle chips.jpg", focus=(0.5, 0.5)),
+    CommonsPhoto(
+        stem="cl-ruta-amanecer", title="File:Ruta 5 Sur Chile (km 104,8).jpg", focus=(0.5, 0.6)
+    ),
+    CommonsPhoto(stem="cl-ruta-5", title="File:Ruta 5 Sur (Chile) en Pelequén.jpg"),
+    CommonsPhoto(stem="cl-agua", title="File:Bottles (4782930999).jpg"),
+    CommonsPhoto(stem="cl-chocolate", title="File:Opened Tupla chocolate bar.jpg"),
+    CommonsPhoto(stem="cl-dulces", title="File:HardCandy.jpg"),
+    # The venue itself: a real Copec station in La Reina (Pronto Copec's own campaigns).
+    CommonsPhoto(stem="cl-copec-estacion", title="File:Copec La Reina.jpg", focus=(0.5, 0.45)),
+    CommonsPhoto(
+        stem="cl-helado-bombon",
+        title="File:Liat Portal for Foodie Disorder - Chocolate coated ice cream bar with nuts.jpg",
+        focus=(0.5, 0.4),
+    ),
 )
 
 # PIL hue: lime ≈ 50-75, violet ≈ 170-200, yellow ≈ 30-34, blue ≈ 150-160.
@@ -104,7 +152,7 @@ def _get(url: str) -> io.BytesIO:
         except Exception:  # rate limits and flaky networks: back off, retry
             if attempt == 4:
                 raise
-            time.sleep(8 * (attempt + 1))
+            time.sleep(30 * (attempt + 1))
     raise AssertionError("unreachable")
 
 
@@ -149,7 +197,17 @@ def _save(image: Image.Image, stem: str) -> None:
     print(f"photos/{path.name}: {path.stat().st_size // 1024} KiB")
 
 
-def build_commons(credits: list[str]) -> None:
+def _download_and_save(photo: CommonsPhoto, meta: dict, originals: dict[str, Image.Image]) -> None:
+    if photo.title not in originals:
+        time.sleep(12)
+        originals[photo.title] = ImageOps.exif_transpose(
+            Image.open(_get(meta.get("thumburl", meta["url"])))
+        ).convert("RGB")
+    framed = _frame(originals[photo.title], photo.focus, photo.zoom)
+    _save(ImageOps.mirror(framed) if photo.mirror else framed, photo.stem)
+
+
+def build_commons(credits: list[str], *, force: bool = False) -> None:
     titles = sorted({photo.title for photo in COMMONS})
     pages = _api(
         {
@@ -166,13 +224,10 @@ def build_commons(credits: list[str]) -> None:
     originals: dict[str, Image.Image] = {}
     for photo in COMMONS:
         meta = info[photo.title]
-        if photo.title not in originals:
-            time.sleep(5)
-            originals[photo.title] = ImageOps.exif_transpose(
-                Image.open(_get(meta.get("thumburl", meta["url"])))
-            ).convert("RGB")
-        framed = _frame(originals[photo.title], photo.focus, photo.zoom)
-        _save(ImageOps.mirror(framed) if photo.mirror else framed, photo.stem)
+        # Resumable: Commons rate-limits bulk downloads (429), so a rerun only fetches
+        # what is missing. --force rebuilds everything.
+        if force or not (ROOT / f"{photo.stem}.webp").is_file():
+            _download_and_save(photo, meta, originals)
         ext = meta.get("extmetadata", {})
         artist = _strip_html(ext.get("Artist", {}).get("value", "unknown"))
         license_name = ext.get("LicenseShortName", {}).get("value", "see source")
@@ -193,12 +248,13 @@ def build_relights() -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--skip-download", action="store_true", help="Only relight local shots")
+    parser.add_argument("--force", action="store_true", help="Re-download photos already built")
     args = parser.parse_args()
     build_relights()
     if args.skip_download:
         return
     credits: list[str] = []
-    build_commons(credits)
+    build_commons(credits, force=args.force)
     (ROOT / "SOURCES.md").write_text(
         "# Photo sources\n\n"
         "Fictional-catalog photos (`energy`, `coffee`, `beer`, `rayo`, `energy-coffee`,\n"

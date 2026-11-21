@@ -243,12 +243,24 @@ class Inbox:
             self.messages.append(json.loads(frame))
 
     async def wait(self, predicate: Callable[[Message], bool], timeout: float = 15) -> Message:
-        with anyio.fail_after(timeout):
-            while True:
-                for message in self.messages:
-                    if predicate(message):
-                        return message
-                await anyio.sleep(0.02)
+        try:
+            with anyio.fail_after(timeout):
+                while True:
+                    for message in self.messages:
+                        if predicate(message):
+                            return message
+                    await anyio.sleep(0.02)
+        except TimeoutError:
+            raise AssertionError(f"no match in {timeout}s; got:\n{self.summary()}") from None
+
+    def summary(self) -> str:
+        """What arrived, so a timeout says why (no transcript text is ever on these sockets)."""
+        lines = []
+        for m in self.messages:
+            slots = m.get("spec", {}).get("slots") if isinstance(m.get("spec"), dict) else None
+            names = sorted(s["brand_name"] for s in slots) if slots else ""
+            lines.append(f"  {m.get('type')} {names} auction={m.get('auction_id', '')}")
+        return "\n".join(lines[-40:]) or "  (nothing)"
 
 
 def brands(message: Message) -> set[str]:
@@ -286,16 +298,40 @@ def test_speech_flips_the_auction_and_voiceovers_play_end_to_end(sandbox: Sandbo
             solo = await player.wait(ready_with("Voltio"))
             solo_voice = await player.wait(upgraded(solo["creative_id"]))
 
-            # 2. Speech: the real agent hears "uf, qué hambre… un café" -> co-brand.
+            # 2. Speech: the real agent hears "uf, qué hambre… un café" -> a co-brand
+            # whose new brand answers what was heard. Which partner wins is the
+            # market's call (VCG over the seeded bids), so the test pins the cause,
+            # not one brand pair that changes whenever the catalog does.
             agent = await anyio.to_thread.run_sync(sandbox.agent, wav)
-            flipped = await player.wait(ready_with("Voltio", "Café Patio"), timeout=30)
-            flipped_voice = await player.wait(upgraded(flipped["creative_id"]))
-            await console.wait(
+            flipped = await player.wait(
+                lambda m: (
+                    m["type"] == "creative.ready"
+                    and m["auction_id"] is not None
+                    and len(brands(m)) == 2
+                    and brands(m) != brands(solo)
+                ),
+                timeout=30,
+            )
+            heard = await console.wait(
                 lambda m: (
                     m["type"] == "console.moment"
                     and any("speech" in s["sources"] for s in m["segments"])
                 )
             )
+            spoken = {s["segment_id"] for s in heard["segments"] if "speech" in s["sources"]}
+            assert spoken >= {"1404", "977"}  # Fast Food ("hambre") + Coffee ("café")
+            cleared = await console.wait(
+                lambda m: (
+                    m["type"] == "console.auction" and m["auction_id"] == flipped["auction_id"]
+                )
+            )
+            partners = {
+                bid["brand_name"]
+                for bid in cleared["bids"]
+                if any(match["segment_id"] in spoken for match in bid["matches"])
+            }
+            assert brands(flipped) - brands(solo) <= partners, (brands(flipped), partners)
+            flipped_voice = await player.wait(upgraded(flipped["creative_id"]))
             exit_code = await anyio.to_thread.run_sync(lambda: agent.popen.wait(30))
             assert exit_code == 0, agent.text()
             tg.cancel_scope.cancel()

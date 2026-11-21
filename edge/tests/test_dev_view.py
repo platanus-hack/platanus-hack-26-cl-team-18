@@ -8,7 +8,7 @@ from datetime import timedelta
 import pytest
 
 from agent.contract import AGENT_INBOUND, DevPerception
-from agent.vision.__main__ import dev_stream_on
+from agent.vision.__main__ import camera_preview_on, dev_stream_on
 from agent.vision.dev_view import DevViewBuilder
 from agent.vision.snapshot import SnapshotBuilder
 from agent.vision.types import Box, MarkerDetection, ObjectDetection
@@ -90,3 +90,46 @@ def test_dev_stream_only_for_live_backends(
     monkeypatch.setenv("EDGE_DEV_STREAM", env)
     args = argparse.Namespace(dev_stream=flag, offline=offline, record=record)
     assert dev_stream_on(args) is on
+
+
+def test_camera_preview_rides_along_only_with_an_encoder() -> None:
+    seen: list[object] = []
+
+    def encode(img: object, _detections: object) -> bytes:
+        seen.append(img)
+        return b"\xff\xd8jpeg"
+
+    with_preview = DevViewBuilder("demo-01", preview=encode)
+    view = with_preview.build(frame(ms(0), person(400)), [], [], frame="the-frame")
+    assert view is not None and view.preview_jpeg_base64 == "/9hqcGVn"
+    assert seen == ["the-frame"]
+    assert AGENT_INBOUND.validate_json(view.model_dump_json()) == view
+
+    plain = DevViewBuilder("demo-01").build(frame(ms(0)), [], [], frame="the-frame")
+    assert plain is not None and plain.preview_jpeg_base64 is None
+
+
+def test_a_failing_preview_still_sends_the_boxes() -> None:
+    def broken(_img: object, _detections: object) -> bytes:
+        raise RuntimeError("encoder down")
+
+    view = DevViewBuilder("demo-01", preview=broken).build(frame(ms(0)), [], [], frame=object())
+    assert view is not None and view.preview_jpeg_base64 is None
+
+
+@pytest.mark.parametrize(
+    ("flag", "env", "dev", "on"),
+    [
+        (True, "", "1", True),
+        (False, "1", "1", True),
+        (False, "", "1", False),
+        (True, "1", "", False),
+    ],
+)
+def test_camera_preview_needs_the_dev_stream(
+    monkeypatch: pytest.MonkeyPatch, flag: bool, env: str, dev: str, on: bool
+) -> None:
+    monkeypatch.setenv("EDGE_CAMERA_PREVIEW", env)
+    monkeypatch.setenv("EDGE_DEV_STREAM", dev)
+    args = argparse.Namespace(camera_preview=flag, dev_stream=False, offline=False, record=None)
+    assert camera_preview_on(args) is on

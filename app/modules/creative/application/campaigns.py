@@ -41,19 +41,46 @@ MOMENT_SEGMENTS = {
 class CampaignMedia:
     photo_url: str
     video_url: str | None = None
+    # More photos of the same campaign, aired in rotation so a returning viewer does not
+    # see the same frame every time. The video loop belongs to `photo_url` only.
+    alternates: tuple[str, ...] = ()
+
+    @property
+    def photo_urls(self) -> tuple[str, ...]:
+        return (self.photo_url, *self.alternates)
+
+
+def category_key(category: str) -> str:
+    """Manifest key of a category's unbranded scene ("category:ice_cream")."""
+    return f"category:{category}"
+
+
+def media_for(
+    media: Mapping[str, CampaignMedia], basket: Sequence[tuple[str, str]]
+) -> tuple[str, CampaignMedia] | None:
+    """The basket's own campaign, else its lead brand's, the lead category's scene, then
+    the partner's. `basket` is (slug, category) in slot order, lead first. Returns the
+    manifest key (the rotation counts per key) and its media."""
+    keys = [
+        "+".join(sorted(slug for slug, _ in basket)),
+        *(key for slug, category in basket for key in (slug, category_key(category))),
+    ]
+    return next(((key, media[key]) for key in keys if key in media), None)
 
 
 def apply_campaign_media(
-    spec: CreativeSpec, media: CampaignMedia | None, *, video: bool = True
+    spec: CreativeSpec, media: CampaignMedia | None, *, video: bool = True, airing: int = 0
 ) -> CreativeSpec:
+    """Set the hero photo (the `airing`-th in rotation) and, with the primary photo
+    only, the campaign's video loop."""
     if media is None:
         return spec
+    photos = media.photo_urls
+    photo = photos[airing % len(photos)]
     return spec.model_copy(
         update={
-            "slots": [
-                slot.model_copy(update={"hero_image_url": media.photo_url}) for slot in spec.slots
-            ],
-            "video_url": media.video_url if video else None,
+            "slots": [slot.model_copy(update={"hero_image_url": photo}) for slot in spec.slots],
+            "video_url": media.video_url if video and photo == media.photo_url else None,
         }
     )
 
@@ -88,12 +115,17 @@ class CampaignGenerator:
         self._lock = Lock()
 
     def _ready(self, brand: BrandId) -> bool:
-        """Studio-ready: the brand has its own campaign photography bundled.
+        """Studio-ready: the brand has its own campaign photography bundled, or an
+        unbranded scene of its own category (an ice cream for an ice cream brand).
 
-        Brands without it still bid live and air with their wordmark template; the
+        Brands without either still bid live and air with their wordmark template; the
         studio never borrows another product's scenery for them.
         """
-        return self._slugs[brand] in self._media
+        return self._own_media(brand) is not None
+
+    def _own_media(self, brand: BrandId) -> CampaignMedia | None:
+        found = media_for(self._media, ((self._slugs[brand], self._bidders[brand].category),))
+        return found[1] if found else None
 
     def catalog(self) -> CampaignCatalog:
         return CampaignCatalog(
@@ -104,9 +136,7 @@ class CampaignGenerator:
                     category=self._bidders[brand].category,
                     accent_color=kit.accent_color,
                     logo_url=kit.logo_url,
-                    photo_url=self._media[self._slugs[brand]].photo_url
-                    if self._slugs[brand] in self._media
-                    else None,
+                    photo_url=media.photo_url if (media := self._own_media(brand)) else None,
                     partners=sorted(self._slugs[p] for p in self._bidders[brand].partners),
                     age_restricted=self._bidders[brand].age_restricted,
                 )
@@ -189,9 +219,13 @@ class CampaignGenerator:
             composed = self._studio.compose(brief)
             if not composed.score.verdict.passed:
                 raise ValueError("La campaña no superó la revisión de copy")
+            found = media_for(
+                self._media,
+                tuple((slug, self._bidders[self._ids[slug]].category) for slug in slugs),
+            )
             spec = apply_campaign_media(
                 render_spec(brief, composed.draft, self._kits),
-                self._media.get("+".join(sorted(slugs))),
+                found[1] if found else None,
                 video=request.media == "video",
             )
             result = CampaignGenerated(

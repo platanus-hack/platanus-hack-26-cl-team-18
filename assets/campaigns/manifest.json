@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "provenance": "AI-generated illustrative product scenery; existing brand marks and approved offers remain separate overlays. Videos are local photo-motion loops, not generated product motion. Chile catalog photos: assets/campaigns/photos/SOURCES.md (real Commons photos, credited, and relit unbranded studio shots).",
+  "provenance": "AI-generated illustrative product scenery; existing brand marks and approved offers remain separate overlays. Videos are local photo-motion loops, not generated product motion. Chile catalog photos: assets/campaigns/photos/SOURCES.md (real Commons photos, credited, and relit unbranded studio shots). Keys: a basket, a brand, or category:<name> (an unbranded scene any brand of the category may air); `alternates` air in rotation.",
   "campaigns": {
     "voltio": {
       "photo": "energy",
@@ -28,51 +28,174 @@
     },
     "score": {
       "photo": "cl-score",
-      "video": "cl-score"
+      "video": "cl-score",
+      "alternates": [
+        "cl-ruta-amanecer"
+      ]
     },
     "red-bull": {
       "photo": "cl-red-bull",
-      "video": "cl-red-bull"
+      "video": "cl-red-bull",
+      "alternates": [
+        "cl-ruta-5"
+      ]
     },
     "monster": {
       "photo": "cl-monster",
-      "video": "cl-monster"
+      "video": "cl-monster",
+      "alternates": [
+        "cl-ruta-5"
+      ]
     },
     "juan-valdez": {
       "photo": "coffee",
-      "video": "coffee"
+      "video": "coffee",
+      "alternates": [
+        "cl-cappuccino",
+        "cl-cafe-medialuna"
+      ]
     },
     "nescafe": {
       "photo": "cl-cafe-medialuna",
-      "video": "cl-cafe-medialuna"
+      "video": "cl-cafe-medialuna",
+      "alternates": [
+        "cl-cappuccino"
+      ]
     },
     "pronto-copec": {
       "photo": "cl-completo",
-      "video": "cl-completo"
+      "video": "cl-completo",
+      "alternates": [
+        "cl-completo-palta",
+        "cl-desayuno",
+        "cl-copec-estacion"
+      ]
     },
     "juan-valdez+score": {
       "photo": "cl-score-cafe",
-      "video": "cl-score-cafe"
+      "video": "cl-score-cafe",
+      "alternates": [
+        "cl-ruta-amanecer",
+        "cl-cappuccino"
+      ]
     },
     "juan-valdez+red-bull": {
       "photo": "cl-red-bull-cafe",
-      "video": "cl-red-bull-cafe"
+      "video": "cl-red-bull-cafe",
+      "alternates": [
+        "cl-ruta-5",
+        "cl-cappuccino"
+      ]
     },
     "juan-valdez+pronto-copec": {
       "photo": "cl-cafe-medialuna",
-      "video": "cl-cafe-medialuna"
+      "video": "cl-cafe-medialuna",
+      "alternates": [
+        "cl-desayuno"
+      ]
     },
     "coca-cola+pronto-copec": {
       "photo": "cl-completo",
-      "video": "cl-completo"
+      "video": "cl-completo",
+      "alternates": [
+        "cl-completo-palta",
+        "cl-bebida-limon"
+      ]
     },
     "monster+pronto-copec": {
       "photo": "cl-completo",
-      "video": "cl-completo"
+      "video": "cl-completo",
+      "alternates": [
+        "cl-completo-palta",
+        "cl-ruta-5"
+      ]
     },
     "juan-valdez+super-8": {
       "photo": "coffee",
-      "video": "coffee"
+      "video": "coffee",
+      "alternates": [
+        "cl-cappuccino",
+        "cl-chocolate"
+      ]
+    },
+    "bilz-y-pap+pronto-copec": {
+      "photo": "cl-completo-palta",
+      "video": "cl-completo-palta",
+      "alternates": [
+        "cl-completo",
+        "cl-bebida-limon"
+      ]
+    },
+    "category:coffee": {
+      "photo": "cl-cappuccino",
+      "video": "cl-cappuccino",
+      "alternates": [
+        "coffee"
+      ]
+    },
+    "category:pastry": {
+      "photo": "cl-desayuno",
+      "video": "cl-desayuno",
+      "alternates": [
+        "cl-cafe-medialuna"
+      ]
+    },
+    "category:cola": {
+      "photo": "cl-bebida-noche",
+      "video": "cl-bebida-noche",
+      "alternates": [
+        "cl-bebida-limon"
+      ]
+    },
+    "category:water": {
+      "photo": "cl-agua",
+      "video": "cl-agua",
+      "alternates": [
+        "cl-ruta-5"
+      ]
+    },
+    "category:snacks": {
+      "photo": "cl-papas",
+      "video": "cl-papas",
+      "alternates": [
+        "cl-papas-rusticas"
+      ]
+    },
+    "category:candy": {
+      "photo": "cl-dulces",
+      "video": "cl-dulces",
+      "alternates": [
+        "cl-chocolate"
+      ]
+    },
+    "category:ice_cream": {
+      "photo": "cl-helado-playa",
+      "video": "cl-helado-playa",
+      "alternates": [
+        "cl-helado-bombon",
+        "cl-paleta"
+      ]
+    },
+    "category:dairy": {
+      "photo": "cl-chocolatada",
+      "video": "cl-chocolatada",
+      "alternates": [
+        "cl-desayuno"
+      ]
+    },
+    "category:juice": {
+      "photo": "cl-nectar",
+      "video": "cl-nectar",
+      "alternates": [
+        "cl-desayuno"
+      ]
+    },
+    "category:sports_drink": {
+      "photo": "cl-agua",
+      "video": "cl-agua",
+      "alternates": [
+        "cl-ruta-5"
+      ]
     }
   }
 }

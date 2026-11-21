@@ -392,6 +392,9 @@ class Catalog:
     # auction applies them per category (AdOpportunity.category_multipliers): coffee at
     # dawn, cold drinks in the afternoon. Empty = every category bids flat all day.
     daypart_boosts: tuple[tuple[str, str, str], ...] = ()
+    # Whether brands without photos of their own may air the manifest's unbranded
+    # category scenes ("category:ice_cream"). Off for the pinned fictional seed.
+    category_scenes: bool = False
 
     def partners_of(self, slug: str) -> frozenset[str]:
         return frozenset(

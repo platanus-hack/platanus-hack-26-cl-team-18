@@ -731,8 +731,10 @@ class LiveStatus(_Message):
 #
 # Debug views of the loop for `/dev` (docs/dev-console-plan.md). Never sent in prod,
 # never stored. No pixels, audio, transcripts or identity: boxes are normalized
-# geometry of anonymous, session-local tracks. `dev.keyframe` is the one exception:
-# the same face-blurred JPEG the VLM gets, opt-in (DEV_KEYFRAME_PREVIEW) and local-only.
+# geometry of anonymous, session-local tracks. Two exceptions, both face-blurred, in
+# memory only and refused in prod: `dev.keyframe` (the JPEG the VLM gets, opt-in via
+# DEV_KEYFRAME_PREVIEW) and `dev.perception.preview_jpeg_base64` (the demo camera
+# view under the boxes, DEMO_CAMERA_PREVIEW).
 
 DevKind = Literal["tag", "topics", "copy", "voice", "video", "other"]
 
@@ -787,6 +789,9 @@ class DevPerception(_Message):
     held: list[Annotated[str, Field(max_length=64)]] = Field(default_factory=list, max_length=16)
     frames: Annotated[int, Field(ge=0)] = 0
     stale_frames: Annotated[int, Field(ge=0)] = 0
+    # Demo only: the same frame, heads blurred, downscaled JPEG. Never stored; the
+    # backend strips it unless DEMO_CAMERA_PREVIEW is on, and always in prod.
+    preview_jpeg_base64: Annotated[str, Field(min_length=1, max_length=400_000)] | None = None
 
 
 class DevTaggedSegment(_Model):

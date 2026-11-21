@@ -134,6 +134,7 @@ async def run(args: argparse.Namespace) -> int:
         else BackendLink(
             args.backend,
             hello=AgentHello(screen_id=args.screen, role=AgentRole.VISION),
+            token=args.agent_token or os.environ.get("AGENT_TOKEN") or None,
             on_status=live.apply,
         )
     )
@@ -181,7 +182,12 @@ async def run(args: argparse.Namespace) -> int:
         # Wall-clock sources only: a lost camera publishes an empty room, not the last group.
         config=VisionConfig(blind_after=None if args.record else timedelta(seconds=2)),
         live=live,
-        dev_view=DevViewBuilder(args.screen, brand_for=catalog.brand_for if catalog else None)
+        dev_view=DevViewBuilder(
+            args.screen,
+            brand_for=catalog.brand_for if catalog else None,
+            # Demo only: a face-blurred, small camera view under the console's boxes.
+            preview=blur_encoder(long_side=480, quality=60) if camera_preview_on(args) else None,
+        )
         if dev_stream_on(args)
         else None,
     )
@@ -238,10 +244,20 @@ def dev_stream_on(args: argparse.Namespace) -> bool:
     return bool(args.dev_stream) or os.environ.get("EDGE_DEV_STREAM", "") in {"1", "true"}
 
 
+def camera_preview_on(args: argparse.Namespace) -> bool:
+    """Demo only: a face-blurred camera view rides along with the boxes."""
+    if not dev_stream_on(args):
+        return False
+    return bool(args.camera_preview) or os.environ.get("EDGE_CAMERA_PREVIEW", "") in {"1", "true"}
+
+
 def argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="agent.vision")
     parser.add_argument("--screen", required=True)
     parser.add_argument("--backend", default="ws://127.0.0.1:8000/ws/agent")
+    parser.add_argument(
+        "--agent-token", default=None, help="backend device token (default: env AGENT_TOKEN)"
+    )
     parser.add_argument("--offline", action="store_true", help="don't connect to the backend")
     parser.add_argument(
         "--await-live",
@@ -285,6 +301,11 @@ def argument_parser() -> argparse.ArgumentParser:
         "--dev-stream",
         action="store_true",
         help="send dev.perception boxes for the /dev QA console (default: env EDGE_DEV_STREAM)",
+    )
+    parser.add_argument(
+        "--camera-preview",
+        action="store_true",
+        help="demo: attach a face-blurred camera view to the boxes (default: env EDGE_CAMERA_PREVIEW)",
     )
     parser.add_argument("--gpu-url", help="remote GPU service, e.g. wss://host/infer (ADR 0007)")
     parser.add_argument("--gpu-token", default=None, help="bearer token (default: env GPU_TOKEN)")

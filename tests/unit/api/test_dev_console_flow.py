@@ -114,3 +114,38 @@ def test_station_console_gets_camera_boxes_without_dev_or_key(tmp_path) -> None:
         )
         perception = _until(console, "dev.perception")
         assert perception["detector"] == "local"
+
+
+def test_camera_preview_is_never_enabled_in_prod() -> None:
+    assert AppSettings(app_env="local", demo_camera_preview=True).demo_camera_preview_enabled
+    prod = AppSettings(app_env="test", demo_camera_preview=True).model_copy(
+        update={"app_env": "prod"}
+    )
+    assert not prod.demo_camera_preview_enabled
+
+
+@pytest.mark.parametrize("kept", [True, False])
+def test_backend_strips_the_camera_preview_when_off(tmp_path, kept: bool) -> None:
+    settings = AppSettings(app_env="test", demo_camera_preview=kept, media_dir=tmp_path)
+    clock = FixedClock(T0)
+    container = build_container(settings, clock=clock)
+    with (
+        TestClient(create_app(container=container)) as client,
+        client.websocket_connect("/ws/console?live=1") as console,
+        client.websocket_connect("/ws/agent") as agent,
+    ):
+        agent.send_text(
+            DevPerception(
+                screen_id="demo-01",
+                seq=1,
+                measured_at=clock.now_utc(),
+                frame_w=1280,
+                frame_h=720,
+                detector="local",
+                inference_ms=9.0,
+                raw_people=1,
+                preview_jpeg_base64="/9hqcGVn",
+            ).model_dump_json()
+        )
+        perception = _until(console, "dev.perception")
+        assert (perception["preview_jpeg_base64"] is not None) is kept

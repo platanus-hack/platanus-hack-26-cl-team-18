@@ -12,12 +12,17 @@ from app.contract.messages import AudienceSnapshot, CreativeReady
 from app.main import create_app
 from app.modules.common.infrastructure.clock.fixed_clock import FixedClock
 
+AGENT_TOKEN = "agent-token-0123456789abcdef"
+
 
 @pytest.mark.parametrize("env", ["local", "prod"])
 def test_live_startup_registers_the_loop_without_simulator(env, tmp_path):
+    # Prod refuses an agent without its token (app/api/device_auth.py).
+    token = AGENT_TOKEN if env == "prod" else None
     settings = AppSettings(
         _env_file=None,
         app_env=env,
+        agent_token=token,
         demo_simulator=False,
         media_dir=tmp_path,
         voiceovers_enabled=False,
@@ -28,7 +33,8 @@ def test_live_startup_registers_the_loop_without_simulator(env, tmp_path):
     with TestClient(create_app(container=container)) as client:
         with client.websocket_connect("/ws/screen/venue-42") as player:
             assert not paid_brands(CreativeReady.model_validate(player.receive_json()))
-            with client.websocket_connect("/ws/agent") as agent:
+            headers = {"Authorization": f"Bearer {token}"} if token else {}
+            with client.websocket_connect("/ws/agent", headers=headers) as agent:
                 reading = snapshot_for("co-brand", 1, datetime.now(UTC)).model_copy(
                     update={"screen_id": "venue-42"}
                 )

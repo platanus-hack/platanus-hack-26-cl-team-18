@@ -90,6 +90,14 @@ export function CameraPanel({ view }: { view: ScreenView }) {
             >
                 {fresh ? (
                     <>
+                        {fresh.preview_jpeg_base64 && (
+                            // Demo only: the same frame, faces blurred, never stored.
+                            <img
+                                src={`data:image/jpeg;base64,${fresh.preview_jpeg_base64}`}
+                                alt=""
+                                className="absolute inset-0 h-full w-full object-cover"
+                            />
+                        )}
                         {fresh.people.map((person, index) => (
                             <div
                                 key={person.track_id}
@@ -128,7 +136,9 @@ export function CameraPanel({ view }: { view: ScreenView }) {
                             </div>
                         ))}
                         <span className="absolute top-3 right-3 rounded-full bg-ink/80 px-2.5 py-1 text-metadata text-white">
-                            Solo cajas · nada se guarda
+                            {fresh.preview_jpeg_base64
+                                ? "Vista demo · rostros difuminados · nada se guarda"
+                                : "Solo cajas · nada se guarda"}
                         </span>
                     </>
                 ) : (

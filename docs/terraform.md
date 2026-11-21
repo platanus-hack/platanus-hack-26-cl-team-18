@@ -101,6 +101,10 @@ Terraform is only for infrastructure changes.
    - `DEMO_KEY` (24+ chars, `openssl rand -hex 16`) unlocks the market controls
      in prod: bids, autobid, stock and campaign drafts at `/demo/<key>`. Unset
      or shorter, prod serves none of them; `/dev` is never served in prod.
+   - `AGENT_TOKEN` and `SCREEN_TOKEN` (24+ chars each) guard the live loop in
+     prod: without them no agent connects and no player bills
+     (`app/api/device_auth.py`). Run the edge agent with `AGENT_TOKEN` in its
+     env; open the kiosk once at `/screen?token=<SCREEN_TOKEN>`.
 2. **Config lives in tracked files only.** That means `variables.tf` defaults
    plus the tracked `terraform.tfvars`. No `*.auto.tfvars`, no untracked
    overrides, no "I set it on my laptop": a value nobody else can see gets

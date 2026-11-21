@@ -22,9 +22,9 @@ env_vars = {
 secret_names = [
   "ANTHROPIC_API_KEY",
   "ELEVENLABS_API_KEY",
-  # Reserved for /ws/agent auth (not enforced yet): the public URL must not
-  # accept audience snapshots from anyone. Declared now because names added
-  # after the first apply are ignored.
-  "AGENT_TOKEN",
+  # Device tokens (app/api/device_auth.py), 24+ chars each (openssl rand -hex 16).
+  # Unset in prod means closed: no agent connects, no player bills.
+  "AGENT_TOKEN",  # the edge agent's bearer token on /ws/agent
+  "SCREEN_TOKEN", # the kiosk player: open /screen?token=... once; without it, view-only
   "DEMO_KEY", # 24+ chars (openssl rand -hex 16): bids, stock and campaigns in prod
 ]

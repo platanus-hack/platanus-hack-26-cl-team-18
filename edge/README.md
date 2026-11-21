@@ -18,6 +18,11 @@ repository root, then run from `edge/`:
 uv run on-sight /path/to/video.mp4 --fps 3 --screen-id demo-01 --backend ws://localhost:8000/ws/agent
 ```
 
+A backend with `AGENT_TOKEN` set (always in prod) refuses an agent without it.
+Every agent sends it as a bearer header from env `AGENT_TOKEN` (or
+`--agent-token` on `agent.vision` / `agent.speech`); `make station` passes the
+one from `.env`.
+
 For the detection-only workbench, add `--recognition-only` to the command.
 That explicitly selects the debug `recognition.snapshot` feed and optional
 `--vlm` crop enrichment. Without `--backend`, `on-sight` also stays in debug

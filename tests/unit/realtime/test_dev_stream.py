@@ -155,7 +155,12 @@ FORBIDDEN = {"text", "transcript", "utterance", "jpeg", "image", "embedding", "f
 
 
 def test_dev_messages_carry_no_words_audio_or_identity() -> None:
-    """Privacy guard (invariant 3): only `dev.keyframe` carries pixels, and it is opt-in."""
+    """Privacy guard (invariant 3): only opt-in, face-blurred demo previews carry pixels.
+
+    `dev.keyframe` (DEV_KEYFRAME_PREVIEW) and the console's camera view
+    (`dev.perception.preview_jpeg_base64`, DEMO_CAMERA_PREVIEW), both off in prod.
+    """
+    allowed = {("DevPerception", "preview_jpeg_base64")}
     dev_models = [
         model
         for name, model in vars(messages).items()
@@ -166,4 +171,6 @@ def test_dev_messages_carry_no_words_audio_or_identity() -> None:
         if model is messages.DevKeyframe:
             continue
         for field in model.model_fields:
+            if (model.__name__, field) in allowed:
+                continue
             assert not FORBIDDEN & set(field.split("_")), f"{model.__name__}.{field}"

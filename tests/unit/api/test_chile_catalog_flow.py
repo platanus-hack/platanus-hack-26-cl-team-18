@@ -201,3 +201,47 @@ def test_a_duo_with_an_energy_can_and_a_coffee_gets_the_score_and_juan_valdez_ba
         assert [(p.category, p.brand_ref) for p in moment.held_products] == [
             ("coffee", "juan-valdez")
         ]
+
+
+def _creative(player) -> CreativeReady:
+    while True:
+        message = player.receive_json()
+        if message.get("type") == "creative.ready":
+            return CreativeReady.model_validate(message)
+
+
+def test_a_basket_that_comes_back_shows_its_next_photo_and_every_basket_has_one(
+    tmp_path,
+) -> None:
+    clock = FixedClock(datetime(2026, 11, 21, 2, tzinfo=UTC))
+    settings = AppSettings(
+        app_env="test", demo_simulator=True, media_dir=tmp_path, demo_catalog="chile"
+    )
+    container = build_container(settings, clock=clock)
+    night = [
+        DetectedObject(label="energy drink can", score=1),
+        DetectedObject(label="cup", score=1),
+    ]
+    lunch = [DetectedObject(label="hot dog", score=1), DetectedObject(label="soda can", score=1)]
+    with (
+        TestClient(create_app(container=container)) as client,
+        client.websocket_connect("/ws/screen/demo-01") as player,
+        client.websocket_connect("/ws/agent") as agent,
+    ):
+        player.receive_json()
+        aired = []
+        for seq, objects in enumerate((night, lunch, night), start=1):
+            agent.send_text(_snapshot(seq, clock.now_utc(), objects).model_dump_json())
+            creative = _creative(player)
+            clock.advance(timedelta(seconds=5))
+            aired.append(
+                (
+                    [slot.brand_name for slot in creative.spec.slots],
+                    creative.spec.slots[0].hero_image_url,
+                )
+            )
+    (first_brands, first_photo), (lunch_brands, lunch_photo), (back_brands, back_photo) = aired
+    assert first_brands == back_brands == ["Score", "Juan Valdez"]
+    assert lunch_brands != first_brands
+    assert first_photo and lunch_photo and back_photo
+    assert back_photo != first_photo  # the returning basket rotates to its next photo

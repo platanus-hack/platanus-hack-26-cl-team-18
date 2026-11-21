@@ -19,6 +19,7 @@ import webbrowser
 from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO
+from urllib.parse import quote
 from urllib.request import urlopen
 
 from app.config.settings import AppSettings
@@ -168,9 +169,14 @@ def main() -> int:
     # An inherited build override must not send this station to a different backend.
     env["VITE_BACKEND_URL"] = origin
     env["SPEECH_MODE_SCREENS"] = json.dumps([args.screen] if args.speech else [])
-    # The console's "Lo que ve la cámara": detection boxes only (no image ever leaves
-    # the agent). The backend relays them only to /ws/dev, behind DEMO_KEY.
+    # The console's "Lo que ve la cámara": detection boxes, plus (demo only, never in
+    # prod) a face-blurred, downscaled camera view under them (DEMO_CAMERA_PREVIEW).
     env["EDGE_DEV_STREAM"] = "1"
+    env["EDGE_CAMERA_PREVIEW"] = "1" if settings.demo_camera_preview_enabled else "0"
+    # Device tokens (app/api/device_auth.py): the agents read AGENT_TOKEN from the env,
+    # so a token set in .env reaches them too (the backend reads .env on its own).
+    if settings.agent_token and settings.agent_token.get_secret_value():
+        env["AGENT_TOKEN"] = settings.agent_token.get_secret_value()
     lib = ROOT / "var/local-demo/lib/usr"
     if lib.is_dir():
         env["PATH"] = f"{lib / 'bin'}:{env.get('PATH', '')}"
@@ -271,6 +277,12 @@ def main() -> int:
     )
     if settings.demo_key and settings.demo_key.get_secret_value():
         print(f"Demo tools (private): {origin}/demo/<DEMO_KEY from .env>", flush=True)
+    # The player remembers the screen token after its first load (web/src/lib/device.ts);
+    # it is only ever put in the URL the station opens, never printed.
+    player_url = f"{origin}/screen?id={args.screen}"
+    if settings.screen_token and settings.screen_token.get_secret_value():
+        player_url += f"&token={quote(settings.screen_token.get_secret_value())}"
+        print("Player gets SCREEN_TOKEN from .env (opened for you)", flush=True)
     if not args.start_live:
         print(
             "STANDBY: camera, mic and ad generation wait for 'Iniciar en vivo' on the console",
@@ -289,7 +301,7 @@ def main() -> int:
                 try:
                     with urlopen(f"{origin}/health", timeout=1) as response:
                         if response.status == 200:
-                            webbrowser.open(f"{origin}/screen?id={args.screen}")
+                            webbrowser.open(player_url)
                             opened = True
                 except OSError:
                     pass

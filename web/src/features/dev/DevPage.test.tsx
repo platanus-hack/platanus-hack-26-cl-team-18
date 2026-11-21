@@ -71,6 +71,7 @@ describe("perception canvas", () => {
         detector: "remote",
         inference_ms: 21,
         round_trip_ms: 48,
+        preview_jpeg_base64: null,
         raw_people: 3,
         people: [
             {

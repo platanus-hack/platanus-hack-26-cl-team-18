@@ -168,6 +168,7 @@ class VisionPipeline:
                 held,
                 frames=self.stats.frames,
                 stale_frames=self.stats.stale_frames,
+                frame=frame,
             )
             if view is not None:
                 self._link.send(view)

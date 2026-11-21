@@ -138,13 +138,24 @@ Patio, Rayo + Café Patio. The seed uses distinct fictional marks from
 
 **Real-brand catalog (local station only):** `DEMO_CATALOG=chile` swaps in
 [`demo_catalog_chile.py`](../app/bootstrap/demo_catalog_chile.py): a Pronto Copec
-highway shop with Score, Red Bull, Monster, Juan Valdez, Nescafé, Pronto Copec,
-Coca-Cola, Pepsi, Cachantun, Benedictino, Lay's, Marco Polo and Super 8. Hero
+highway shop with 23 brands across 11 aisles (energy, coffee, the Pronto counter,
+sodas including Bilz y Pap, water, sports drinks, chocolate milk, nectars, ice cream,
+snacks and sweets). Product names and prices follow real 2026 Chilean ones (Score
+Original 473 ml, Coca-Cola Zero Azúcar, Bilz y Pap Zero 600 ml at CCU's $1.000 price
+point, Pronto's completo palta, Savory's "Alarma de helado"). Hero
 basket: Score + Juan Valdez (Red Bull bids for Score's slot). No alcohol (Ley 21.363
 bans it at gas stations); the minor-safety beat blocks the "ALTO EN" snacks instead
 (Ley 20.606). Props use `edge/props/markers-chile.json`. Real trademarks, no
 affiliation: keep it off the public URL. Logo provenance:
 [`assets/campaigns/logos/SOURCES.md`](../assets/campaigns/logos/SOURCES.md).
+
+**Imagery never repeats in a row:** each campaign has a primary photo and
+`alternates` (manifest), and a basket that comes back on air shows its next photo
+(it keeps one photo while it stays on). Brands without their own photos air an
+unbranded scene of their category (`category:ice_cream`, Chile only). Photos are
+real, credited Commons shots of Chilean food, drinks, Ruta 5 and a Copec station
+([`photos/SOURCES.md`](../assets/campaigns/photos/SOURCES.md)), built by
+`scripts/build_chile_photos.py`; no product or mark is ever AI-drawn.
 
 The Chile market is deliberately uneven (`MARKET_SHAPE` and `daypart_boosts` in the
 catalog):

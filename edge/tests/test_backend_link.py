@@ -160,3 +160,23 @@ async def test_an_unexpected_link_error_reconnects_instead_of_ending_the_link() 
     finally:
         task.cancel()
         await backend.stop()
+
+
+async def test_sends_the_device_token_as_a_bearer_header_never_in_the_url() -> None:
+    seen: list[tuple[str | None, str]] = []
+
+    async def handler(ws) -> None:  # type: ignore[no-untyped-def]
+        seen.append((ws.request.headers.get("Authorization"), ws.request.path))
+        await ws.wait_closed()
+
+    server = await websockets.serve(handler, "127.0.0.1", 0)
+    port = next(iter(server.sockets)).getsockname()[1]
+    link = BackendLink(f"ws://127.0.0.1:{port}/ws/agent", token="tok-123")
+    task = asyncio.create_task(link.run())
+    try:
+        await wait_for(lambda: bool(seen))
+        assert seen[0] == ("Bearer tok-123", "/ws/agent")
+    finally:
+        task.cancel()
+        server.close()
+        await server.wait_closed()

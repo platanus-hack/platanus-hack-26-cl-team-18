@@ -349,6 +349,7 @@ describe("the next ad and the camera", () => {
             held: [],
             frames: 1,
             stale_frames: 0,
+            preview_jpeg_base64: null,
         } satisfies DevPerception;
         const state = consoleReducer(initialConsoleState, {
             type: "perception",

@@ -3,20 +3,29 @@
 A lossy, rate-limited projection of state the pipeline already has (tracks,
 objects, markers, held products): normalized box geometry and labels only. No
 pixels, no keypoints, no identity; track ids stay anonymous and session-local.
-Opt-in on the agent (`--dev-stream` / EDGE_DEV_STREAM=1); the backend drops it
-in prod and when no `/dev` page is open.
+Opt-in on the agent (`--dev-stream` / EDGE_DEV_STREAM=1).
+
+Demo only: with a `preview` encoder (`--camera-preview` / EDGE_CAMERA_PREVIEW=1)
+the view also carries the same frame as a face-blurred, downscaled JPEG, so the
+console can draw the boxes over what the camera saw. Never stored; the backend
+strips it in prod.
 """
 
 from __future__ import annotations
 
+import base64
+import logging
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Any
 
 from agent.contract import DevBox, DevMarker, DevObject, DevPerception, DevPerson
 from agent.vision.held import HeldProductView
 from agent.vision.tracking import TrackView
 from agent.vision.types import Box, FrameDetections
+
+logger = logging.getLogger(__name__)
 
 MAX_ITEMS = 64
 MAX_MARKERS = 16
@@ -45,8 +54,10 @@ class DevViewBuilder:
         *,
         brand_for: Callable[[int], str | None] | None = None,
         config: DevViewConfig | None = None,
+        preview: Callable[[Any, FrameDetections], bytes] | None = None,
     ) -> None:
         self._screen_id = screen_id
+        self._preview = preview
         self._brand_for = brand_for
         self._config = config or DevViewConfig()
         self._last_at: datetime | None = None
@@ -60,6 +71,7 @@ class DevViewBuilder:
         *,
         frames: int = 0,
         stale_frames: int = 0,
+        frame: Any = None,
     ) -> DevPerception | None:
         """A view at most every `min_interval` of device time; None in between."""
         at = detections.measured_at
@@ -112,9 +124,21 @@ class DevViewBuilder:
             held=[product.brand_id[:64] for product in held][:MAX_MARKERS],
             frames=frames,
             stale_frames=stale_frames,
+            preview_jpeg_base64=self._encode_preview(frame, detections),
         )
         self._seq += 1
         return view
+
+    def _encode_preview(self, frame: Any, detections: FrameDetections) -> str | None:
+        if self._preview is None or frame is None:
+            return None
+        try:
+            jpeg = self._preview(frame, detections)
+        except Exception:
+            logger.exception("camera preview encoding failed")
+            return None
+        encoded = base64.b64encode(jpeg).decode("ascii")
+        return encoded if len(encoded) <= 400_000 else None
 
     def reset(self) -> None:
         self._last_at = None
