@@ -24,6 +24,7 @@ from app.contract.messages import (
     AudienceUtterance,
     PlaybackReport,
     PlayerDisplayed,
+    PlayerVoice,
     RecognitionSnapshot,
 )
 from app.realtime.hub import Sink
@@ -36,6 +37,7 @@ Inbound = (
     | AudienceUtterance
     | PlaybackReport
     | PlayerDisplayed
+    | PlayerVoice
     | RecognitionSnapshot
 )
 

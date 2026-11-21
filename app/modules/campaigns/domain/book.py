@@ -71,6 +71,9 @@ class Bidder:
     """The auction's immutable view of one campaign at clearing time (CONTEXT.md: Bidder).
 
     `budget_remaining=None` means uncapped (seed/demo house campaigns only).
+    `broad_match=False` restricts the campaign to its exact segments; by default a
+    bid also reaches broader, narrower and related segments at a discount
+    (auction `SegmentAffinity`).
     """
 
     campaign_id: CampaignId
@@ -83,6 +86,7 @@ class Bidder:
     live_multiplier: BidMultiplier = BidMultiplier(value=Decimal(1))
     active: bool = True
     budget_remaining: Money | None = None
+    broad_match: bool = True
 
     def __post_init__(self) -> None:
         if not self.segment_bids:
@@ -114,6 +118,7 @@ class Bidder:
             live_multiplier=multiplier,
             active=self.active,
             budget_remaining=self.budget_remaining,
+            broad_match=self.broad_match,
         )
 
 

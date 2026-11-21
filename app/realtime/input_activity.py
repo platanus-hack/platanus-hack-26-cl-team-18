@@ -1,4 +1,4 @@
-"""Bounded transport diagnostics: timestamps only, never sensor content or utterances."""
+"""Bounded transport diagnostics: timestamps/counts, never sensor content or utterances."""
 
 from collections import OrderedDict
 from dataclasses import dataclass, replace
@@ -14,6 +14,7 @@ class _Activity:
     snapshot_at: datetime | None = None
     snapshot_measured_at: datetime | None = None
     utterance_at: datetime | None = None
+    keyterm_count: int | None = None
 
 
 class InputStatus(TypedDict):
@@ -22,6 +23,7 @@ class InputStatus(TypedDict):
     speech_enabled: bool
     speech_recent: bool
     last_utterance_at: str | None
+    last_keyterm_count: int | None
     player_connected: bool
 
 
@@ -39,7 +41,7 @@ class InputActivity:
             current = (
                 replace(current, snapshot_at=at, snapshot_measured_at=message.measured_at)
                 if isinstance(message, AudienceSnapshot)
-                else replace(current, utterance_at=at)
+                else replace(current, utterance_at=at, keyterm_count=len(message.keyterms_hit))
             )
             self._screens[message.screen_id] = current
             self._screens.move_to_end(message.screen_id)
@@ -66,6 +68,7 @@ class InputActivity:
                     if activity.utterance_at
                     else None,
                     "player_connected": screen in players,
+                    "last_keyterm_count": activity.keyterm_count,
                 }
                 for screen, activity in self._screens.items()
             }

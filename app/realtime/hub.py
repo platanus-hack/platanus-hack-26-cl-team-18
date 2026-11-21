@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from app.contract.messages import (
+    AgentRole,
     ConsoleAuction,
     ConsoleBook,
     ConsoleDegradation,
@@ -32,12 +33,14 @@ from app.contract.messages import (
     CreativeReady,
     CreativeUpgraded,
     ErrorMessage,
+    LiveStatus,
     ScreenAttention,
 )
 
 logger = logging.getLogger(__name__)
 
-PlayerMessage = CreativeReady | CreativeUpgraded | ErrorMessage | ScreenAttention
+PlayerMessage = CreativeReady | CreativeUpgraded | ErrorMessage | ScreenAttention | LiveStatus
+AgentMessage = LiveStatus
 ConsoleMessage = (
     ConsoleMoment
     | ConsoleAuction
@@ -85,6 +88,10 @@ class ConnectionHub:
         # so consumers reading the creative stream in order are unaffected.
         self._attention: set[Sink] = set()
         self._consoles: set[Sink] = set()
+        # Players and consoles that asked for `live.status` (?live=1), like attention.
+        self._live: set[Sink] = set()
+        # Perception agents that said `agent.hello`: screen -> {sink: role}.
+        self._agents: dict[str, dict[Sink, AgentRole]] = defaultdict(dict)
         self._loop: asyncio.AbstractEventLoop | None = None
         self.stats = HubStats()
 
@@ -93,14 +100,19 @@ class ConnectionHub:
 
     # ----------------------------------------------------------- registration
 
-    def add_player(self, screen_id: str, sink: Sink, *, attention: bool = False) -> None:
+    def add_player(
+        self, screen_id: str, sink: Sink, *, attention: bool = False, live: bool = False
+    ) -> None:
         self._send_states.setdefault(sink, _SendState())
         self._players[screen_id].add(sink)
         if attention:
             self._attention.add(sink)
+        if live:
+            self._live.add(sink)
 
     def remove_player(self, screen_id: str, sink: Sink) -> None:
         self._attention.discard(sink)
+        self._live.discard(sink)
         sinks = self._players.get(screen_id)
         if sinks is not None:
             sinks.discard(sink)
@@ -108,13 +120,33 @@ class ConnectionHub:
                 del self._players[screen_id]
         self._retire_if_unused(sink)
 
-    def add_console(self, sink: Sink) -> None:
+    def add_console(self, sink: Sink, *, live: bool = False) -> None:
         self._send_states.setdefault(sink, _SendState())
         self._consoles.add(sink)
+        if live:
+            self._live.add(sink)
 
     def remove_console(self, sink: Sink) -> None:
         self._consoles.discard(sink)
+        self._live.discard(sink)
         self._retire_if_unused(sink)
+
+    def add_agent(self, screen_id: str, role: AgentRole, sink: Sink) -> None:
+        self._send_states.setdefault(sink, _SendState())
+        self._agents[screen_id][sink] = role
+
+    def remove_agent(self, sink: Sink) -> list[str]:
+        """Forget `sink` on every screen; returns the screens it served."""
+        served = [screen for screen, sinks in self._agents.items() if sink in sinks]
+        for screen in served:
+            del self._agents[screen][sink]
+            if not self._agents[screen]:
+                del self._agents[screen]
+        self._retire_if_unused(sink)
+        return served
+
+    def agent_roles(self, screen_id: str) -> list[AgentRole]:
+        return sorted(set(self._agents.get(screen_id, {}).values()))
 
     def connected_screens(self) -> list[str]:
         return sorted(self._players)
@@ -137,6 +169,8 @@ class ConnectionHub:
         subscribers = self._players.get(target, ())
         if isinstance(message, ScreenAttention):
             subscribers = {s for s in subscribers if s in self._attention}
+        elif isinstance(message, LiveStatus):
+            subscribers = {s for s in subscribers if s in self._live}
         recipients = subscribers if sink is None else (sink,) if sink in subscribers else ()
         await self._fan_out(recipients, (message.model_dump_json(),))
 
@@ -146,7 +180,24 @@ class ConnectionHub:
         recipients = self._consoles if sink is None else self._consoles & {sink}
         await self._fan_out(recipients, tuple(message.model_dump_json() for message in messages))
 
+    async def broadcast_live(self, *statuses: LiveStatus, sink: Sink | None = None) -> None:
+        """`live.status` to the consoles that subscribed with ?live=1."""
+        live_consoles = self._consoles & self._live
+        recipients = live_consoles if sink is None else live_consoles & {sink}
+        await self._fan_out(recipients, tuple(status.model_dump_json() for status in statuses))
+
+    async def send_to_agents(self, message: AgentMessage, *, sink: Sink | None = None) -> None:
+        subscribers = self._agents.get(message.screen_id, {})
+        recipients = subscribers if sink is None else (sink,) if sink in subscribers else ()
+        await self._fan_out(recipients, (message.model_dump_json(),))
+
     # ----------------------------------------------------------- from worker threads
+
+    def broadcast_live_threadsafe(self, *statuses: LiveStatus, sink: Sink | None = None) -> None:
+        self._schedule(self.broadcast_live(*statuses, sink=sink))
+
+    def send_to_agents_threadsafe(self, message: AgentMessage, *, sink: Sink | None = None) -> None:
+        self._schedule(self.send_to_agents(message, sink=sink))
 
     def send_to_screen_threadsafe(
         self, message: PlayerMessage, *, sink: Sink | None = None
@@ -170,7 +221,11 @@ class ConnectionHub:
     # ----------------------------------------------------------- internals
 
     def _retire_if_unused(self, sink: Sink) -> None:
-        if sink in self._consoles or any(sink in group for group in self._players.values()):
+        if (
+            sink in self._consoles
+            or any(sink in group for group in self._players.values())
+            or any(sink in group for group in self._agents.values())
+        ):
             return
         state = self._send_states.pop(sink, None)
         if state is not None:
@@ -185,6 +240,9 @@ class ConnectionHub:
         self._consoles.discard(sink)
         for screen_id in list(self._players):
             self.remove_player(screen_id, sink)
+        for group in self._agents.values():
+            group.pop(sink, None)
+        self._live.discard(sink)
         self._retire_if_unused(sink)
 
     async def _close_slow_sink(self, sink: Sink) -> None:

@@ -1,6 +1,7 @@
 """WebSocket endpoints: validate -> stamp `received_at` -> gate -> route. No business logic.
 
-- `/ws/agent`            perception agent -> backend (snapshots, keyframes, utterances)
+- `/ws/agent`            perception agent <-> backend (snapshots, keyframes, utterances in;
+                         `live.status` out after the agent's `agent.hello`)
 - `/ws/screen/{screen_id}` player <-> backend (creatives out, playback reports in)
 - `/ws/console`          backend -> operator console
 
@@ -23,6 +24,7 @@ from app.bootstrap.container import Container
 from app.contract.messages import (
     AGENT_INBOUND,
     PLAYER_INBOUND,
+    AgentHello,
     AudienceKeyframe,
     AudienceSnapshot,
     AudienceUtterance,
@@ -38,7 +40,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _SCREEN_ID = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
-AgentMessage = AudienceSnapshot | AudienceKeyframe | AudienceUtterance | RecognitionSnapshot
+AgentMessage = (
+    AudienceSnapshot | AudienceKeyframe | AudienceUtterance | RecognitionSnapshot | AgentHello
+)
+
+
+def _admitted_live(c: Container, message: AgentMessage) -> bool:
+    """The "En vivo" gate: in standby nothing sensed reaches the loop (live_switch.py)."""
+    if isinstance(message, AudienceUtterance):
+        return c.live.listening(message.screen_id)
+    return c.live.sensing(message.screen_id)
 
 
 def _container(ws: WebSocket) -> Container:
@@ -104,6 +115,10 @@ async def agent_socket(ws: WebSocket) -> None:
                         )
                         pending_keyframe = None
                         continue
+                    if not c.live.sensing(pending_keyframe.screen_id):
+                        c.live.dropped += 1  # standby: the frame bytes go nowhere
+                        pending_keyframe = None
+                        continue
                     received = Received(received_at=c.clock.now_utc(), payload=data)
                     mailbox.put(
                         ("audience.keyframe", pending_keyframe.screen_id),
@@ -126,6 +141,18 @@ async def agent_socket(ws: WebSocket) -> None:
                 received_at = c.clock.now_utc()
                 if not gate.admit((message.type, message.screen_id), message.seq):
                     continue  # duplicate or stale: drop, never queue
+                if isinstance(message, AgentHello):
+                    c.hub.add_agent(message.screen_id, message.role, ws)
+                    status = c.live.status(message.screen_id)
+                    await c.hub.send_to_agents(status, sink=ws)
+                    await c.hub.broadcast_live(status)
+                    continue
+                if isinstance(message, AudienceKeyframe):
+                    pending_keyframe = message  # bytes follow; the gate applies to them
+                    continue
+                if not _admitted_live(c, message):
+                    c.live.dropped += 1
+                    continue
                 if isinstance(message, (AudienceSnapshot, AudienceUtterance)):
                     c.input_activity.observe(message, received_at)
                 if isinstance(message, RecognitionSnapshot):
@@ -138,9 +165,7 @@ async def agent_socket(ws: WebSocket) -> None:
                     ):
                         continue
                     message = stored[0]  # retain warm evidence in subsequent publications
-                if isinstance(message, AudienceKeyframe):
-                    pending_keyframe = message  # bytes arrive in the next frame
-                elif isinstance(message, AudienceUtterance):
+                if isinstance(message, AudienceUtterance):
                     key = (message.type, message.screen_id, message.seq)  # never conflate speech
                     mailbox.put(key, (message, Received(received_at=received_at)))
                 else:
@@ -151,6 +176,9 @@ async def agent_socket(ws: WebSocket) -> None:
             tg.cancel_scope.cancel()
     except WebSocketDisconnect:
         pass
+    finally:
+        for screen_id in c.hub.remove_agent(ws):
+            await c.hub.broadcast_live(c.live.status(screen_id))
 
 
 # ------------------------------------------------------------------ player
@@ -163,7 +191,12 @@ async def screen_socket(ws: WebSocket, screen_id: str) -> None:
         return
     c = _container(ws)
     await ws.accept()
-    c.hub.add_player(screen_id, ws, attention=ws.query_params.get("attention") == "1")
+    c.hub.add_player(
+        screen_id,
+        ws,
+        attention=ws.query_params.get("attention") == "1",
+        live=ws.query_params.get("live") == "1",
+    )
     gate = SeqGate()
     try:
         await c.router.player_connected(screen_id, ws)
@@ -208,7 +241,7 @@ async def screen_socket(ws: WebSocket, screen_id: str) -> None:
 async def console_socket(ws: WebSocket) -> None:
     c = _container(ws)
     await ws.accept()
-    c.hub.add_console(ws)
+    c.hub.add_console(ws, live=ws.query_params.get("live") == "1")
     try:
         await c.router.console_connected(ws)
         while (frame := await _next_frame(ws)) is not None:

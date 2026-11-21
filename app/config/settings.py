@@ -18,6 +18,10 @@ class AppSettings(BaseSettings):
     demo_simulator: bool = False
     # The real sensing-to-ad loop runs independently of simulator/operator tooling.
     live_ads_enabled: bool = True
+    # The console's "En vivo" switch position at startup (app/realtime/live_switch.py).
+    # `make demo-live` starts in standby (false): nothing is sensed or generated until
+    # the operator presses the button. Tests, evals and replays keep the loop live.
+    live_starts_on: bool = True
     vlm_enabled: bool = False
     # Postgres is the record (auctions, charges), written behind the hot path.
     # Unset: everything stays in memory (simulator, tests, offline rehearsal).
@@ -81,7 +85,7 @@ class AppSettings(BaseSettings):
     # Warm AI copy (Claude Haiku 5.5) upgrades targeted stock copy in place. Needs
     # ANTHROPIC_API_KEY; without it every creative airs on stock copy.
     creative_ai_copy: bool = True
-    creative_copy_timeout_s: float = Field(default=2.5, gt=0, le=20)
+    creative_copy_timeout_s: float = Field(default=6.0, gt=0, le=20)
     # Generation spend cap per screen-hour, USD (the ROI rule applies under it).
     creative_hourly_budget_usd: Decimal = Field(default=Decimal(2), gt=0, le=1000)
     # Speech topics from opted-in screens (ADR 0005: off by default, per screen).

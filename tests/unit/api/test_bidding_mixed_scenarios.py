@@ -68,3 +68,23 @@ def test_stock_out_supersedes_a_pending_bid_and_never_replays_the_stale_basket(l
     safety = loop.auction()
     assert safety.swap == "swap" and safety.winners == []
     assert paid_brands(loop.creative()) == ()
+
+
+def test_demo_bidding_war_rayo_takes_voltios_seat_beside_cafe_patio(loop: Loop) -> None:
+    """docs/demo.md beat 4: the rival replaces Voltio *inside* the basket, not the basket."""
+    loop.send("co-brand")
+    loop.auction()
+    assert set(paid_brands(loop.creative())) == {"Voltio", "Café Patio"}
+    assert slide(loop, "Rayo", "1.5", 1).status_code == 200
+    war = loop.auction()
+    names = {
+        line["campaign_id"]: line["brand_name"]
+        for line in loop.client.get("/api/book").json()["lines"]
+    }
+    detail = (
+        [w.brand_name for w in war.winners],
+        {names[e.campaign_id]: e.reason.value for e in war.exclusions},
+        war.bundle_value,
+        war.single_brand_value,
+    )
+    assert {w.brand_name for w in war.winners} == {"Rayo", "Café Patio"}, detail

@@ -110,3 +110,23 @@ class WarmWorker:
             logger.exception("warm job failed", extra={"source": provider})
         finally:
             self._in_flight.pop(dedupe_key, None)
+
+
+class GatedWarm:
+    """One screen's view of the worker: jobs are refused while `allowed()` is false.
+
+    The live switch (live_switch.py) gates warm AI per screen: in standby no Claude
+    copy, VLM tag, speech topic or voice-over job starts, so nothing is spent. A job
+    already in flight finishes, and its in-place upgrade is discarded as stale.
+    """
+
+    def __init__(self, inner: WarmWorker, allowed: Callable[[], bool]) -> None:
+        self._inner = inner
+        self._allowed = allowed
+        self.refused = 0
+
+    def submit_threadsafe(self, provider: str, key: str, job: WarmJob) -> None:
+        if not self._allowed():
+            self.refused += 1
+            return
+        self._inner.submit_threadsafe(provider, key, job)

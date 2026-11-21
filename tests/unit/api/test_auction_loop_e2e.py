@@ -221,11 +221,13 @@ def test_walking_away_keeps_the_ad_for_the_grace_period_then_house_ad(loop: Loop
     loop.auction()
     assert set(paid_brands(loop.creative())) == {"Voltio", "Café Patio"}
 
-    loop.send("empty", after_s=1.0)
+    left = loop.send("empty", after_s=1.0)
     held = loop.auction()
     assert held.swap == "held" and held.winners == []
-    assert held.trace.swap_not_before == shown + timedelta(seconds=3)
-    loop.clock.set(shown + timedelta(seconds=3))
+    # D5.5: the grace counts from when attention left, not from when the ad went up.
+    assert held.trace.swap_not_before == left + timedelta(seconds=3)
+    assert left == shown + timedelta(seconds=1)
+    loop.clock.set(left + timedelta(seconds=3))
     assert loop.scheduler.fire_due() == 1
     loop.auction()
     assert paid_brands(loop.creative()) == ()
@@ -589,12 +591,21 @@ def test_stock_out_of_a_held_winner_never_airs_it(loop: Loop) -> None:
     held = loop.auction()
     assert held.swap == "held"
     assert stock(loop, "Café Patio", in_stock=False).json() == {"changed": True}
-    loop.auction()  # Voltio alone is already on air: unchanged, the basket hold is dropped
+    loop.auction()  # Voltio alone wins; the basket hold is dropped (refreshed to its Dúo)
     loop.clock.advance(timedelta(seconds=3))
     loop.scheduler.fire_due()
     loop.send("adult", after_s=0.1)
-    loop.auction()
-    assert paid_brands(loop.creative()) == ("Malta Sur",)  # no stale Café basket came first
+    beer = loop.auction()
+    while beer.swap == "released":  # the Voltio refresh ("Dúo Voltio" for the two) aired
+        beer = loop.auction()
+    assert [w.brand_name for w in beer.winners] == ["Malta Sur"]
+    if beer.swap == "held":  # the refresh just aired: the new-group floor applies
+        loop.clock.advance(timedelta(seconds=1.5))
+        loop.scheduler.fire_due()
+    aired = [paid_brands(loop.creative())]
+    while aired[-1] != ("Malta Sur",):
+        aired.append(paid_brands(loop.creative()))
+    assert set(aired[:-1]) <= {("Voltio",)}, aired  # never a stale Café basket
 
 
 def test_concurrent_slider_calls_settle_on_the_highest_seq(loop: Loop) -> None:

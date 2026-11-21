@@ -165,3 +165,21 @@ def test_an_unknown_daypart_is_rejected(studio: TestClient) -> None:
         "/api/campaigns/generate", json={"brands": ["voltio"], "daypart": "brunch"}
     )
     assert response.status_code == 422
+
+
+def test_rayo_baskets_show_rayos_own_can(studio: TestClient) -> None:
+    """Rayo's lavender can, never Voltio's lime one beside Rayo's price."""
+    rayo = CampaignGenerated.model_validate(
+        studio.post(
+            "/api/campaigns/generate", json={"brands": ["rayo", "cafe-patio"], "party_size": 2}
+        ).json()
+    )
+    voltio = CampaignGenerated.model_validate(
+        studio.post(
+            "/api/campaigns/generate", json={"brands": ["voltio", "cafe-patio"], "party_size": 2}
+        ).json()
+    )
+    assert rayo.spec.slots[0].hero_image_url == "/campaign-assets/photos/rayo-coffee.webp"
+    assert rayo.spec.video_url == "/campaign-assets/videos/rayo-coffee.mp4"
+    assert voltio.spec.slots[0].hero_image_url == "/campaign-assets/photos/energy-coffee.webp"
+    assert studio.get(rayo.spec.video_url).status_code == 200

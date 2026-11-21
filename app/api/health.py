@@ -27,6 +27,11 @@ def health(request: Request) -> dict[str, Any]:
             players=c.hub.connected_screens(),
         ),
         "consoles_connected": c.hub.console_count(),
+        "live": {
+            "starts_on": c.settings.live_starts_on,
+            "dropped_in_standby": c.live.dropped,
+            "screens": {s.screen_id: s.model_dump(mode="json") for s in c.live.statuses()},
+        },
         "warm": {
             "submitted": c.warm.stats.submitted,
             "deduped": c.warm.stats.deduped,

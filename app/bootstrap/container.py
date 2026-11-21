@@ -15,7 +15,7 @@ from typing import Any
 from app.bootstrap.demo import DemoControls
 from app.bootstrap.live import register_live_market
 from app.config.settings import AppSettings
-from app.contract.messages import AudienceKeyframe
+from app.contract.messages import AudienceKeyframe, LiveStatus
 from app.modules.ai.application.service.llm import AIService
 from app.modules.ai.infrastructure.adapters.llm.factory import LLMNotConfigured, build_llm_provider
 from app.modules.auction.application.ports.auction_log import AuctionLog
@@ -38,8 +38,9 @@ from app.modules.creative.infrastructure.elevenlabs_tts import ElevenLabsVoiceSy
 from app.modules.creative.infrastructure.media_store import FileMediaStore
 from app.modules.delivery.application.ports.ledger import ChargeLedger
 from app.modules.delivery.infrastructure.ledger import InMemoryChargeLedger, PostgresChargeLedger
-from app.realtime.hub import ConnectionHub
+from app.realtime.hub import ConnectionHub, Sink
 from app.realtime.input_activity import InputActivity
+from app.realtime.live_switch import LiveSwitchboard
 from app.realtime.router import InboundRouter
 from app.realtime.scheduler import Scheduler, thread_timer
 from app.realtime.warm_worker import WarmWorker
@@ -65,6 +66,7 @@ class Container:
     hub: ConnectionHub
     router: InboundRouter
     warm: WarmWorker
+    live: LiveSwitchboard
     voiceovers: VoiceoverService | None = None
     copywriter: CopyWriter | None = None
     scheduler: Scheduler = thread_timer
@@ -103,12 +105,18 @@ def build_container(
     audience_tagger: AudienceTagger | None = None,
     topic_extractor: TopicExtractor | None = None,
 ) -> Container:
+    clock = clock or SystemClock()
     container = Container(
         settings=settings,
-        clock=clock or SystemClock(),
+        clock=clock,
         hub=ConnectionHub(),
         router=InboundRouter(),
         warm=WarmWorker(settings.warm_concurrency),
+        live=LiveSwitchboard(
+            clock=clock,
+            starts_live=settings.live_starts_on,
+            speech_screens=settings.speech_mode_screens,
+        ),
         scheduler=scheduler or thread_timer,
     )
     build_voiceovers(container, voice_synthesizer)
@@ -125,6 +133,7 @@ def register_contexts(container: Container) -> None:
 
     if container.vlm is not None:
         container.router.on(AudienceKeyframe, container.vlm.accept)
+    register_live_switch(container)
     if container.settings.live_ads_enabled:
         container.demo = register_live_market(container)
 
@@ -280,3 +289,32 @@ def build_recognition_vlm(container: Container) -> None:
         container.recognition,
         container.router,
     )
+
+
+def register_live_switch(container: Container) -> None:
+    """Push the "En vivo" switch to every party that acts on it (live_switch.py).
+
+    Agents start or pause sensing, the player shows its listening indicator, and
+    every console redraws the button. Each new player or console gets the current
+    position on connect; agents get it in reply to their `agent.hello`.
+    """
+    live, hub = container.live, container.hub
+    live.bind_agents(hub.agent_roles)
+
+    def announce(_before: LiveStatus, after: LiveStatus) -> None:
+        hub.send_to_agents_threadsafe(after)
+        hub.send_to_screen_threadsafe(after)
+        hub.broadcast_live_threadsafe(after)
+
+    def player_connected(screen_id: str, sink: Sink) -> None:
+        hub.send_to_screen_threadsafe(live.status(screen_id), sink=sink)
+
+    def console_connected(sink: Sink) -> None:
+        known = {status.screen_id for status in live.statuses()}
+        screens = sorted(known | set(hub.connected_screens()))
+        if screens:
+            hub.broadcast_live_threadsafe(*map(live.status, screens), sink=sink)
+
+    live.on_change(announce)
+    container.router.on_player_connected(player_connected)
+    container.router.on_console_connected(console_connected)

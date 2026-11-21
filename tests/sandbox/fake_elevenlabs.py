@@ -128,6 +128,8 @@ async def scribe(ws: WebSocket) -> None:
         json.dumps({"message_type": "session_started", "session_id": "sbx", "config": query})
     )
     transcript = os.environ.get("FAKE_SCRIBE_TRANSCRIPT", "Uf, qué hambre. Vamos por un café.")
+    scripted = json.loads(os.environ.get("FAKE_SCRIBE_TRANSCRIPTS", "[]"))
+    commit_index = 0
     while True:
         try:
             msg = json.loads(await ws.receive_text())
@@ -142,6 +144,9 @@ async def scribe(ws: WebSocket) -> None:
             stats["scribe_keepalives"] += 1
         if msg.get("commit"):
             stats["scribe_commits"] += 1
+            if scripted:
+                transcript = scripted[min(commit_index, len(scripted) - 1)]
+                commit_index += 1
             words = transcript.split()
             await ws.send_text(
                 json.dumps({"message_type": "partial_transcript", "text": " ".join(words[:3])})

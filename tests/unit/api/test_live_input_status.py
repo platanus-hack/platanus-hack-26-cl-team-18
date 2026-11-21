@@ -45,6 +45,7 @@ def test_health_distinguishes_live_inputs_from_an_unconnected_player(tmp_path):
             assert status["camera_recent"] is True
             assert status["speech_enabled"] is True
             assert status["speech_recent"] is True
+            assert status["last_keyterm_count"] == 1
             assert status["last_utterance_at"] == clock.now_utc().isoformat()
             assert status["player_connected"] is False
             assert "private synthetic" not in str(body)

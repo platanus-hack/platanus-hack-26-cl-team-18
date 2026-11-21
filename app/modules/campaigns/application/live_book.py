@@ -215,4 +215,5 @@ class LiveCampaignBook:
             live_multiplier=bidder.live_multiplier,
             active=bidder.active,
             budget_remaining=remaining,
+            broad_match=bidder.broad_match,
         )

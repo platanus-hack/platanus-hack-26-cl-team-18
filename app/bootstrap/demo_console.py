@@ -1,10 +1,12 @@
 """Project simulator decisions onto the operator console contract."""
 
 from collections.abc import Mapping
+from decimal import Decimal
 
 from app.contract.messages import (
     AudienceSnapshot,
     BidLine,
+    BidMatch,
     ConsoleAuction,
     ConsoleLatency,
     ConsoleMoment,
@@ -14,11 +16,12 @@ from app.contract.messages import (
     HeldProductScore,
     LatencyTrace,
     MoneyDTO,
+    SegmentMatchKind,
     SegmentScore,
     SignalSource,
     Winner,
 )
-from app.modules.auction.domain.result import AuctionResult, Exclusion as DomainExclusion
+from app.modules.auction.domain.result import AuctionResult, BidValue, Exclusion as DomainExclusion
 from app.modules.audience import AudienceMomentSnapshot
 from app.modules.audience.domain.value_objects.segment import SegmentId
 from app.modules.campaigns.domain.book import Bidder, BrandId, BrandKit, CampaignId
@@ -65,15 +68,24 @@ def decision_messages(
             other=name(exclusion.related_campaign_id)
         )
 
-    def relevance(bidder: Bidder) -> float:
+    def relevance(bid: BidValue) -> float:
+        """Viewers × confidence the bid reaches, an approximate match by its weight."""
         return float(
             sum(
-                segments[bid.segment_id].viewer_count
-                * segments[bid.segment_id].confidence.value
+                segments[match.moment_segment].viewer_count
+                * segments[match.moment_segment].confidence.value
                 / 100
-                for bid in bidder.segment_bids
-                if bid.segment_id in segments
+                * match.weight
+                for match in bid.matches
             )
+        )
+
+    def best_rate(bid: BidValue) -> MoneyRate:
+        """The most the bid pays per attention-second here: its rate × match weight."""
+        currency = bid.value_per_s.currency
+        return MoneyRate.create(
+            currency=currency,
+            amount=max((match.rate for match in bid.matches), default=Decimal(0)),
         )
 
     messages: tuple[ConsoleMoment, ConsoleAuction] = (
@@ -111,21 +123,27 @@ def decision_messages(
                     campaign_id=str(bid.campaign_id),
                     brand_name=name(bid.campaign_id),
                     category=by_campaign[bid.campaign_id].category,
-                    bid_per_as=_money(
-                        max(
-                            (
-                                segment_bid.rate
-                                for segment_bid in by_campaign[bid.campaign_id].segment_bids
-                                if segment_bid.segment_id in segments
-                            ),
-                            key=lambda rate: rate.amount,
-                        )
-                    ),
-                    value=relevance(by_campaign[bid.campaign_id]),
+                    bid_per_as=_money(best_rate(bid)),
+                    value=relevance(bid),
                     value_per_s=_money(bid.value_per_s),
                     multiplier=format(
                         by_campaign[bid.campaign_id].live_multiplier.value.normalize(), "f"
                     ),
+                    matches=[
+                        BidMatch(
+                            segment_id=match.moment_segment.value,
+                            bid_segment_id=match.bid_segment.value,
+                            kind=SegmentMatchKind(match.kind.value),
+                            weight=float(match.weight),
+                            segment_label=segment_labels.get(
+                                match.moment_segment, match.moment_segment.value
+                            ),
+                            bid_segment_label=segment_labels.get(
+                                match.bid_segment, match.bid_segment.value
+                            ),
+                        )
+                        for match in bid.matches
+                    ],
                 )
                 for bid in result.bids
             ],

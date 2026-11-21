@@ -23,6 +23,9 @@ def outputs() -> dict[str, str]:
     return {
         OUTPUT_PATH: render(),
         EDGE_COPY: (ROOT / SOURCE).read_text(encoding="utf-8"),
+        "edge/agent/speech_matching.py": (ROOT / "app/contract/speech_matching.py").read_text(
+            encoding="utf-8"
+        ),
     }
 
 

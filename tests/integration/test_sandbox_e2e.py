@@ -213,13 +213,13 @@ def sandbox(tmp_path: Path) -> Iterator[Sandbox]:
             proc.stop()
 
 
-def speech_wav(path: Path) -> Path:
+def speech_wav(path: Path, *, segments: int = 1) -> Path:
     """0.5 s silence, 1.5 s of 'voice' (a tone the energy VAD hears), 1 s silence."""
     rate = 16_000
     voice = [
         int(math.sin(2 * math.pi * 220 * i / rate) * 0.3 * 32767) for i in range(int(1.5 * rate))
     ]
-    samples = [0] * (rate // 2) + voice + [0] * rate
+    samples = [0] * (rate // 2) + (voice + [0] * rate) * segments
     with wave.open(str(path), "wb") as wav:
         wav.setnchannels(1)
         wav.setsampwidth(2)
@@ -326,6 +326,59 @@ def test_speech_flips_the_auction_and_voiceovers_play_end_to_end(sandbox: Sandbo
             f"{proc.name} leaked text"
         )
         assert SANDBOX_KEY not in log, f"{proc.name} leaked the API key"
+
+
+def test_one_speech_session_switches_coffee_beer_then_coffee_again(tmp_path: Path) -> None:
+    phrases = ["quiero un café", "quiero unas cervezas", "quiero un café"]
+    box = start_sandbox(tmp_path, fake_env={"FAKE_SCRIBE_TRANSCRIPTS": json.dumps(phrases)})
+    try:
+        wav = speech_wav(tmp_path / "three-requests.wav", segments=3)
+
+        async def scenario() -> None:
+            async with (
+                websockets.connect(f"{box.backend_ws}/ws/screen/demo-01") as player_ws,
+                websockets.connect(f"{box.backend_ws}/ws/agent") as vision,
+                anyio.create_task_group() as tg,
+            ):
+                player = Inbox(player_ws)
+                tg.start_soon(player.pump)
+
+                async def camera_heartbeats() -> None:
+                    seq = 0
+                    while True:
+                        seq += 1
+                        snapshot = snapshot_for("empty", seq, datetime.now(UTC)).model_copy(
+                            update={"people": 1, "looking": 1}
+                        )
+                        await vision.send(snapshot.model_dump_json())
+                        await anyio.sleep(0.25)
+
+                tg.start_soon(camera_heartbeats)
+                agent = await anyio.to_thread.run_sync(box.agent, wav)
+                first = await player.wait(ready_with("Café Patio"))
+                await player.wait(ready_with("Malta Sur"))
+                await player.wait(
+                    lambda m: (
+                        ready_with("Café Patio")(m) and m["creative_id"] != first["creative_id"]
+                    )
+                )
+                assert await anyio.to_thread.run_sync(lambda: agent.popen.wait(15)) == 0
+                transitions = [
+                    next(iter(brands(m)))
+                    for m in player.messages
+                    if m["type"] == "creative.ready" and m["auction_id"] is not None
+                ]
+                assert transitions == ["Café Patio", "Malta Sur", "Café Patio"]
+                tg.cancel_scope.cancel()
+
+        anyio.run(scenario)
+        assert box.fake_stats()["scribe_sessions"] == 1
+        assert box.fake_stats()["scribe_commits"] == 3
+        for proc in box.procs:
+            assert all(phrase not in proc.text() for phrase in phrases)
+    finally:
+        for proc in reversed(box.procs):
+            proc.stop()
 
 
 def test_provider_quota_failure_degrades_to_silent_creatives(tmp_path: Path) -> None:

@@ -86,7 +86,7 @@ def test_two_people_get_a_group_sized_offer_with_stages(tmp_path: Path) -> None:
         spec = creative.spec
         assert set(paid_brands(creative)) == {"Voltio", "Café Patio"}
         assert spec.offer is not None and spec.offer.party_size == 2
-        assert (spec.offer.price.amount, spec.offer.label) == ("5990", "Dúo post-entreno")
+        assert (spec.offer.price.amount, spec.offer.label) == ("5990", "Dúo")
         assert [s.name for s in spec.stages] == list(CreativeStageName)
         assert "entren" in spec.stages[0].copy_text.lower()  # the hook answers the moment
         assert "para los 2" in spec.stages[1].copy_text  # the offer names the group

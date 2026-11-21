@@ -292,9 +292,9 @@ def test_quota_exhaustion_degrades_to_silent_creatives_and_tells_the_console(
 
 def test_character_budget_stops_new_lines_but_cached_ones_keep_playing(tmp_path: Path) -> None:
     synth = FakeSynth()
-    # Fits one demo line (~90 chars spoken) but not a second one: copy can change,
-    # so the test asserts the arithmetic instead of hard-coding lengths.
-    budget = 120
+    # Fits one demo line (~66 chars spoken) but not a second one (the solo line is ~46):
+    # copy can change, so the test asserts the arithmetic instead of hard-coding lengths.
+    budget = 80
     app, clock = app_for(tmp_path, synth=synth, elevenlabs_char_budget=budget)
     with (
         TestClient(app) as client,

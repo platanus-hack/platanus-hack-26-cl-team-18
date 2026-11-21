@@ -12,8 +12,10 @@ from app.contract.messages import (
     AudienceKeyframe,
     AudienceSnapshot,
     AudienceUtterance,
+    LiveStatus,
     PlaybackReport,
     PlayerDisplayed,
+    PlayerVoice,
     StockSet,
 )
 from app.modules.campaigns.application.live_book import MultiplierOutcome
@@ -21,6 +23,7 @@ from app.modules.creative.application.campaigns import CampaignGenerator
 from app.modules.creative.application.loops import bundle_key
 from app.realtime.hub import Sink
 from app.realtime.router import Inbound, InboundRouter, Received
+from app.realtime.warm_worker import GatedWarm
 
 if TYPE_CHECKING:
     from app.bootstrap.container import Container
@@ -77,7 +80,10 @@ def register_live_market(container: Container) -> DemoControls:
                     hub=container.hub,
                     clock=container.clock,
                     ids=ids,
-                    warm=container.warm,
+                    warm=GatedWarm(
+                        container.warm,
+                        lambda: container.live.ai_generation(screen_id),
+                    ),
                     voiceovers=container.voiceovers,
                     narrator_voice_id=settings.elevenlabs_narrator_voice_id,
                     speech_screens=frozenset(settings.speech_mode_screens),
@@ -112,6 +118,15 @@ def register_live_market(container: Container) -> DemoControls:
         for runtime in runtimes():
             runtime.router.console_connected_sync(sink)
 
+    def live_changed(before: LiveStatus, after: LiveStatus) -> None:
+        # Sensing off: the screen airs what an empty room gets. Mic off while still
+        # live: spoken topics are forgotten at once instead of riding out their TTL.
+        controls = screen(after.screen_id).controls
+        if before.sensing and not after.sensing:
+            controls.standby()
+        elif before.listening and not after.listening:
+            controls.forget_speech()
+
     def set_multiplier(message: AdvertiserBidMultiplier) -> MultiplierOutcome:
         # Each runtime must reconsider its own moment, including duplicate retries
         # of the shared update. The per-screen callback below handles that trigger.
@@ -132,10 +147,12 @@ def register_live_market(container: Container) -> DemoControls:
         AudienceUtterance,
         PlaybackReport,
         PlayerDisplayed,
+        PlayerVoice,
     ):
         container.router.on(message_type, dispatch)
     container.router.on_player_connected(player_connected)
     container.router.on_console_connected(console_connected)
+    container.live.on_change(live_changed)
     return DemoControls(
         book_view=default.controls.book_view,
         set_multiplier=set_multiplier,

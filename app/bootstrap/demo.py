@@ -8,6 +8,7 @@ from decimal import ROUND_CEILING, Decimal
 from pathlib import Path
 from threading import RLock
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from app.bootstrap.demo_console import decision_messages
 from app.contract.messages import (
@@ -29,16 +30,20 @@ from app.contract.messages import (
     DegradationFlag,
     DistanceBand,
     LatencyTrace,
+    MinorLikely,
     MoneyDTO,
     PlaybackReport,
     PlayerDisplayed,
+    PlayerVoice,
     ScreenAttention,
     StockSet,
     Tracklet,
     UpgradeKind,
 )
+from app.contract.speech_matching import DEFAULT_KEYTERMS
 from app.modules.auction.application.desk import AuctionDesk
 from app.modules.auction.application.ports.auction_log import AuctionLog, AuctionRecord
+from app.modules.auction.domain.affinity import RelatedSegments, SegmentAffinity
 from app.modules.auction.domain.opportunity import (
     AdOpportunity,
     HeldProduct as BidHeldProduct,
@@ -50,8 +55,10 @@ from app.modules.auction.infrastructure.auction_log import InMemoryAuctionLog
 from app.modules.auction.infrastructure.engines.in_process import InProcessBundleEngine
 from app.modules.audience import AudienceMomentSnapshot
 from app.modules.audience.application.classifier import AudienceClassifier, DegradedSignal
+from app.modules.audience.application.playback_echo import PlaybackEcho
 from app.modules.audience.application.ports import AudienceTagger
-from app.modules.audience.application.ports.topics import TopicExtractor
+from app.modules.audience.application.ports.tagger import WarmScheduler
+from app.modules.audience.application.ports.topics import TopicExtractor, TopicOutcome
 from app.modules.audience.domain.catalog import CueRule
 from app.modules.audience.domain.speech_evidence import (
     SpeechEvidence,
@@ -93,7 +100,7 @@ from app.modules.creative.application.studio import CreativeStudio, StudioConfig
 from app.modules.creative.application.template import compose_template
 from app.modules.creative.application.voiceover import InvalidSpokenLine, VoiceoverService
 from app.modules.creative.domain.angle import Angle
-from app.modules.creative.domain.brief import CreativeBrief
+from app.modules.creative.domain.brief import CreativeBrief, daypart_for_hour
 from app.modules.creative.domain.cost import GenerationBudget, GenerationKind, UsdCost
 from app.modules.creative.domain.draft import CopyDraft, CopySource
 from app.modules.creative.domain.offer import BasketOffer, OfferBook
@@ -112,7 +119,6 @@ from app.modules.screens.domain.value_objects.ids import ScreenId
 from app.realtime.hub import ConnectionHub, ConsoleMessage, Sink
 from app.realtime.router import InboundRouter, Received
 from app.realtime.scheduler import Scheduler, thread_timer
-from app.realtime.warm_worker import WarmWorker
 
 DEMO_SCREEN = "demo-01"
 MAX_MEASUREMENT_SKEW = timedelta(seconds=10)
@@ -135,6 +141,10 @@ class DemoControls:
     redeem: Callable[[str, str], tuple[ConsoleRedemption, bool]]
     reauction_bids: Callable[[], None]
     book_for: Callable[[str], ConsoleBook] | None = None
+    # The live switch (app/realtime/live_switch.py): standby airs what an empty room
+    # gets; forget_speech drops spoken topics when the mic goes off mid-moment.
+    standby: Callable[[], None] = lambda: None
+    forget_speech: Callable[[], None] = lambda: None
 
 
 def _clp_per_as(amount: str) -> MoneyRate:
@@ -200,17 +210,61 @@ def seed_market(
             *_tiers(
                 frozenset({voltio, patio}),
                 "Voltio + Café Patio",
+                # Moment-neutral labels: the same tiers air after the gym, on a coffee break
+                # or in the queue, and the hook carries the moment.
                 (
-                    (1, "Combo post-entreno", "", 3490),
-                    (2, "Dúo post-entreno", " x2", 5990),
-                    (3, "Trío post-entreno", " x3", 8490),
-                    (4, "Pack x4 post-entreno", " x4", 10990),
+                    (1, "Combo", "", 3490),
+                    (2, "Dúo", " x2", 5990),
+                    (3, "Trío", " x3", 8490),
+                    (4, "Pack x4", " x4", 10990),
                 ),
             ),
             *_tiers(
                 frozenset({rayo, patio}),
                 "Rayo + Café Patio",
                 ((1, "Combo", "", 3290), (2, "Dúo", " x2", 5790), (3, "Trío", " x3", 7990)),
+            ),
+            # Solo offers: most real moments sell one brand (a coffee group, one runner),
+            # and an ad without a price has nothing to redeem. Sized to the group too.
+            *_tiers(
+                frozenset({voltio}),
+                "Voltio",
+                (
+                    (1, "Voltio helado", "", 1490),
+                    (2, "Dúo Voltio", " x2", 2690),
+                    (3, "Trío Voltio", " x3", 3790),
+                    (4, "Pack x4 Voltio", " x4", 4690),
+                ),
+            ),
+            *_tiers(
+                frozenset({patio}),
+                "Café Patio",
+                (
+                    (1, "Café del día", "", 1990),
+                    (2, "Dos cafés", " x2", 3590),
+                    (3, "Tres cafés", " x3", 4990),
+                    (4, "Cuatro cafés", " x4", 6290),
+                ),
+            ),
+            *_tiers(
+                frozenset({rayo}),
+                "Rayo",
+                (
+                    (1, "Rayo helado", "", 1390),
+                    (2, "Dúo Rayo", " x2", 2490),
+                    (3, "Trío Rayo", " x3", 3490),
+                    (4, "Pack x4 Rayo", " x4", 4390),
+                ),
+            ),
+            *_tiers(
+                frozenset({kits[2].brand_id}),
+                "Malta Sur",
+                (
+                    (1, "Malta Sur", "", 1890),
+                    (2, "Dos Malta Sur", " x2", 3490),
+                    (3, "Tres Malta Sur", " x3", 4890),
+                    (4, "Cuatro Malta Sur", " x4", 5990),
+                ),
             ),
         ]
     )
@@ -271,7 +325,7 @@ def register_demo(
     hub: ConnectionHub,
     clock: BaseClock,
     ids: IdGenerator,
-    warm: WarmWorker | None = None,
+    warm: WarmScheduler | None = None,
     voiceovers: VoiceoverService | None = None,
     narrator_voice_id: str | None = None,
     speech_screens: frozenset[str] = frozenset(),
@@ -282,7 +336,7 @@ def register_demo(
     auction_log: AuctionLog | None = None,
     ledger: ChargeLedger | None = None,
     copywriter: CopyWriter | None = None,
-    copy_timeout_s: float = 2.5,
+    copy_timeout_s: float = 6.0,
     hourly_budget_usd: Decimal = Decimal(2),
     budget_clp: int = 50_000,
     startup: list[Callable[[], Awaitable[None]]] | None = None,
@@ -324,11 +378,14 @@ def register_demo(
             (SegmentSource.VISION, "tap handle fixture", beer),
             (SegmentSource.SOUND, "coffee service fixture", coffee),
             # COCO labels the live agent emits for the demo props
-            # (edge/agent/vision/snapshot.py); at catalog weight a single cup or
+            # (edge/agent/vision/vocabulary.py); at catalog weight a single cup or
             # bottle stays below the enter threshold and only the house ad plays.
             (SegmentSource.VISION, "bottle", fitness),  # the gym-bottle prop
             (SegmentSource.VISION, "cup", coffee),
             (SegmentSource.VISION, "wine glass", beer),
+            # YOLOE-26 store labels (edge/agent/vision/vocabulary.py) COCO lacked.
+            (SegmentSource.VISION, "energy drink can", fitness),  # a Voltio/Rayo can
+            (SegmentSource.VISION, "beer bottle", beer),
         )
     )
     fixture_keys = {(rule.source, rule.cue) for rule in fixture_cues}
@@ -339,6 +396,16 @@ def register_demo(
         )
     )
     segment_labels = {segment.segment_id: segment.label for segment in audience_catalog.segments}
+    # Segment matching beyond exact ids (auction affinity.py): the IAB hierarchy from
+    # the catalog paths plus its curated same-need pairs. A static in-memory table,
+    # so the hot path stays a lookup.
+    affinity = SegmentAffinity.build(
+        paths={segment.segment_id: segment.path for segment in audience_catalog.segments},
+        related=(
+            RelatedSegments(left=item.left, right=item.right, weight=item.weight.to_ratio())
+            for item in audience_catalog.relations
+        ),
+    )
     # Canonical keyterms the agent reports (edge/agent/speech/keyterms.py) -> segments.
     keyterm_catalog = {
         "gym": fitness,
@@ -391,6 +458,11 @@ def register_demo(
     latest_console: tuple[ConsoleMessage, ...] = ()
     # Classified speech topics only; utterance text is never kept (ADR 0005).
     speech = SpeechEvidence()
+    speech_revision = 0  # order utterances independently of slow warm-provider completion
+    speech_request_id: str | None = None
+    speech_request_base = SpeechEvidence()
+    playback_echo = PlaybackEcho()
+    voice_creative_id: str | None = None
     last_snapshot: tuple[AudienceSnapshot, Received] | None = None
     voice_degraded = False
     vlm_degraded = False
@@ -521,11 +593,12 @@ def register_demo(
             if len(result.winners) > 1
             else frozenset()
         )
+        local_hour = moment.measured_at.value.astimezone(VENUE_TZ).hour
         return build_brief(
             moment=moment,
             result=result,
             catalog=catalog,
-            context=MomentContext(held_brand_ids=held),
+            context=MomentContext(held_brand_ids=held, daypart=daypart_for_hour(local_hour)),
         )
 
     def run_auction(
@@ -534,8 +607,13 @@ def register_demo(
         trigger: Trigger,
         *,
         out_of_budget: frozenset[CampaignId] = frozenset(),
+        triggered_at: datetime | None = None,
     ) -> CreativeReady | None:
-        """Clear `moment` against the live book and stock. Caller holds the lock."""
+        """Clear `moment` against the live book and stock. Caller holds the lock.
+
+        `triggered_at` is when an operator change (bid, stock, budget) reached us:
+        a re-auction is timed from its cause, not from the moment's old receipt.
+        """
         nonlocal current_moment, latest_console
 
         def needs_creative_refresh(result: AuctionResult) -> bool:
@@ -569,9 +647,10 @@ def register_demo(
                 bidders=bidders,
                 layouts=layouts,
                 reserve=reserve,
-                approved_baskets=offer_book.baskets(),
+                approved_baskets=offer_book.pairings(),
                 out_of_stock=stock.out_of_stock(wire_screen_id),
                 max_play_seconds=Decimal(MAX_PLAY_SECONDS),
+                affinity=affinity,
                 # Complete the basket (ADR 0008 D2): a held brand boosts its partners.
                 held_products=tuple(
                     BidHeldProduct(
@@ -610,8 +689,8 @@ def register_demo(
             detected_at=snapshot.detected_at,
             published_at=snapshot.published_at,
             measured_at=moment.measured_at.value,
-            received_at=moment.received_at.value,
-            moment_changed_at=moment.moment_changed_at.value,
+            received_at=triggered_at or moment.received_at.value,
+            moment_changed_at=triggered_at or moment.moment_changed_at.value,
             cleared_at=cleared_at,
             swap_not_before=outcome.not_before,
         )
@@ -635,11 +714,18 @@ def register_demo(
 
     def reauction(trigger: Trigger, *, out_of_budget: frozenset[CampaignId] = frozenset()) -> None:
         """Re-clear the moment on screen after a bid, stock or budget change (same audience)."""
+        triggered_at = clock.now_utc()
         with lock:
             snapshot = last_snapshot
             moment = current_moment
             needs_voice = (
-                run_auction(snapshot[0], moment, trigger, out_of_budget=out_of_budget)
+                run_auction(
+                    snapshot[0],
+                    moment,
+                    trigger,
+                    out_of_budget=out_of_budget,
+                    triggered_at=triggered_at,
+                )
                 if snapshot is not None and moment is not None
                 else None
             )
@@ -868,7 +954,7 @@ def register_demo(
 
     # ------------------------------------------------------------ held products, tags
 
-    def extract_topics(utterance: AudienceUtterance, received: Received) -> None:
+    def extract_topics(utterance: AudienceUtterance, received: Received, revision: int) -> None:
         if topic_extractor is None or warm is None:
             return
         text, language = utterance.text, utterance.language  # in memory only, never logged
@@ -877,9 +963,32 @@ def register_demo(
 
         async def job() -> None:
             nonlocal speech
-            found = await topic_extractor.extract(text, language=language, catalog=catalog_text)
-            if not found:
+            with lock:
+                if revision != speech_revision:
+                    return
+                prior_topics = tuple(
+                    topic.segment_id.value
+                    for topic in speech_request_base.active(
+                        UtcTimestamp.create(received.received_at)
+                    ).topics
+                )
+            extraction = await topic_extractor.extract(
+                text, language=language, catalog=catalog_text, prior_topics=prior_topics
+            )
+            if extraction.outcome is TopicOutcome.FAILED:
                 return
+            found = tuple(t for t in extraction.topics if t.segment_key not in extraction.rejected)
+            # A model cannot reintroduce a topic the shopper explicitly rejected.
+            denied = {
+                keyterm_catalog[term].value
+                for term in DEFAULT_KEYTERMS.understand(text).rejected
+                if term in keyterm_catalog
+            }
+            found = tuple(
+                topic
+                for topic in found
+                if topic.segment_key in by_key and topic.segment_key not in denied
+            )
             heard = UtcTimestamp.create(received.received_at)
             expires = UtcTimestamp.create(received.received_at + speech_ttl)
             topics = tuple(
@@ -888,16 +997,38 @@ def register_demo(
                     intent=Percentage.create(topic.intent * 100),
                     heard_at=heard,
                     expires_at=expires,
+                    model_version=extraction.model_version,
+                    confidence=Percentage.create(
+                        min(topic.confidence, extraction.confidence) * 100
+                    ),
+                    reasoning_trace=extraction.outcome.value,
                 )
                 for topic in found
             )
             with lock:
-                speech = speech.heard(topics)
+                if revision != speech_revision or clock.now_utc() >= expires.value:
+                    return
                 snapshot = last_snapshot
+                base = speech_request_base
+                rejected = frozenset(
+                    by_key[k] for k in (*extraction.rejected, *denied) if k in by_key
+                )
+                # Successful semantics supersede this request's provisional hits.
+                # Failure retains them. No raw utterance survives classification.
+                speech = base.without(rejected)
+                solo = snapshot is not None and snapshot[0].looking <= 1
+                if extraction.outcome is TopicOutcome.CANCEL:
+                    speech = SpeechEvidence() if solo else speech
+                elif extraction.outcome is TopicOutcome.REQUEST:
+                    if topics:
+                        speech = speech.heard(topics, replace_previous=solo)
+                    elif solo:
+                        speech = SpeechEvidence()  # understood need, unavailable inventory
             if snapshot is not None:
-                decide(snapshot[0], Received(received_at=received.received_at), reconsider=True)
+                decide(snapshot[0], Received(received_at=clock.now_utc()), reconsider=True)
 
-        warm.submit_threadsafe("claude", f"topics:{utterance.screen_id}:{utterance.seq}", job)
+        # Agent sequence numbers restart on reconnect; the runtime revision does not.
+        warm.submit_threadsafe("claude", f"topics:{utterance.screen_id}:{revision}", job)
 
     # ------------------------------------------------------------ QR, redemption, video
 
@@ -915,6 +1046,16 @@ def register_demo(
         spec = apply_campaign_media(
             spec, market.campaign_media.get("+".join(sorted(slug_of[brand] for brand in brands)))
         )
+        if brief is None or brief.offer is None:
+            # No approved offer, nothing to redeem: never show a QR that sells nothing.
+            if loops is not None:
+                spec = spec.model_copy(
+                    update={
+                        "video_url": loops.url_for([slug_of[brand] for brand in brands])
+                        or spec.video_url
+                    }
+                )
+            return spec
         offer = redemptions.issue(
             auction_id=auction_id,
             creative_id=creative_id,
@@ -1032,26 +1173,77 @@ def register_demo(
 
     # ------------------------------------------------------------ speech (opt-in screens)
 
+    def receive_voice(report: PlayerVoice, received: Received) -> None:
+        nonlocal voice_creative_id
+        with lock:
+            if not report.playing and report.creative_id == voice_creative_id:
+                playback_echo.stop(received.received_at)
+                voice_creative_id = None
+                return
+            if report.screen_id != wire_screen_id or current_creative is None:
+                return
+            if report.creative_id != current_creative.creative_id:
+                return
+            if report.playing:
+                voice_creative_id = report.creative_id
+                playback_echo.start(
+                    spoken_copy(current_creative.spec),
+                    received.received_at,
+                    timedelta(milliseconds=report.duration_ms),
+                )
+
     def receive_utterance(utterance: AudienceUtterance, received: Received) -> None:
-        nonlocal speech
+        nonlocal speech, speech_revision, speech_request_id, speech_request_base
         if utterance.screen_id != wire_screen_id or wire_screen_id not in speech_screens:
             return  # speech mode is off for this screen: drop it, unread
+        with lock:
+            if playback_echo.matches(utterance.text, received.received_at):
+                return
+            speech_revision += 1
+            revision = speech_revision
+            correcting = (
+                utterance.utterance_id is not None and utterance.utterance_id == speech_request_id
+            )
+            if correcting:
+                # Reinterpret a partial from the state before this utterance. A
+                # corrected partial may remove a topic, even in a multi-person group.
+                speech = speech_request_base
+            else:
+                speech_request_id = utterance.utterance_id
+                speech_request_base = speech
+        meaning = DEFAULT_KEYTERMS.understand(utterance.text)
+        # Canonical hits support old devices and replay. Explicit rejection in the
+        # ephemeral text always overrides a stale or incorrect edge hit.
+        wanted = tuple(dict.fromkeys((*utterance.keyterms_hit, *meaning.wanted)))
+        wanted = tuple(term for term in wanted if term not in (*meaning.rejected, *meaning.ignored))
         topics = topics_from_keyterms(
-            utterance.keyterms_hit,
+            wanted,
             keyterm_catalog,
             heard_at=UtcTimestamp.create(received.received_at),
             ttl=speech_ttl,
         )
-        if not topics:
-            # No keyterm: the LLM topic extractor refines on the warm path (never blocks).
-            extract_topics(utterance, received)
-            return
         with lock:
-            speech = speech.heard(topics)
             snapshot = last_snapshot
-        if snapshot is not None:
-            # Re-run the decision on the latest observation with speech merged in.
+            # Rejections retract speech evidence, never visual observations. We
+            # cannot identify speakers: this is an anonymous group request.
+            rejected = frozenset(
+                keyterm_catalog[t] for t in meaning.rejected if t in keyterm_catalog
+            )
+            speech = speech.without(rejected)
+            if topics:
+                speech = speech.heard(
+                    topics, replace_previous=snapshot is not None and snapshot[0].looking <= 1
+                )
+            elif wanted and snapshot is not None and snapshot[0].looking <= 1:
+                # Known shopping need with no available campaign (e.g. water)
+                # supersedes the previous spoken need without inventing inventory.
+                speech = SpeechEvidence()
+        if snapshot is not None and (topics or meaning.rejected or wanted or correcting):
             decide(snapshot[0], Received(received_at=received.received_at), reconsider=True)
+        # Refine the whole final request even when one known keyword matched.
+        # Partial text stays entirely on the instant path to cap provider usage.
+        if utterance.is_final and utterance.text.strip():
+            extract_topics(utterance, received, revision)
 
     # ------------------------------------------------------------ AI copy (warm)
 
@@ -1130,9 +1322,11 @@ def register_demo(
         """Cold path: synthesize every approved offer line once (budget-guarded, cached on disk)."""
         if voiceovers is None or narrator_voice_id is None:
             return
-        for basket in sorted(offer_book.baskets(), key=lambda b: sorted(map(str, b))):
+        # Demo baskets only: solo offer lines are synthesized on first use, then cached,
+        # so a restart never spends voice credits on lines no moment has asked for.
+        for basket in sorted(offer_book.pairings(), key=lambda b: sorted(map(str, b))):
             for tier in offer_book.tiers(basket):
-                line = offer_line(tier.label, tier.text, str(tier.price.amount))
+                line = offer_line(tier.text, str(tier.price.amount))
                 await voiceovers.voiceover_url(line, narrator_voice_id)
 
     if startup is not None and voiceovers is not None:
@@ -1235,6 +1429,38 @@ def register_demo(
                 keyframe, jpeg=received.payload, received_at=received.received_at
             )
 
+    def reset_speech() -> tuple[AudienceSnapshot, Received] | None:
+        """Forget every spoken topic; a later warm extraction for them is discarded."""
+        nonlocal speech, speech_revision, speech_request_id, speech_request_base
+        with lock:
+            speech = SpeechEvidence()
+            speech_revision += 1
+            speech_request_id = None
+            speech_request_base = SpeechEvidence()
+            return last_snapshot
+
+    def forget_speech() -> None:
+        if (latest := reset_speech()) is not None:
+            decide(latest[0], Received(received_at=clock.now_utc()), reconsider=True)
+
+    def standby() -> None:
+        """The live switch went off: nobody is observed, so air what an empty room gets.
+
+        The normal decision path does the work (house ad, the play's attention ends,
+        swap holds still apply), so standby can't charge or skip a receipt.
+        """
+        latest = reset_speech()
+        now = clock.now_utc()
+        empty = AudienceSnapshot(
+            screen_id=wire_screen_id,
+            seq=latest[0].seq if latest is not None else 0,
+            measured_at=now,
+            people=0,
+            looking=0,
+            minor_likely=MinorLikely(value=False, confidence=0.0),
+        )
+        decide(empty, Received(received_at=now), reconsider=False)
+
     router.on(AudienceSnapshot, receive_snapshot)
     router.on(AudienceKeyframe, receive_keyframe)
     router.on(AudienceUtterance, receive_utterance)
@@ -1242,6 +1468,7 @@ def register_demo(
     router.on_player_connected(player_connected)
     router.on_console_connected(console_connected)
     router.on(PlayerDisplayed, receive_displayed)
+    router.on(PlayerVoice, receive_voice)
     return DemoControls(
         book_view=book_view,
         set_multiplier=set_multiplier,
@@ -1249,10 +1476,14 @@ def register_demo(
         offer_for=redemptions.offer,
         redeem=redeem,
         reauction_bids=lambda: reauction(Trigger.BID_CHANGED),
+        standby=standby,
+        forget_speech=forget_speech,
     )
 
 
 _CEILING = RoundingPolicy.create(money_rounding=ROUND_CEILING)
+# The first market is Chilean convenience stores (ADR 0008): hooks follow Santiago's clock.
+VENUE_TZ = ZoneInfo("America/Santiago")
 
 
 _NEAREST_FIRST = (DistanceBand.NEAR, DistanceBand.MID, DistanceBand.FAR)
