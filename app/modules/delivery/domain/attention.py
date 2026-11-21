@@ -30,6 +30,8 @@ class LookSample:
 
     at: datetime
     looking: frozenset[str]
+    # Looking tracklets in the "far" distance band: too far to read the ad (not billable).
+    far: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

@@ -325,6 +325,12 @@ function ReceiptPanel({ view }: { view: ScreenView }) {
                         {decimalCl(last.attention_seconds, 1)} s de atención ·{" "}
                         {decimalCl(last.played_s, 1)} s al aire
                     </p>
+                    {last.filtered.length > 0 && (
+                        <p className="text-metadata text-muted tabular-nums">
+                            No cobrado:{" "}
+                            {last.filtered.map((f) => `${f.reason} ${f.seconds} s`).join(" · ")}
+                        </p>
+                    )}
                     {last.total.amount === "0" ? (
                         <Badge tone="info" appearance="soft">
                             Cobrado $0: nadie miró
@@ -397,8 +403,12 @@ function MarketPanel({ view }: { view: ScreenView }) {
                                         <Badge>En espera</Badge>
                                     )}
                                 </TableCell>
-                                <TableCell className="text-right">
+                                <TableCell
+                                    className="text-right"
+                                    title={l.autobid_reason ?? undefined}
+                                >
                                     ×{decimalCl(l.multiplier, 1)}
+                                    {l.autobid && <Badge tone="info">auto</Badge>}
                                 </TableCell>
                                 <TableCell className="text-right">{money(l.spent)}</TableCell>
                                 <TableCell className="text-right">{money(l.reserved)}</TableCell>

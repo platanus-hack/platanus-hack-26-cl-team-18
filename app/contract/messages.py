@@ -488,6 +488,15 @@ class AdvertiserBidMultiplier(_Message):
     seq: Seq
 
 
+class AdvertiserAutoBid(_Message):
+    """Turn rule-based auto-bidding on or off for one campaign (a manual slider move turns it off)."""
+
+    type: Literal["advertiser.autobid"] = "advertiser.autobid"
+    campaign_id: EntityId
+    enabled: bool
+    target_cost_per_redemption: MoneyDTO | None = None
+
+
 class StockSet(_Message):
     """A clerk's stock toggle for one brand at one screen. A stock-out re-auctions."""
 
@@ -511,6 +520,9 @@ class BookLine(_Model):
     spent: MoneyDTO
     reserved: MoneyDTO
     remaining: MoneyDTO
+    autobid: bool = False
+    autobid_rule: Annotated[str, Field(max_length=32)] | None = None
+    autobid_reason: Annotated[str, Field(max_length=200)] | None = None
 
 
 class ConsoleBook(_Message):
@@ -536,6 +548,11 @@ class ChargeLine(_Model):
     reason: ChargeReason
 
 
+class FilteredAttention(_Model):
+    reason: Annotated[str, Field(max_length=32)]
+    seconds: Annotated[str, Field(pattern=r"^\d+(\.\d+)?$", max_length=16)]
+
+
 class ConsoleReceipt(_Message):
     """The moment receipt: who looked, for how long, and what each brand paid."""
 
@@ -549,6 +566,8 @@ class ConsoleReceipt(_Message):
     attention_seconds: Annotated[str, Field(pattern=r"^\d+(\.\d+)?$", max_length=16)]
     charges: list[ChargeLine]
     total: MoneyDTO
+    # Invalid-attention filtering: seconds not billed, per reason (glance, far, static, ...).
+    filtered: list[FilteredAttention] = Field(default_factory=list, max_length=8)
 
 
 class ConsoleRedemption(_Message):
@@ -640,6 +659,7 @@ AnyMessage = (
     | PlayerDisplayed
     | ScreenAttention
     | ConsoleRedemption
+    | AdvertiserAutoBid
 )
 
 # Order is the generated TS order; append new messages at the end.
@@ -663,6 +683,7 @@ ALL_MESSAGES: tuple[type[_Message], ...] = (
     PlayerDisplayed,
     ScreenAttention,
     ConsoleRedemption,
+    AdvertiserAutoBid,
 )
 
 

@@ -143,5 +143,8 @@ def register_live_market(container: Container) -> DemoControls:
         offer_for=default.controls.offer_for,
         redeem=default.controls.redeem,
         reauction_bids=default.controls.reauction_bids,
+        # One shared book: auto-bid moves apply to every screen; the default screen's
+        # auctions and plays are the observations the rules learn from.
+        set_autobid=default.controls.set_autobid,
         book_for=lambda screen_id: screen(screen_id).controls.book_view(),
     )

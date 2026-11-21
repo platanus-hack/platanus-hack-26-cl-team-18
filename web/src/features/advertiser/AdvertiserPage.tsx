@@ -1,6 +1,6 @@
 import type { BookLine } from "@/contract";
 import { decimalCl, moneyCl } from "@/lib/format";
-import { setBidMultiplier, useBook } from "@/lib/market-api";
+import { setAutoBid, setBidMultiplier, useBook } from "@/lib/market-api";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { Card } from "@/shared/ui/card";
@@ -185,6 +185,24 @@ function Slider({
                     No se envió. Mueve el control otra vez.
                 </Badge>
             )}
+            <div className="flex flex-col gap-2">
+                <Button
+                    variant={line.autobid ? "primary" : "outline"}
+                    aria-pressed={line.autobid}
+                    onClick={() => {
+                        setAutoBid(line.campaign_id, !line.autobid)
+                            .then(onSent)
+                            .catch(() => {
+                                setFailed(true);
+                            });
+                    }}
+                >
+                    {line.autobid ? "Puja automática: activa" : "Activar puja automática"}
+                </Button>
+                {line.autobid && line.autobid_reason && (
+                    <p className="text-metadata text-muted">{line.autobid_reason}</p>
+                )}
+            </div>
             <dl className="grid grid-cols-2 gap-4 border-t border-border-subtle pt-4 text-compact">
                 <div>
                     <dt className="text-muted">Presupuesto disponible</dt>

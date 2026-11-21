@@ -11,6 +11,7 @@ from uuid import UUID
 
 from app.bootstrap.demo_console import decision_messages
 from app.contract.messages import (
+    AdvertiserAutoBid,
     AdvertiserBidMultiplier,
     AudienceKeyframe,
     AudienceSnapshot,
@@ -27,6 +28,7 @@ from app.contract.messages import (
     CreativeSpec,
     CreativeUpgraded,
     DegradationFlag,
+    FilteredAttention,
     LatencyTrace,
     MoneyDTO,
     PlaybackReport,
@@ -42,7 +44,7 @@ from app.modules.auction.domain.opportunity import (
     HeldProduct as BidHeldProduct,
     Layout,
 )
-from app.modules.auction.domain.result import AuctionResult, NoFillReason
+from app.modules.auction.domain.result import AuctionResult, ExclusionReason, NoFillReason
 from app.modules.auction.domain.swap import Trigger
 from app.modules.auction.infrastructure.auction_log import InMemoryAuctionLog
 from app.modules.auction.infrastructure.engines.in_process import InProcessBundleEngine
@@ -60,12 +62,14 @@ from app.modules.audience.domain.speech_evidence import (
 from app.modules.audience.domain.value_objects.ids import MomentId
 from app.modules.audience.domain.value_objects.segment import SegmentId, SegmentSource
 from app.modules.audience.infrastructure.catalog.loader import load_catalog
+from app.modules.campaigns.application.autobidder import AutoBidder
 from app.modules.campaigns.application.live_book import (
     LiveCampaignBook,
     MultiplierOutcome,
     UnknownCampaign,
 )
 from app.modules.campaigns.application.stock import StockBoard
+from app.modules.campaigns.domain.autobid import AutoBidGoal
 from app.modules.campaigns.domain.book import (
     Bidder,
     BidMultiplier,
@@ -132,6 +136,7 @@ class DemoControls:
     offer_for: Callable[[str], RedeemableOffer | None]
     redeem: Callable[[str, str], tuple[ConsoleRedemption, bool]]
     reauction_bids: Callable[[], None]
+    set_autobid: Callable[[AdvertiserAutoBid], bool] | None = None
     book_for: Callable[[str], ConsoleBook] | None = None
 
 
@@ -304,6 +309,9 @@ def register_demo(
     reserve = _clp_per_as("1.5")
     desk = AuctionDesk(InProcessBundleEngine(), holds_enabled=swap_holds)
     book, stock, auctions = market.book, market.stock, market.auctions
+    # Rule-based auto-bidding (opt-in per campaign from /advertiser).
+    autobidder = AutoBidder(book)
+    autobid_running = False
     delivery, redemptions = market.delivery, market.redemptions
     loops = BundleLoopLibrary(media_dir) if media_dir is not None else None
     campaign_of = {bidder.campaign_id: bidder for bidder in bidders}
@@ -451,6 +459,11 @@ def register_demo(
                     wire_screen_id,
                     measured_at.value,
                     (tracklet.id for tracklet in snapshot.tracklets if tracklet.looking),
+                    far=(
+                        tracklet.id
+                        for tracklet in snapshot.tracklets
+                        if tracklet.looking and tracklet.distance_band.value == "far"
+                    ),
                 )
                 looks = [t.dwell_s for t in snapshot.tracklets if t.looking]
                 hub.send_to_screen_threadsafe(
@@ -564,6 +577,7 @@ def register_demo(
                 cleared_at=cleared_at,
             )
         )
+        observe_for_autobid(outcome.result)
         trace = LatencyTrace(
             candidate_at=snapshot.candidate_at,
             detected_at=snapshot.detected_at,
@@ -796,6 +810,13 @@ def register_demo(
                     spent=_money(account.spent if account else zero),
                     reserved=_money(account.reserved if account else zero),
                     remaining=_money(account.remaining if account else zero),
+                    autobid=autobidder.enabled(bidder.campaign_id),
+                    autobid_rule=(
+                        d.rule.value
+                        if (d := autobidder.last_decision(bidder.campaign_id))
+                        else None
+                    ),
+                    autobid_reason=d.reason if d else None,
                 )
             )
         return ConsoleBook(screen_id=wire_screen_id, lines=lines)
@@ -808,8 +829,58 @@ def register_demo(
             campaign_id, BidMultiplier.create(message.multiplier), message.seq
         )
         if outcome is MultiplierOutcome.APPLIED:
+            autobidder.disable(campaign_id)  # a human took the slider: the human wins
             reauction(Trigger.BID_CHANGED)
         return outcome
+
+    # ------------------------------------------------------------ auto-bidding (rules)
+
+    def observe_for_autobid(result: AuctionResult) -> None:
+        values = {bid.campaign_id: bid.value_per_s.amount for bid in result.bids}
+        rival = max((w.value_per_s.amount for w in result.winners), default=Decimal(0))
+        for campaign_id, value in values.items():
+            exclusion = result.exclusion_for(campaign_id)
+            outbid = exclusion is not None and exclusion.reason in (
+                ExclusionReason.OUTBID,
+                ExclusionReason.COMPETITOR,
+            )
+            autobidder.observe_auction(
+                campaign_id,
+                won=campaign_id in result.winner_ids,
+                outbid=outbid,
+                multiplier_needed=(rival / value) if outbid and value > 0 else None,
+            )
+
+    def set_autobid(message: AdvertiserAutoBid) -> bool:
+        nonlocal autobid_running
+        campaign_id = _campaign_id(message.campaign_id)
+        if campaign_id not in campaign_of:
+            raise UnknownCampaign()
+        if not message.enabled:
+            autobidder.disable(campaign_id)
+            return False
+        target = message.target_cost_per_redemption
+        autobidder.enable(
+            campaign_id,
+            AutoBidGoal(
+                target_cost_per_redemption=None
+                if target is None
+                else Money.create(currency=target.currency, amount=target.amount)
+            ),
+            at=clock.now_utc(),
+        )
+        if not autobid_running:
+            autobid_running = True
+            scheduler(AUTOBID_TICK_S, autobid_tick)
+        return True
+
+    def autobid_tick() -> None:
+        changed = autobidder.tick(at=clock.now_utc())
+        if changed:
+            reauction(Trigger.BID_CHANGED)
+        else:
+            hub.broadcast_console_threadsafe(book_view())
+        scheduler(AUTOBID_TICK_S, autobid_tick)
 
     def set_stock(message: StockSet) -> bool:
         if message.screen_id != wire_screen_id:
@@ -892,6 +963,9 @@ def register_demo(
 
     def redeem(code: str, nonce: str) -> tuple[ConsoleRedemption, bool]:
         redemption, created = redemptions.redeem(code, nonce, at=clock.now_utc())
+        if created:
+            for campaign in redemption.campaign_ids:
+                autobidder.observe_redemption(campaign)
         offer = redemptions.offer(code)
         message = ConsoleRedemption(
             screen_id=redemption.screen_id,
@@ -943,6 +1017,12 @@ def register_demo(
         if receipt is None:
             return  # house ad, unknown creative or a retry already billed
         # The charge was booked (and capped) against budgets inside billing.
+        for charge in receipt.charges:
+            autobidder.observe_play(
+                charge.campaign_id,
+                charge=charge.amount,
+                attention_seconds=charge.attention_seconds,
+            )
         hub.broadcast_console_threadsafe(receipt_message(receipt), book_view())
         # That spend may leave the brand on air unable to cover its current lease.
         with lock:
@@ -980,6 +1060,11 @@ def register_demo(
                 for charge in receipt.charges
             ],
             total=_money(receipt.total),
+            filtered=[
+                FilteredAttention(reason=reason.value, seconds=format(seconds, "f"))
+                for reason, seconds in receipt.attention.invalid_seconds.items()
+                if seconds > 0
+            ],
         )
 
     # ------------------------------------------------------------ speech (opt-in screens)
@@ -1201,9 +1286,11 @@ def register_demo(
         offer_for=redemptions.offer,
         redeem=redeem,
         reauction_bids=lambda: reauction(Trigger.BID_CHANGED),
+        set_autobid=set_autobid,
     )
 
 
+AUTOBID_TICK_S = 5.0  # how often the auto-bidding rules re-evaluate
 _CEILING = RoundingPolicy.create(money_rounding=ROUND_CEILING)
 
 

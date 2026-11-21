@@ -5,6 +5,22 @@ import { z } from "zod";
 
 export const CONTRACT_VERSION = 1 as const;
 
+export const MoneyDTOSchema = z.strictObject({
+  amount: z.string().max(32).regex(/^-?\d+(\.\d+)?$/),
+  currency: z.string().regex(/^[A-Z]{3}$/),
+});
+export type MoneyDTO = z.infer<typeof MoneyDTOSchema>;
+
+// Turn rule-based auto-bidding on or off for one campaign (a manual slider move turns it off).
+export const AdvertiserAutoBidSchema = z.strictObject({
+  v: z.literal(1),
+  type: z.literal("advertiser.autobid"),
+  campaign_id: z.string().min(1).max(64),
+  enabled: z.boolean(),
+  target_cost_per_redemption: MoneyDTOSchema.nullable(),
+});
+export type AdvertiserAutoBid = z.infer<typeof AdvertiserAutoBidSchema>;
+
 // The bidding-war slider: bounded live multiplier, idempotent by (campaign_id, seq).
 export const AdvertiserBidMultiplierSchema = z.strictObject({
   v: z.literal(1),
@@ -89,12 +105,6 @@ export const AudienceUtteranceSchema = z.strictObject({
 });
 export type AudienceUtterance = z.infer<typeof AudienceUtteranceSchema>;
 
-export const MoneyDTOSchema = z.strictObject({
-  amount: z.string().max(32).regex(/^-?\d+(\.\d+)?$/),
-  currency: z.string().regex(/^[A-Z]{3}$/),
-});
-export type MoneyDTO = z.infer<typeof MoneyDTOSchema>;
-
 export const BidLineSchema = z.strictObject({
   campaign_id: z.string().min(1).max(64),
   brand_name: z.string().max(80),
@@ -120,6 +130,9 @@ export const BookLineSchema = z.strictObject({
   spent: MoneyDTOSchema,
   reserved: MoneyDTOSchema,
   remaining: MoneyDTOSchema,
+  autobid: z.boolean(),
+  autobid_rule: z.string().max(32).nullable(),
+  autobid_reason: z.string().max(200).nullable(),
 });
 export type BookLine = z.infer<typeof BookLineSchema>;
 
@@ -348,6 +361,12 @@ export const ConsoleMomentSchema = z.strictObject({
 });
 export type ConsoleMoment = z.infer<typeof ConsoleMomentSchema>;
 
+export const FilteredAttentionSchema = z.strictObject({
+  reason: z.string().max(32),
+  seconds: z.string().max(16).regex(/^\d+(\.\d+)?$/),
+});
+export type FilteredAttention = z.infer<typeof FilteredAttentionSchema>;
+
 // The moment receipt: who looked, for how long, and what each brand paid.
 export const ConsoleReceiptSchema = z.strictObject({
   v: z.literal(1),
@@ -361,6 +380,7 @@ export const ConsoleReceiptSchema = z.strictObject({
   attention_seconds: z.string().max(16).regex(/^\d+(\.\d+)?$/),
   charges: z.array(ChargeLineSchema),
   total: MoneyDTOSchema,
+  filtered: z.array(FilteredAttentionSchema).max(8),
 });
 export type ConsoleReceipt = z.infer<typeof ConsoleReceiptSchema>;
 
@@ -551,6 +571,6 @@ export type PlayerOutbound = z.infer<typeof PlayerOutboundSchema>;
 export const ConsoleOutboundSchema = z.discriminatedUnion("type", [ConsoleMomentSchema, ConsoleAuctionSchema, ConsoleLatencySchema, ConsoleDegradationSchema, CreativeReadySchema, CreativeUpgradedSchema, ErrorMessageSchema, ConsoleBookSchema, ConsoleReceiptSchema, ConsoleRedemptionSchema]);
 export type ConsoleOutbound = z.infer<typeof ConsoleOutboundSchema>;
 
-export const MESSAGE_TYPES = ["audience.snapshot", "audience.keyframe", "audience.utterance", "creative.ready", "creative.upgraded", "playback.report", "console.moment", "console.auction", "console.latency", "console.degradation", "system.error", "advertiser.bid_multiplier", "stock.set", "console.book", "console.receipt", "recognition.snapshot", "player.displayed", "screen.attention", "console.redemption", "campaign.catalog", "campaign.generate", "campaign.generated"] as const;
+export const MESSAGE_TYPES = ["audience.snapshot", "audience.keyframe", "audience.utterance", "creative.ready", "creative.upgraded", "playback.report", "console.moment", "console.auction", "console.latency", "console.degradation", "system.error", "advertiser.bid_multiplier", "stock.set", "console.book", "console.receipt", "recognition.snapshot", "player.displayed", "screen.attention", "console.redemption", "advertiser.autobid", "campaign.catalog", "campaign.generate", "campaign.generated"] as const;
 
 export type MessageType = (typeof MESSAGE_TYPES)[number];
