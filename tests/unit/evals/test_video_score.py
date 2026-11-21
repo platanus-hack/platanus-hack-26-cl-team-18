@@ -5,7 +5,14 @@ from evals.harness import RunRecord
 from evals.metrics import Decision
 from evals.video.run import score
 
-from app.contract.messages import CreativeReady, CreativeSlot, CreativeSpec, LatencyTrace
+from app.contract.messages import (
+    ConsoleMoment,
+    CreativeReady,
+    CreativeSlot,
+    CreativeSpec,
+    LatencyTrace,
+    MinorLikely,
+)
 
 T0 = datetime(2026, 11, 21, tzinfo=UTC)
 
@@ -49,6 +56,15 @@ def test_timeline_scores_fit_reach_and_must_never_seconds(tmp_path) -> None:
     )
     recording.with_suffix(".meta.json").write_text(json.dumps({"sample_fps": 0.5}))
     run = RunRecord(source="t", initial=creative(None))
+    run.moments[0] = ConsoleMoment(
+        screen_id="demo-01",
+        moment_id="m",
+        people=1,
+        looking=1,
+        segments=[],
+        minor_likely=MinorLikely(value=False, confidence=1),
+        trace=LatencyTrace(received_at=T0),
+    )
     run.decisions = [
         Decision(
             source="t", step=1, minor_likely=False, creative=creative("Café Patio"), auction=None
@@ -77,5 +93,7 @@ def test_timeline_scores_fit_reach_and_must_never_seconds(tmp_path) -> None:
     assert result.metrics["paid_share"] == 0.8
     assert result.metrics["ad_precision"] == 0.75  # 6 s fitting of 8 s paid
     assert result.metrics["inappropriate_ad_seconds"] == 2.0  # the gate that must stay 0
+    assert result.metrics["house_no_target_signal_s"] == 2.0
+    assert sum(v for k, v in result.metrics.items() if k.startswith("house_")) == 2.0
     assert result.metrics["published_fact_changes"] == 2
     assert result.unmapped == ["cup"]  # seen half the time, no segment ever understood

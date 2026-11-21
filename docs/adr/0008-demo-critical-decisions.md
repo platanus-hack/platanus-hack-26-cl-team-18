@@ -185,6 +185,14 @@ adds an always-on sound scene built from coarse acoustic features (no words,
 no audio stored or sent), enabled with `--sound`. Its "coffee service
 fixture" label is a demo heuristic.
 
+### D13 amendment. Publish a confirmed minor block immediately
+
+The temporal pose vote still decides when the minor flag becomes true. Once
+confirmed, the edge publishes that block without waiting for the general
+scene debounce or its rate limit. Removing a block still requires a stable
+scene, and the crowd vote cannot clear it. At 10 fps the fixture reaches the
+backend boundary 600 ms after the first hit, 500 ms earlier than before.
+
 ## Consequences
 
 - Two hand-offs (D2) are needed before beat 3 works end to end.

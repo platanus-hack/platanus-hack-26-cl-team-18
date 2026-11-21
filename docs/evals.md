@@ -88,6 +88,63 @@ Passing these tests does not establish durable recovery across a restart.
 
 ## 2. The scorecard
 
+### Product performance targets
+
+Use **fitting paid exposure on eligible moments** as the primary product
+metric. Label attention and relevant ad opportunities independently on
+representative venue footage. Report total paid share separately so an
+increase in irrelevant ads cannot look like an improvement. Proposed targets
+below are engineering goals for that venue set.
+
+| Dimension | Target and measurement |
+|---|---|
+| Relevance | ≥95% fitting paid time and ≥80% of independently labeled eligible time covered by fitting ads. Report both per venue and across the corpus. |
+| Safety and availability | Zero prohibited ads, off-screen asset leaks, or blank renders in safety and failure rehearsals. Measure confirmed minor vote to publication separately from the time it takes to acquire the vote. |
+| Response time | Glass-to-glass p50 <1.5 s and p95 <2.5 s on hardware. Split capture → receipt, receipt → ready, and ready → displayed. Report intentional holds separately. Server decision p95 ≤30 ms. |
+| Stability | Report unintended swaps per minute on stationary scenes and measure snapshots lost to stale timestamps or backpressure. Target zero unintended swaps in the stationary fixture. |
+| Delivery integrity | 100% of completed paid plays have a receipt, no duplicate charges or redemptions, and attention error ≤5% against independent labels. |
+| Warm generation | Complete ad p95 <3 s and warmed cache p95 <300 ms. Report upgrade acceptance, upgrades that arrive after a creative leaves, and provider cost per accepted upgrade with live credentials. |
+
+For each report, include sample count, cold vs warm runs, device and provider
+settings, and p50/p95 separately. Stock footage is useful for finding gaps.
+It has no independent attention labels, so it cannot certify the eligible
+coverage target. Use consenting venue footage with labeled arrivals,
+attention, held products, and safety windows for that gate.
+
+### Local performance investigation
+
+- **Coverage:** eight stock-video recordings produced fitting paid exposure
+  only in the café clip, at 78.6% of that clip. Of about 126.6 seconds of
+  house play, 72.7 seconds had looking viewers without a classified segment
+  or held product, 52.3 seconds had no reported attention, and 1.6 seconds
+  reached auction no-fill with a target signal. The report now prints these
+  reasons per clip. They are based on observed signals and are not venue
+  ground truth. Sampling the raw detector output found no object detections
+  in the tested gym-floor and supermarket frames. The removed market cue was
+  a chair. This supports collecting better contextual evidence before
+  relaxing auction eligibility or the looking heuristic.
+- **Safety:** the same 10 fps edge fixture reported a confirmed minor block
+  after 1,100 ms before the fix and after 600 ms with immediate publication.
+  Clearing still requires a stable reading. The auction's existing
+  immediate safety swap is covered by the scenario and adversarial tests.
+- **Latency:** loopback scenario server p95 was 8.3 ms before and 10.4 ms
+  after, inside the 30 ms gate. One local café browser run had 9 display
+  acknowledgments, with p50/p95 of 393/547 ms from the snapshot frame to
+  browser display. The browser readiness stage alone was 269/305 ms, which
+  includes the crossfade. This sample does not include the time before the
+  agent publishes a stable moment or the physical display scanout.
+- **Inference:** a fresh 56-frame café recording measured 198/251 ms
+  CPU inference p50/p95. Same-frame thread probes preserved person counts
+  and object labels, but 4 threads had a p95 of 186 ms on the first run and
+  271 ms on repeat, versus 198/270 ms at 8 threads. Two threads reached
+  292 ms on the first run. Keep the current CPU configuration until the
+  production device has a repeatable benchmark. Record mode now writes
+  inference p95 and sample count. Live mode keeps no list of per-frame timings.
+- **Generation:** the provider-timing replay measured 1.06 s complete-ad p95
+  and 15 ms after warm-up. In the unwarmed run the recorded copy wait
+  accounted for about 98% of median latency. This does not measure current
+  Claude, ElevenLabs or fal service latency.
+
 `make eval` writes `evals/results/latest.md` (also the CI job summary and an
 artifact), a timestamped JSON, and appends `history.jsonl`, so the scorecard
 shows the trend across runs. Results are gitignored. Only `evals/baseline.json`
@@ -218,8 +275,12 @@ open evals/results/video/index.html
   only to gitignored results.
 - **Replay** runs in real time through a fresh live backend, so debounce,
   holds and swaps behave as live.
-- **Report** (`evals/results/video/index.html`): per clip, a timeline bar of
-  what the screen showed, and per change the blurred frame, what perception
+- **Report** (`evals/results/video/index.html`): play or scrub each local
+  stock clip beside the auction's recorded ad and copy. This replay aligns
+  decisions to source timestamps and does not measure browser display latency.
+  For a source the browser cannot decode, place a full-length WebM preview
+  alongside it as `<clip-id>.preview.webm` before generating the report.
+  The timeline and change cards show the blurred frame, what perception
   saw (people, looking, held/near objects), what the audience context
   understood (segments), the ad and its copy, and a verdict (✓ makes sense,
   ? off-target, ✗ must never, house ad, "missed opportunity").

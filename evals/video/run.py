@@ -206,6 +206,8 @@ def score(clip: dict[str, Any], recording: Path, run: RunRecord) -> ClipResult:
         else meta.get("raw_fact_changes"),
         "published_fact_changes": _changes([x["snapshot"] for x in lines]),
         "cpu_infer_p50_ms": meta.get("cpu_infer_p50_ms", meta.get("infer_p50_ms")),
+        "cpu_infer_p95_ms": meta.get("infer_p95_ms"),
+        **_house_time(lines, timeline, run, end),
         "invariant_violations": len(m.invariant_violations(decisions)),
         **{
             k: v
@@ -214,6 +216,44 @@ def score(clip: dict[str, Any], recording: Path, run: RunRecord) -> ClipResult:
         },
     }
     return result
+
+
+def _house_time(
+    lines: list[dict[str, Any]], timeline: list[Interval], run: RunRecord, end: float
+) -> dict[str, float]:
+    """Attribute house time using source intervals and the latest observed decision."""
+    seconds = dict.fromkeys(
+        ("no_attention", "no_target_signal", "auction_no_fill", "winner_not_on_air", "unobserved"),
+        0.0,
+    )
+    auctions = {d.step: d.auction for d in run.decisions if d.auction is not None}
+    if lines:
+        seconds["unobserved"] = float(lines[0]["t_s"])
+    moment = auction = None
+    interval = 0
+    for step, line in enumerate(lines):
+        moment = run.moments.get(step, moment)
+        auction = auctions.get(step, auction)
+        start = float(line["t_s"])
+        until = float(lines[step + 1]["t_s"]) if step + 1 < len(lines) else end
+        while interval + 1 < len(timeline) and timeline[interval].end_s <= start:
+            interval += 1
+        if timeline[interval].brands:
+            continue
+        if not line["snapshot"]["looking"]:
+            reason = "no_attention"
+        elif moment is None:
+            reason = "unobserved"
+        elif not moment.segments and not moment.held_products:
+            reason = "no_target_signal"
+        elif auction is None or auction.moment_id != moment.moment_id:
+            reason = "unobserved"
+        elif not auction.winners:
+            reason = "auction_no_fill"
+        else:
+            reason = "winner_not_on_air"
+        seconds[reason] += until - start
+    return {f"house_{reason}_s": round(value, 2) for reason, value in seconds.items()}
 
 
 def _changes(facts: list[dict[str, Any]]) -> int:
@@ -324,7 +364,44 @@ th{color:var(--muted);font-weight:600}td.n{text-align:right;font-variant-numeric
 .row{display:grid;grid-template-columns:240px 1fr;gap:14px;padding:12px 0;border-top:1px solid var(--line)}
 .row img{width:100%;border-radius:8px;display:block}@media (max-width:640px){.row{grid-template-columns:1fr}}
 .ad{border-left:4px solid var(--line);padding-left:10px}.ad.paid{border-color:var(--good)}.ad.off{border-color:var(--warn)}.ad.never{border-color:var(--bad)}
+.replay{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:12px 0}
+.replay video{width:100%;aspect-ratio:16/9;background:#151515;border-radius:8px}
+.replay output{display:block;background:var(--chip);border-radius:8px;padding:16px;min-width:0}
+@media (max-width:640px){.replay{grid-template-columns:1fr}}
 small{color:var(--muted)}a{color:inherit}
+"""
+REPLAY_SCRIPT = """
+for (const replay of document.querySelectorAll(".replay")) {
+    const video = replay.querySelector("video");
+    const output = replay.querySelector("output");
+    const offset = Number(replay.dataset.offset);
+    const duration = Number(replay.dataset.duration);
+    const intervals = JSON.parse(replay.dataset.intervals);
+    const sync = () => {
+        const t = video.currentTime - offset;
+        const decision = intervals.find(item => item.start <= t && t < item.end);
+        output.querySelector("[data-time]").textContent = t >= 0 && t < duration
+            ? t.toFixed(1) + " s into test"
+            : "Outside the scored window";
+        output.querySelector("strong").textContent = decision?.brands ?? "";
+        output.querySelector("p").textContent = decision?.copy ?? "";
+    };
+    video.addEventListener("loadedmetadata", () => { video.currentTime = offset; sync(); });
+    video.addEventListener("play", () => {
+        if (video.currentTime < offset || video.currentTime >= offset + duration) {
+            video.currentTime = offset;
+        }
+    });
+    video.addEventListener("timeupdate", () => {
+        if (!video.paused && video.currentTime >= offset + duration) video.pause();
+        sync();
+    });
+    video.addEventListener("seeked", sync);
+    video.addEventListener("error", () => {
+        output.querySelector("[data-time]").textContent = "The browser could not load this clip.";
+    });
+    sync();
+}
 """
 COLORS = {
     "": "#8a8a84",
@@ -388,6 +465,31 @@ def _perceiver(result: ClipResult) -> str:
     return f"{who}: {' + '.join(models) or 'YOLO26'} on CPU"
 
 
+def _video_replay(result: ClipResult) -> str:
+    original = clip_path(result.clip)
+    preview = original.with_suffix(".preview.webm")
+    source_path = preview if preview.is_file() else original
+    source = html.escape(Path(os.path.relpath(source_path, OUT)).as_posix())
+    intervals = html.escape(
+        json.dumps(
+            [
+                {"start": i.start_s, "end": i.end_s, "brands": _brands(i.brands), "copy": i.copy}
+                for i in result.timeline
+            ]
+        )
+    )
+    offset = float(result.clip["start_s"])
+    duration = float(result.metrics["duration_s"])
+    return (
+        f'<div class="replay" data-offset="{offset}" data-duration="{duration}" '
+        f'data-intervals="{intervals}">'
+        f'<video src="{source}" controls muted playsinline preload="none" '
+        'aria-label="Source video"></video>'
+        "<output><small>Auction replay · <span data-time></span></small><br>"
+        "<strong></strong><p></p></output></div>"
+    )
+
+
 def render_html(results: list[ClipResult]) -> str:
     rows = []
     for r in results:
@@ -409,6 +511,18 @@ def render_html(results: list[ClipResult]) -> str:
         )
     cards = []
     for r in results:
+        mt = r.metrics
+        house = " · ".join(
+            f"{label} {mt[key]:.1f}s"
+            for key, label in (
+                ("house_no_attention_s", "no attention"),
+                ("house_no_target_signal_s", "no target signal"),
+                ("house_auction_no_fill_s", "auction no fill"),
+                ("house_winner_not_on_air_s", "winner pending"),
+                ("house_unobserved_s", "unobserved"),
+            )
+            if mt[key] > 0
+        )
         expect = r.clip.get("expect", {})
         sensible = frozenset(expect.get("sensible_brands", []))
         never = frozenset(expect.get("never_brands", []))
@@ -452,8 +566,10 @@ def render_html(results: list[ClipResult]) -> str:
             f"<small>Would make sense: {html.escape(', '.join(sorted(sensible)) or 'nothing specific (house ad is fine)')} · "
             f"never: {html.escape(', '.join(sorted(never)) or '—')}"
             f"{' · ' + html.escape(expect['note']) if expect.get('note') else ''}</small>"
+            f"{_video_replay(r)}"
             f"<div class='tl'>{bar}</div><small>{r.metrics['duration_s']:.0f}s · {r.metrics['screen_changes']} screen changes · "
             f"{html.escape(_perceiver(r))}</small>"
+            f"<p><small>House ad time · {house or 'none'}</small></p>"
             f"{''.join(changes)}<p><small>Source: {credit}. Faces blurred; frames are local review artifacts, never committed.</small></p></section>"
         )
     return (
@@ -466,7 +582,7 @@ def render_html(results: list[ClipResult]) -> str:
         f"<tbody>{''.join(rows)}</tbody></table><p><small>Ad precision: share of paid screen-time showing a brand that fits the scene. "
         "Sensible reach: share of the whole clip with a fitting ad on air. Seen, not understood: objects perception reported in ≥30% "
         "of samples that produced no audience segment (a catalog gap, not a model gap).</small></p></section>"
-        f"{''.join(cards)}</main></body></html>"
+        f"{''.join(cards)}</main><script>{REPLAY_SCRIPT}</script></body></html>"
     )
 
 

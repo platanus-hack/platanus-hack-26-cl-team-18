@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from agent.contract import AGENT_INBOUND, AudienceSnapshot, MinorLikely, Tracklet
-from agent.vision.minor import MinorConfig, MinorVote, child_evidence
+from agent.vision.minor import NO_READING, MinorConfig, MinorReading, MinorVote, child_evidence
 from agent.vision.pipeline import VisionPipeline
 from agent.vision.snapshot import SnapshotBuilder, SnapshotConfig
 from agent.vision.tracking import PersonTracker, TrackerConfig
@@ -182,7 +182,7 @@ def _pipeline(link: Link) -> VisionPipeline:
     )
 
 
-def test_minor_likely_goes_through_the_debounce_and_leaves_only_a_bool_and_confidence() -> None:
+def test_confirmed_minor_is_sent_without_waiting_for_the_general_debounce() -> None:
     link = Link()
     pipeline = _pipeline(link)
     for i in range(10):  # 1 s of adults
@@ -193,9 +193,9 @@ def test_minor_likely_goes_through_the_debounce_and_leaves_only_a_bool_and_confi
         pipeline.process(object(), _frame(at, ADULT, CHILD, ADULT_2))
     snapshots = [m for m in link.sent if isinstance(m, AudienceSnapshot)]
     flagged = [s for s in snapshots if s.minor_likely.value]
-    assert flagged, "the child should be flagged once the vote and the debounce agree"
-    # 7-frame vote (0.6 s) + 500 ms debounce: never earlier than ~1.1 s after the child arrives.
-    assert flagged[0].measured_at - child_from >= timedelta(milliseconds=1100)
+    assert flagged
+    # The seventh hit at 10 Hz lands 600 ms after the first hit.
+    assert flagged[0].measured_at - child_from == timedelta(milliseconds=600)
     assert 0 < flagged[-1].minor_likely.confidence < 1
     # The count (3) is published first; the flag flips later on its own (it is in Facts.key).
     first_three = next(s for s in snapshots if s.people == 3)
@@ -206,3 +206,24 @@ def test_minor_likely_goes_through_the_debounce_and_leaves_only_a_bool_and_confi
     assert set(wire["minor_likely"]) == set(MinorLikely.model_fields)
     assert all(set(t) == set(Tracklet.model_fields) for t in wire["tracklets"])
     assert isinstance(AGENT_INBOUND.validate_json(flagged[-1].model_dump_json()), AudienceSnapshot)
+
+
+def test_minor_block_bypasses_rate_limit_and_clears_only_after_stability() -> None:
+    builder = SnapshotBuilder("demo-01")
+
+    def observe(ms: int, minor: MinorReading) -> AudienceSnapshot | None:
+        return builder.build(
+            measured_at=T0 + timedelta(milliseconds=ms),
+            tracks=[],
+            objects=(),
+            held=[],
+            minor=minor,
+        )
+
+    assert observe(0, NO_READING) is not None
+    blocked = observe(25, MinorReading(value=True, confidence=0.9))
+    assert blocked is not None and blocked.minor_likely.value
+    assert observe(100, NO_READING) is None
+    assert observe(599, NO_READING) is None
+    cleared = observe(600, NO_READING)
+    assert cleared is not None and not cleared.minor_likely.value

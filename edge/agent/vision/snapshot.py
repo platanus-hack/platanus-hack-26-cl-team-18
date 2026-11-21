@@ -12,9 +12,8 @@ Two jobs, both deterministic (time comes from `measured_at`, never the clock):
 2. **Rate-limit the sends.** A snapshot goes out at once when the published
    facts change, otherwise as a heartbeat, never faster than `max_rate_hz`.
 
-Counts, objects, held products, `minor_likely` and the sound scene in a
-snapshot are the **published** (debounced) facts: they all live in `Facts.key`,
-so none of them bypasses the debounce or the crowd vote. Tracklets are the
+Counts, objects, held products and the sound scene are debounced. A confirmed
+`minor_likely` block is published immediately; clearing it is debounced. Tracklets are the
 **live** per-person samples of the current frame, because the backend joins
 them with the playback window to measure attention.
 """
@@ -22,7 +21,7 @@ them with the playback window to measure attention.
 from __future__ import annotations
 
 from collections import Counter, deque
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 
 from agent.contract import AudienceSnapshot, DetectedObject, MinorLikely, SoundScene, Tracklet
@@ -129,6 +128,7 @@ class SnapshotBuilder:
         self._recent: deque[tuple[datetime, Facts]] = deque()
         self._last_sent_at: datetime | None = None
         self._last_sent_key: FactsKey | None = None
+        self._last_sent_minor = False
 
     @property
     def published(self) -> Facts | None:
@@ -147,8 +147,7 @@ class SnapshotBuilder:
         """Feed one frame. Returns the snapshot to send now, or None.
 
         `minor` is the already-voted moment reading (`agent.vision.minor`) and
-        `sound` the latest sound-scene labels (`agent.sound`); both are debounced
-        here like every other fact.
+        `sound` the latest sound-scene labels (`agent.sound`).
         """
         facts = frame_facts(tracks, objects, held, self._config, minor, sound)
         self._observe(facts, measured_at)
@@ -182,6 +181,7 @@ class SnapshotBuilder:
         self._seq += 1
         self._last_sent_at = measured_at
         self._last_sent_key = published.key
+        self._last_sent_minor = published.minor.value
         return snapshot
 
     def _observe(self, facts: Facts, now: datetime) -> None:
@@ -195,6 +195,13 @@ class SnapshotBuilder:
         if self._published is None:
             self._publish(facts, now)
             return
+        if facts.minor.value and not self._published.minor.value:
+            # MinorVote already confirmed the block. Keep the rest of the scene
+            # stable and discard the pre-block crowd votes.
+            self._recent.clear()
+            self._recent.append((now, facts))
+            self._publish(replace(self._published, minor=facts.minor), now)
+            return
         assert self._candidate_since is not None and self._published_at is not None
         if self._candidate.key == self._published.key:
             self._published = self._candidate  # refresh scores, not news
@@ -204,6 +211,12 @@ class SnapshotBuilder:
         if now - self._published_at >= self._config.max_stale:
             # Re-check every max_stale: publish the vote if it disagrees, else confirm.
             vote = self._vote()
+            if self._published.minor.value:
+                # A crowd vote can settle counts, but only the stable candidate
+                # branch above can clear an active safety block.
+                vote = replace(
+                    vote, minor=facts.minor if facts.minor.value else self._published.minor
+                )
             if vote.key != self._published.key:
                 self._publish(vote, now)
             else:
@@ -224,6 +237,8 @@ class SnapshotBuilder:
 
     def _due(self, now: datetime, published: Facts) -> bool:
         if self._last_sent_at is None:
+            return True
+        if published.minor.value and not self._last_sent_minor:
             return True
         elapsed = now - self._last_sent_at
         if elapsed < timedelta(seconds=1 / self._config.max_rate_hz):

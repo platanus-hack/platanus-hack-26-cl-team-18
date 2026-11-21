@@ -83,9 +83,9 @@ async def run(args: argparse.Namespace) -> int:
             object_every=1 if args.record else args.object_every,
         )
         main_detector = FailoverDetector(remote, local)
-    detector = _TimedDetector(
-        CompositeDetector(main_detector, ArucoMarkerDetector() if catalog else None)
-    )
+    composite = CompositeDetector(main_detector, ArucoMarkerDetector() if catalog else None)
+    timing = _TimedDetector(composite) if args.record else None
+    detector = timing or composite
 
     backend = None if args.offline else BackendLink(args.backend)
     recorder = (
@@ -142,6 +142,8 @@ async def run(args: argparse.Namespace) -> int:
             sound.close()
         if recorder:
             recorder.close()
+            assert timing is not None
+            samples = timing.ms
             meta = {
                 "video": Path(args.video).name,
                 "pose_model": args.pose_model,
@@ -150,8 +152,12 @@ async def run(args: argparse.Namespace) -> int:
                 "debounce_ms": args.debounce_ms,
                 "snapshots": recorder.lines,
                 "frames": pipeline.stats.frames,
-                "infer_p50_ms": statistics.median(detector.ms) if detector.ms else None,
-                "infer_max_ms": max(detector.ms, default=None),
+                "infer_samples": len(samples),
+                "infer_p50_ms": statistics.median(samples) if samples else None,
+                "infer_p95_ms": statistics.quantiles(samples, n=20, method="inclusive")[-1]
+                if len(samples) > 1
+                else next(iter(samples), None),
+                "infer_max_ms": max(samples, default=None),
             }
             Path(args.record).with_suffix(".meta.json").write_text(
                 json.dumps(meta, indent=2) + "\n", encoding="utf-8"
