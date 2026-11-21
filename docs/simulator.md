@@ -161,7 +161,11 @@ Open `http://127.0.0.1:5188/screen?id=demo-01` and `/console?screen=demo-01`.
 The console distinguishes recent camera snapshots, speech enabled/received,
 and a connected player. A healthy server alone does not prove the loop works.
 Speech received means an utterance arrived, not that the room is speaking now.
-Diagnostics retain timestamps only, never audio, transcripts or keyterms.
+Diagnostics retain timestamps and keyterm counts only, never audio, transcripts
+or keyterm text. `Voz recibida · sin términos reconocidos` means speech arrived
+without an instant keyword match; warm topic extraction may still classify it.
+When minor safety is active, alcohol stays blocked even after a beer request;
+the audience badge and auction exclusion explain why.
 
 ```sh
 make live-preflight ARGS="--server http://127.0.0.1:5188 --require-inputs --require-speech"

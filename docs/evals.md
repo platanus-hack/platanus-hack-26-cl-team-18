@@ -26,6 +26,7 @@ rehearsal ──► make eval-record ──► make eval-rehearsal ──► new
 | **Real-video replay** | Real perception output through the live backend: flicker, fill, latency | None | `make eval-replay` | On purpose |
 | **Stock-video ad fit** | On real footage of real people, the ad the screen chose *makes sense* for the scene, and a must-never brand never airs | **None** (CC stock clips → edge agent → live backend) | `make eval-video` | Before every demo, after any catalog or auction change |
 | **Ad pipeline journeys** | The whole ad system end to end (auction → stock/cached copy → AI copy → voice-over → play → receipt), timed per stage, with the bottleneck named | Provider *timing* replayed (recorded Claude latencies, TTS knob); everything else real, incl. the ElevenLabs HTTP adapter against the sandbox server | `make eval-pipeline` | CI, and after any change to creative, voice or billing |
+| **Demo video** | The five beats of [demo-video.md](demo-video.md) in order: Dúo → Trío → held cup → bidding war → close, QR redeem, receipt, charged $0. Every paid ad must be complete (AI copy + voice + video + logos + approved price + QR) | Same as the pipeline journeys: replayed Claude timing, sandbox ElevenLabs; no credits | `make eval-demo-video` | Before every rehearsal or recording, and after any loop change |
 | **Rehearsal scoring** | What actually happened in a run-through, glass to glass | None | `make eval-record` / `make eval-rehearsal` | Every rehearsal |
 
 ### Known-gap ledger (strict xfail)
@@ -459,3 +460,44 @@ near 1 s p50, inside the 1.5 s target.
    and "never blank" (ADR 0007); unplug test as a number.
 8. **Per-step trace budgets:** when a step gets its own timestamp (warm copy,
    TTS, video upgrade), add its p95 as a gate here in the same PR.
+
+### Voice corrections and bidding-war controls
+
+`make eval-speech` includes café → cerveza → café, minor safety, negated beer,
+nonalcoholic modifiers, the curated `acfe` spelling, and unavailable water
+inventory. `speech_text` in scenario files is authored synthetic input; it is
+never populated from a microphone or live transcript. Request-lifecycle socket
+tests cover retracted partials in a group. Echo tests cover actual playback
+windows, interrupted audio and unrelated shopper requests.
+
+The advertiser slider serializes writes and keeps only the latest queued drag.
+It retains a failed draft for retry, confirms the final acknowledged value,
+ignores obsolete polling responses, and orders writes after the last observed
+market sequence (including another controller's clock). Tests cover coalescing,
+unmounts, stale acknowledgements and decimal-string transport. Existing HTTP
+auction tests continue to cover reserve/budget/safety, stock-outs and delayed
+screen swaps. Increasing a multiplier does not guarantee an eligible winning bid.
+
+### Semantic flexibility and microphone framing
+
+`make eval-speech` now also replays the authored fixtures in
+`evals/fixtures/speech/understanding.json` through the real structured-output
+adapter, warm worker, audience evidence, auction and player sockets. It covers
+indirect requests, Chilean slang, English, transcription spelling errors,
+multiple needs, cancellation, quotes, hypothetical mentions, unavailable items,
+model failure/uncertainty, rejected topics and prompt-injection handling.
+These are **response-replay application evals**, not measurements of live LLM
+accuracy; expected responses are authored rather than obtained from a live model.
+No paid provider is needed, and no microphone transcripts are harvested.
+
+`make edge-check` covers sample preservation under irregular capture chunks,
+bounded notification scheduling, incomplete-turn pauses, exact PCM byte bounds,
+stale audio, missing final transcripts, supplemental timestamp events, empty
+commits, stream discontinuities and final-source flushes. `make test-sandbox`
+then runs the real agent and backend processes against a local provider server.
+
+Remaining release evidence requires a separately authorized paid rehearsal on
+actual hardware: short single words, long pauses, nearby speech, TV overlap,
+clipping/noise, and reconnects. Measure WER, request meaning, wrong-ad rate,
+request-to-visible-ad latency and provider usage separately. Passing protocol
+fixtures alone does not establish acoustic accuracy or camera-to-TV latency.

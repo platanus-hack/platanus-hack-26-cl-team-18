@@ -120,7 +120,8 @@ doesn't make a demo moment land better is backlog.
   cancellation** (room mic *and* ad audio) + 16:9 TV in Game mode over HDMI.
 - **Perception agent `edge/`:** Python **3.12**, its own uv project.
   **YOLO26-pose** every frame (people, looking from keypoints, face blur box,
-  distance) and **YOLO26s** objects at 5 fps, called through the `Detector`
+  distance) and **YOLOE-26s** open-vocabulary objects at 5 fps (the demo
+  vocabulary in `edge/agent/vision/vocabulary.py`, baked once by `make edge-yoloe`), called through the `Detector`
   port (remote GPU first, local fallback). ByteTrack runs locally. Capture
   thread with a single latest-frame slot.
   Silero VAD → **ElevenLabs Scribe v2 Realtime**, with our own keyterm matcher

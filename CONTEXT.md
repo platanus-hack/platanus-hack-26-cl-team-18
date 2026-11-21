@@ -28,6 +28,8 @@ Contexts: [`docs/architecture.md` §5](docs/architecture.md#5-bounded-contexts).
 | **Brand kit** | Approved assets: vector logo, product cutouts, colors, fonts, approved claims, stock copy, optional pre-rendered loops. The only visual source for a brand. | AI-generated images (never contain logos). |
 | **Campaign** | A brand's buying intent: segment bids (Money per AS), budget, pacing, schedule, co-brand preferences. | Creative. |
 | **Bid** | Max price per attention-second for viewers in a segment. | Price (what is actually paid). |
+| **Segment affinity** | The fixed table of how a bid on one segment reaches another: exact (1.0), broader/narrower along the IAB path, or a curated related pair from the catalog, each with a weight that discounts both value and charge ceiling. A lookup, never text similarity. | A segment (the affinity is between segments); a basket partner (brand side). |
+| **Match kind** | How a bid reached a moment segment: `exact`, `broader`, `narrower` or `related`. Shown per bid in the console. | Exclusion reason. |
 | **Bidder** | The auction's immutable, read-only view of one campaign at clearing time: segment bids, live multiplier, budget left, partner allow-list, category. | Auctioneer (the engine that decides); Advertiser (the organization). |
 | **Compatibility rule** | Competitor exclusion, co-brand allow/block lists, affinity bonuses. Pure `Specification`s. | Brand-safety policy. |
 | **Brand-safety policy** | Moment-dependent eligibility rule (e.g. no alcohol when minor-likely). Pure `Policy`. | Compatibility rule (pairwise between brands). |

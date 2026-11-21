@@ -59,6 +59,9 @@ web/coverage/
 *.pth
 *.onnx
 *.engine
+# YOLOE-26 text encoder, downloaded once by the vocabulary bake.
+mobileclip*.ts
+mobileclip*.pt
 *.trt
 *.tflite
 *.safetensors

@@ -170,6 +170,21 @@ Inputs: the audience moment (people present `n`, looking `k`, segments
 2. **Value per campaign:** `v_c = Σ_s bid_c(s) · relevant_viewers(s) ·
    confidence(s) · context_mult(category, context) · live_mult_c`, in `Money`
    per attention-second.
+   - **Segment matching (`SegmentAffinity`, `auction/domain/affinity.py`):**
+     `bid_c(s)` is the best of the campaign's bids that *reach* `s`, each times
+     its affinity weight: **exact** 1.0; **broader** (bid on an IAB ancestor,
+     "Sports" → "Cycling") 0.8 per level; **narrower** (bid on a descendant)
+     0.4 per level; **related** (a curated, symmetric same-need pair in the
+     catalog's `related` list, e.g. Coffee ↔ Pastry 0.4) its own weight. Each
+     moment segment counts once per campaign. The table is built at startup
+     from the catalog's paths and pairs and is a pure in-memory lookup, so
+     there is no text similarity and no model call on the hot path. The weight
+     also scales the **charge ceiling**: an approximate match never costs more
+     than `bid × weight`. Coverage counts an approximate match by its weight.
+     A campaign can opt out (`Bidder.broad_match=False`). Age-restricted
+     segments have no related pairs, so affinity never widens alcohol's reach.
+     The console shows the route (`BidLine.matches`: "via Coffee →
+     Pastry/Doughnuts · related 40%").
    - Speech-derived segments carry an explicit-intent boost (someone *said*
      "tengo hambre"), capped so one loud person can't outweigh the group.
    - **Held-product boost:** if a held product's brand is an approved partner

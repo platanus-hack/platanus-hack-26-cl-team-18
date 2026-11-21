@@ -6,9 +6,9 @@ TF  := scripts/tf.sh $(ENV)
 TF_ROOTS := terraform/modules/render-app terraform/modules/render-static-site terraform/envs/prod
 LOCAL_DATABASE_URL := postgresql://team18:team18@localhost:5432/team18
 
-.PHONY: help install edge-install edge-check test-live test-sandbox dev web-install web-dev web-check contract contract-check lint format typecheck test check migrate migrate-status db-up db-down db-reset \
-        live-preflight bundle-loops \
-        eval eval-baseline eval-creative eval-creative-baseline eval-campaigns eval-replay eval-perception eval-record eval-rehearsal eval-video-fetch eval-video eval-pipeline demo-warmup eval-browser \
+.PHONY: help install edge-install edge-check edge-yoloe edge-probe-objects test-live test-sandbox dev web-install web-dev web-check contract contract-check lint format typecheck test check migrate migrate-status db-up db-down db-reset \
+        live-preflight bundle-loops bundle-loops-local \
+        eval eval-baseline eval-creative eval-creative-baseline eval-campaigns eval-replay eval-perception eval-record eval-rehearsal eval-beats eval-video-fetch eval-video eval-pipeline eval-demo-video demo-warmup eval-browser \
         tf-init tf-fmt tf-fmt-check tf-validate tf-test tf-check tf-plan tf-apply tf-output tf-lock
 
 help: ## Show this help
@@ -28,6 +28,12 @@ edge-install: ## Install the perception agent (edge/, Python 3.12) with dev tool
 edge-check: ## edge/: ruff + format + mypy + tests (what CI runs)
 	cd edge && env -u VIRTUAL_ENV uv run ruff check . && env -u VIRTUAL_ENV uv run ruff format --check . \
 	  && env -u VIRTUAL_ENV uv run mypy agent && env -u VIRTUAL_ENV uv run pytest
+
+edge-yoloe: ## Bake the YOLOE-26 object vocabulary into edge/ weights once (downloads MobileCLIP)
+	cd edge && env -u VIRTUAL_ENV uv run python -m agent.vision.vocabulary
+
+edge-probe-objects: ## Live webcam -> YOLOE scores per prop, at the counter (ARGS="--gpu-url wss://.../infer")
+	cd edge && env -u VIRTUAL_ENV uv run python -m agent.vision.probe $(ARGS)
 
 test-sandbox: ## Real processes (backend + edge agent) against a local fake ElevenLabs; no credentials
 	uv run pytest -m sandbox -o addopts="" -v tests/integration/test_sandbox_e2e.py
@@ -57,8 +63,14 @@ live-preflight: ## Report live-loop providers and missing media (ARGS="--require
 eval-speech: ## Speech facts → live auction → matching player, no provider credits
 	uv run python -m evals speech
 
+eval-demo-video: ## The demo video (docs/demo.md §3) beat by beat: complete ads, redeem, receipt, $0
+	uv run python -m evals demo-video
+
 demo-live: ## Supervised camera → backend → player on :5188; paid providers OFF by default
 	uv run python -m scripts.live_demo $(ARGS)
+
+bundle-loops-local: ## Free: compose a loop per approved bundle/brand from campaign footage (no fal)
+	uv run --with imageio-ffmpeg python -m scripts.build_bundle_loops $(ARGS)
 
 bundle-loops: ## Generate cold H.264 loops (requires ARGS="--budget-usd N --cost-per-clip-usd N")
 	uv run python -m scripts.generate_loops $(ARGS)
@@ -108,6 +120,9 @@ eval-record: ## Record a live rehearsal from :8000 until Ctrl-C (OUT=path.jsonl)
 
 eval-rehearsal: ## Score a recorded rehearsal (REC=path.jsonl)
 	uv run python -m evals rehearsal $(REC)
+
+eval-beats: ## Did each demo-video beat land, in order? (REC=path.jsonl from eval-record)
+	uv run python -m evals beats $(REC)
 
 eval-video-fetch: ## Download the CC stock clips in evals/video/clips.json (gitignored)
 	uv run python -m evals.video.fetch

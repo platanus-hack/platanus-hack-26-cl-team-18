@@ -197,3 +197,133 @@ per-character timings. Medians of 3 runs. The test line is *"Uf, qué hambre.
 
 **Cost of tuning:** about 175 credits in total, for fixtures, the A/B test and
 round trips. Reruns cost 0 TTS characters.
+
+## Amendment: changing spoken requests
+
+For **one looking viewer**, the latest recognized request replaces that viewer's
+previous speech topics. Otherwise a beer request (higher seeded bid) could keep
+winning for the entire 60-second TTL after the person asked for coffee again.
+A single request may still contain several topics. Groups retain concurrent
+speech interests under the TTL, and visual evidence is never erased by a new
+spoken request. No speaker identification is introduced.
+
+Partial transcript updates carry all recognized keyterms in the current phrase,
+not just the newly added term. Model extraction jobs carry an internal revision;
+a job queued before a newer utterance, or completed after its TTL, cannot update
+the moment. Its dedupe key uses that revision too, so restarting the speech agent
+at sequence 1 cannot collide with a previous in-flight request. Model completion
+reconsiders the latest camera snapshot at the current clock time, never at an
+older utterance's receipt time.
+
+Alcohol still requires eligibility. A minor-safety block, unavailable stock,
+budget limits or no looking audience can legitimately prevent a beer ad. The
+console shows exclusions, and its input status distinguishes received speech
+from matched keyterms using counts only. No transcript or keyterm text is retained
+in diagnostics. `make eval-speech` covers coffee → beer → coffee and the
+alcohol-safety block; its unit tests also enable the real minimum-ad holds.
+`make test-sandbox` also runs three requests
+through one fake Scribe session and the real agent/backend sockets, without paid APIs.
+
+### Correction-aware matching and actual playback echo (2026-11-21)
+
+- `app/contract/speech_matching.py` owns the approved canonical terms and
+  conservative clause matching. `make contract` vendors it into the edge agent;
+  accent folding, synonyms, word boundaries, negation and nonalcoholic beer
+  handling now agree on both ends. The curated `acfe` alias covers the reported
+  coffee transcription; arbitrary fuzzy matches are deliberately avoided.
+- An anonymous, process-local `utterance_id` groups partials and their final
+  commit. Revisions are interpreted against the evidence before that utterance,
+  so removing a partial hit retracts it even for groups. IDs identify requests,
+  never speakers. Rejections remove speech evidence only; visual evidence and
+  mandatory minor restrictions remain independent.
+- Final requests can refine the complete meaning on the capped warm worker even
+  after a keyword hit. Partials never invoke the semantic provider. Explicit
+  lexical rejections also filter its result; obsolete completions cannot revive
+  a previous request. Unknown inventory produces a safe fallback, never an
+  invented offer. These deterministic tests do not establish live model quality.
+- The player emits `player.voice` at actual Web Audio start and stop. The backend
+  keeps the approved spoken line only for that playback window plus 400 ms and
+  rejects convincing matching fragments. It does not mute unrelated shopper
+  speech while an ad talks. Hardware echo cancellation is still required; no
+  claim of acoustic diarization or speaker identification is made.
+- Synthetic phrase fixtures live in `speech/corrections.json`; live transcripts
+  are never harvested for this corpus. Broader language quality should be
+  measured on consented synthetic recordings (negation, corrections, multiple
+  needs, unsupported inventory, noise and ad overlap) before any provider change.
+
+### Framing, semantic decisions and recovery (2026-11-21)
+
+The offline framing audit found that the outbox bound multiplied message count
+by the smallest chunk size, undercounting full-second chunks. It also found that
+capture callbacks scheduled unbounded event-loop work before the old queue bound
+applied. Both bounds now apply to actual data: a thread-safe microphone buffer
+assembles exact 512-sample frames, schedules one notification, and reports gaps;
+the Scribe outbox counts PCM bytes and discards stale audio after two seconds.
+An interrupted phrase is retracted and capture waits for silence before a new
+turn. Its tail must never become an independent positive shopping request.
+
+Regular Scribe chunks are **128 ms**, inside the documented 100–1000 ms range.
+The final commit preserves a shorter remainder; duplicate empty commits are
+suppressed. The client waits for `session_started`, ignores timestamp enrichment
+as a second request, and resets on a missing final transcript after ten seconds.
+Permanent parameter/format errors stop speech instead of retrying indefinitely.
+No live provider calls were used to tune these changes.
+
+The measured 320 ms manual VAD hangover remains the normal path. A dangling
+conjunction/negation, or a v3 `turn_probability` below 0.5, can extend it to
+38 frames (1.216 s). A complete partial restores the normal limit. Finite WAV
+sources explicitly flush the last segment, even without trailing silence.
+
+Warm extraction now returns typed `request`, `ignore`, `cancel` or `failed`
+outcomes, validated confidence, rejected catalog topics and model provenance.
+A successful interpretation can retract a provisional keyword hit. Failure or
+uncertainty preserves the safe instant result. Multiple needs remain separate;
+unsupported inventory never authorizes an invented offer. Quote/hypothetical
+cues, postfix rejection, “en vez de”, “no solo” and nonalcoholic modifiers also
+have conservative instant-path regressions. This is a bounded matcher, not a
+claim to understand every natural-language construction.
+
+Playback echo history retains up to eight approved lines with a **2.4 s** grace
+for VAD/network/transcription delay (superseding the 400 ms backend-only tail).
+An interrupted or previous creative's delayed transcript can still be rejected
+after a swap. Different shopper requests remain allowed; this is content matching,
+not speaker identification or a microphone mute.
+
+Protocol references: [ElevenLabs events](https://elevenlabs.io/docs/eleven-api/guides/how-to/speech-to-text/realtime/event-reference)
+and [commit strategies and chunk sizes](https://elevenlabs.io/docs/eleven-api/guides/how-to/speech-to-text/realtime/transcripts-and-commit-strategies).
+
+Semantic follow-ups also receive the **active, approved IAB topic IDs** from before
+this request. That allows references such as “otra igual” or “eso no” without
+keeping transcript history or attributing speech to a person. Expired and unknown
+topics are excluded. The model is instructed to use this context only for explicit
+references and never to infer quantities or people. Corpus tests assert that the
+actual warm adapter receives these IDs; a canned model response alone is not
+sufficient evidence that context was wired.
+
+### Live acoustic acceptance: explicit corrections (2026-11-21)
+
+A user-authorized live test ran the laptop microphone through Silero VAD, the
+real Scribe v3 Live endpoint, our speech pipeline, backend and player socket,
+against a controlled one-viewer audience. Audio and transcripts were not saved.
+The initial run changed coffee to beer, but an utterance with two matched needs
+could retain beer. Authored regressions reproduced the gap: an explicit “mejor”,
+“prefiero” or “más bien” correction did not retract the earlier positive topic.
+
+The shared matcher now retracts earlier wants within that utterance when an
+explicit correction begins. Intentional additions (“café y cerveza”) and
+superlatives (“el mejor café”) remain additions. After the fix, the live room
+microphone produced beer → coffee player messages. A separate real ElevenLabs
+round trip of an authored correction fixture finished with coffee-only intent.
+
+Additional live evidence: the cached short benchmark had WER 0.00 on one run,
+321 ms median keyterm-end → partial, 268 ms commit → final, and 275 ms speech-end
+→ final. Two existing live tests also passed for shopping intent and the aired
+brand/price line (339 ms commit → final on the intent test). These samples do not
+establish performance across all accents, microphones or noisy venues. Sessions
+were bounded and closed afterward. The demo launcher's bundled native-library
+PATH and LD_LIBRARY_PATH were needed for this machine's PortAudio discovery.
+
+`evals/scenarios/speech/same_utterance_correction.json` locks down the backend
+outcome, including old edge hits containing both topics. Unit tests cover the
+partial → correction → final lifecycle; the new live test caches only authored
+synthetic audio, never microphone audio.

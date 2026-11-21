@@ -478,22 +478,54 @@ an AI draft can only replace stock copy if it keeps them.
   "Voltio más dos Café Patio". The guard rejects such a line as `OFFER_CHANGED`. Joining items with
   "+", "y" or "más" counts as the same text.
 
-**Layout** (`web/src/features/screen/CreativeView.tsx`, `creative.css`), drawn from the Relvo
-brand system:
+**Truth rules added after the campaign review (2026-11-21)**
 
-- Three typefaces, one job each: Instrument Serif for the hook, Instrument Sans for products and
-  the price, Geist Mono in caps for labels. All are self-hosted and preloaded for the kiosk.
-- One accent, the lead brand's, used once per stage: on the price, or on the QR's edge.
-- The price is the largest number on screen: a small "$", tabular digits. The offer stage drops the
-  copy's trailing price (`splitOfferHeadline`) so the price isn't said twice. Only an exact match of
-  the approved price at the end of the line is dropped.
-- The co-brand lockup uses the real logos with "×" between partners. No filler labels.
-- Distance-aware: far enlarges the hook and the price and hides fine print; near enlarges the QR.
-- The accent must reach 4.5:1 contrast on the dark canvas (`accent.ts`). Otherwise the ad falls
-  back to white, so a navy or deep-red brand colour never hides the price.
-- The house ad and any spec without stages use the same composition: logo top-left over a thin
-  accent rule, and the line large at the bottom. The kit's "Brand · " prefix is dropped, because
-  the logo already names the brand.
+- **An offer smaller than the group is offered to share.** `CreativeBrief.offer_undersized` is
+  true when the best tier serves fewer people than are looking (a 4-pack for 12). The offer line
+  then says "para compartir", and the guard rejects "todo el grupo", "para todos", "cada uno" and
+  "todos ustedes" as `PARTY_MISMATCH`. The prompt gets `offer_for_fewer`, and the eval's "groups
+  addressed" metric credits the honest form.
+- **No approved offer, no redeem stage.** The spec carries only the hook and the brand line, and
+  live issues no redemption code or QR.
+- **Moment-neutral tier labels** (Combo, Dúo, Trío, Pack x4). The hook carries the moment, so a
+  coffee ad is never tagged "post-entreno".
+- **The hour reaches the TV.** The live brief gets `daypart_for_hour` from the moment's
+  `measured_at` in Santiago time. Daypart hooks have a counted-group form ("Café de media tarde
+  para los tres."), and every variant of an angle keeps its keyword (café, hambre, pilas/recarga).
+- **Spoken line:** what you get, then the price ("Voltio y Café Patio para dos: cinco mil
+  novecientos noventa pesos"), without the tier label.
+- **Warm copy:** `max_tokens` is 2048 because thinking counts against it, and the copy timeout is
+  6 s. Stock copy is already on air, so the screen never waits.
+- **Product photography matches the brand.** Rayo baskets use `rayo-coffee` and `rayo`: the
+  same scenes with the can recoloured to Rayo's lavender by a local hue mask (`prompts.json` →
+  `recolors`). Composing the lead brand's product first still needs new photography.
+
+**Layout** (`web/src/features/screen/CreativeView.tsx`, `creative.css`, `ad-theme.ts`), after the
+Relvo brand deck (`relvo_10abril` pp. 18–25):
+
+- **Two fields, one system.** By day (07:00–20:00 on the screen's clock) the ad is light: Relvo
+  grey (#E8E8E8) and ink type, with the product photo as a right-hand panel cropped toward the
+  products. At night it is dark: the photo full-bleed under a shade, with white type. The studio
+  previews both (Claro / Oscuro).
+- **Type.** The line of each stage is Instrument Sans, set large, at weight 500, with tight
+  tracking (Relvo's display treatment; no serif). Geist Mono caps are used for metadata only.
+- **Signature figure.** Each ad draws a stroke-only spirograph in the lead brand's accent, seeded
+  by the basket, so each pair keeps its own figure. In light ads it emerges from behind the photo
+  panel; in dark ads it appears only when there is no photo.
+- **Baseline.** The brand lockup (real logos, "×" between partners) sits next to mono metadata at
+  the bottom. During the hook the metadata carries the price ("$8.490 · Para 3"), so a three-second
+  glance still leaves with a number.
+- **Price.** Tabular ink digits, the largest number on screen, with a small "$". The group rides an
+  accent-filled pill, with ink on the accent, because light accents are fills, never text. The
+  offer stage drops the copy's trailing price (`splitOfferHeadline`). Only an exact match of the
+  approved price at the end of the line is dropped.
+- **Close.** One instruction plus the code, with the QR on a white card over the photo side.
+- **Accent contrast.** The accent must reach 4.5:1 against the dark canvas (`accent.ts`);
+  otherwise the ad falls back to white.
+- **Distance-aware.** Far enlarges the line and the price and hides fine print; near enlarges
+  the QR.
+- **House ad.** The house ad and any spec without stages use the same field, line and baseline.
+  The kit's "Brand · " prefix is dropped.
 
 **Targeting controls in the studio** (`CampaignGenerate`):
 

@@ -57,6 +57,36 @@ installed as `typescript-native`) runs `npm run typecheck`, 0.22 s vs 1.49 s.
 TS 7 in typecheck and 5.9 inside ESLint. When typescript-eslint supports TS 7,
 drop 5.9 in one change.
 
+## Amendment (2026-11-21): open-vocabulary objects (YOLOE-26)
+
+The object model is **YOLOE-26s** (`yoloe-26s-seg.pt`, Ultralytics ≥ 8.4)
+instead of the 80-class YOLO26s, in both the `gpu/` service and the local
+detector. One object model; nothing else in the stack changes.
+
+- **Why.** COCO can't tell a coffee cup from an energy-drink can, has no beer
+  bottle, pastry or stroller, and our demo props are exactly those. YOLOE
+  detects classes named in text, so the vocabulary is the demo's
+  (`edge/agent/vision/vocabulary.py`, copied verbatim to `gpu/service/`).
+  Prompts map to canonical labels that keep the catalog's COCO names (`cup`,
+  `bottle`) and add `energy drink can`, `soda can`, `beer bottle`, `pastry`,
+  `stroller`.
+- **Cost.** The prompts are baked into the weights once
+  (`make edge-yoloe`, `<stem>-vocab-<fingerprint>.pt`), so a start loads in
+  ~60 ms with no text encoder. The bake needs MobileCLIP (~250 MB) and the
+  `clip` package, both pinned in the `vision` / `yolo` extras so Ultralytics
+  never pip-installs at runtime. On a laptop CPU an object pass is ~120 ms at
+  640 px (it runs at 5 fps); on the GPU the same TensorRT export path applies.
+- **Scores.** Open-vocabulary scores run lower than closed-set ones for small
+  objects (a far cup ≈ 0.35, a close cup ≈ 0.9), so the object floor is 0.25
+  (`OBJECT_CONF`); the snapshot debounce absorbs the extra noise.
+- **Safety.** A stroller or teddy bear near a tracked person votes
+  `minor_likely` (`ChildPropVote`), which only blocks age-restricted ads
+  (invariant 2). ArUco markers stay the source of truth for *which brand* a
+  held product is (ADR 0008 D2); YOLOE gives the category.
+- **Evidence.** `evals/scenarios/10_open_vocab_props.json`: the can and cup
+  win the Voltio + Café Patio basket without a marker; the stroller blocks
+  Malta Sur.
+
 ## Why Haiku rather than Opus for the warm path
 
 Every warm LLM call is a short, latency-bound classification or copy task. The
