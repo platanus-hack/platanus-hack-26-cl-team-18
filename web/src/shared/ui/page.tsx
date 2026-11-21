@@ -4,7 +4,7 @@ import { Inbox } from "lucide-react";
 import type { ReactNode } from "react";
 
 /** The real station. Demo tools appear only inside the hidden `/demo/<key>` surface. */
-const STATION_NAV = [
+const STATION_NAV: { href: string; label: string; wide?: boolean }[] = [
     { href: "/", label: "Consola" },
     { href: "/screen?id=demo-01", label: "Pantalla" },
 ];
@@ -14,10 +14,11 @@ function navFor(key: string | null) {
     return [
         ...STATION_NAV,
         { href: demoHref(key, null), label: "Demo" },
-        { href: demoHref(key, "campaigns"), label: "Campañas" },
-        { href: demoHref(key, "advertiser"), label: "Pujas" },
-        { href: demoHref(key, "clerk", "?id=demo-01"), label: "Stock" },
-        { href: demoHref(key, "dev", "?screen=demo-01"), label: "Dev / QA" },
+        // On a phone these live in the Demo hub: the bar never overflows.
+        { href: demoHref(key, "campaigns"), label: "Campañas", wide: true },
+        { href: demoHref(key, "advertiser"), label: "Pujas", wide: true },
+        { href: demoHref(key, "clerk", "?id=demo-01"), label: "Stock", wide: true },
+        { href: demoHref(key, "dev", "?screen=demo-01"), label: "Dev / QA", wide: true },
     ];
 }
 
@@ -43,7 +44,7 @@ export function AppShell({
                         aria-label="Principal"
                         className="-mx-1 flex min-w-0 gap-1 overflow-x-auto"
                     >
-                        {nav.map(({ href, label }) => {
+                        {nav.map(({ href, label, wide }) => {
                             const current =
                                 path === href.split("?")[0] ||
                                 (href === "/" && path === "/console");
@@ -55,6 +56,7 @@ export function AppShell({
                                     className={cn(
                                         "shrink-0 rounded-control px-2.5 py-1.5 text-compact text-muted transition-colors hover:bg-surface-hover hover:text-fg",
                                         current && "bg-surface-hover font-medium text-fg",
+                                        wide && "hidden md:inline-block",
                                     )}
                                 >
                                     {label}

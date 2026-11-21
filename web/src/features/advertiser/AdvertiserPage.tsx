@@ -1,4 +1,5 @@
 import type { BookLine } from "@/contract";
+import { categoryLabel } from "@/lib/categories";
 import { decimalCl, moneyCl } from "@/lib/format";
 import { setAutoBid, setBidMultiplier, useBook } from "@/lib/market-api";
 import { Badge } from "@/shared/ui/badge";
@@ -12,14 +13,7 @@ import { BidQueue, type BidState } from "./bid-queue";
 const MIN = 0.2;
 const MAX = 5;
 
-const CATEGORY: Record<string, string> = {
-    sports_goods: "Deportes",
-    coffee: "Café",
-    alcohol: "Alcohol",
-    energy_drink: "Bebida energética",
-    food: "Comida",
-};
-const category = (key: string) => CATEGORY[key] ?? key.replaceAll("_", " ");
+const category = categoryLabel;
 
 const decimal = (value: number) => decimalCl(value.toFixed(1));
 

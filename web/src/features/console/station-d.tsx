@@ -6,7 +6,7 @@ import { setBidMultiplier, setStock } from "@/lib/market-api";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { Card } from "@/shared/ui/card";
-import { Minus, Plus } from "lucide-react";
+import { Camera, Minus, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { bidRows, splitRows, stepMultiplier, type BidRow } from "./bids";
 import type { ScreenView } from "./console-state";
@@ -82,7 +82,11 @@ export function CameraPanel({ view }: { view: ScreenView }) {
             aside={fresh && `${fresh.detector} · ${Math.round(fresh.inference_ms)} ms`}
         >
             <div
-                className="relative overflow-hidden rounded-container bg-ink"
+                className={
+                    fresh
+                        ? "relative overflow-hidden rounded-container bg-ink"
+                        : "relative overflow-hidden rounded-container border border-dashed border-border-strong bg-surface-raised"
+                }
                 style={{
                     aspectRatio: fresh ? `${fresh.frame_w} / ${fresh.frame_h}` : "16 / 9",
                 }}
@@ -142,14 +146,26 @@ export function CameraPanel({ view }: { view: ScreenView }) {
                         </span>
                     </>
                 ) : (
-                    <p className="grid h-full place-items-center px-6 text-center text-compact text-white/75">
-                        Sin detecciones
-                    </p>
+                    <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
+                        <Camera className="size-6 text-muted" aria-hidden />
+                        <p className="text-body font-medium">
+                            {people > 0
+                                ? `${people} ${people === 1 ? "persona" : "personas"} · ${looking} mirando`
+                                : "Sin detecciones"}
+                        </p>
+                        <p className="max-w-xs text-compact text-muted">
+                            {people > 0
+                                ? "La vista de cajas aparece cuando el agente de cámara envía sus detecciones."
+                                : "Las cajas aparecen cuando la cámara está en vivo y ve a alguien."}
+                        </p>
+                    </div>
                 )}
             </div>
-            <p className="text-compact text-muted">
-                {people} {people === 1 ? "persona" : "personas"} · {looking} mirando
-            </p>
+            {fresh && (
+                <p className="text-compact text-muted">
+                    {people} {people === 1 ? "persona" : "personas"} · {looking} mirando
+                </p>
+            )}
         </Section>
     );
 }
@@ -230,6 +246,11 @@ export function AuctionSection({ view, screen }: { view: ScreenView; screen: str
             <div className="flex flex-wrap items-baseline justify-between gap-3">
                 <div className="flex items-baseline gap-3">
                     <h2 className="text-section font-semibold">La subasta</h2>
+                    {!auction && (
+                        <span className="text-compact text-muted">
+                            {shown.length} marcas listas · la subasta empieza cuando alguien mire
+                        </span>
+                    )}
                     {auction && (
                         <span className="text-compact text-muted tabular-nums">
                             {`${auction.bids.length} pujas · ${new Date(auction.trace.cleared_at ?? auction.trace.measured_at ?? 0).toLocaleTimeString("es-CL", { hour12: false })}`}
@@ -253,86 +274,80 @@ export function AuctionSection({ view, screen }: { view: ScreenView; screen: str
                         : "grid gap-6"
                 }
             >
-                <div className="overflow-x-auto">
-                    <table
-                        className={
-                            live
-                                ? "w-full min-w-[720px] border-collapse text-compact"
-                                : "w-full border-collapse text-compact"
-                        }
-                    >
-                        <thead>
-                            <tr className="text-left text-muted">
-                                <th className="border-b border-border py-2 pr-2 pl-3 font-medium">
-                                    Marca
-                                </th>
-                                {live && (
-                                    <th className="border-b border-border p-2 text-right font-medium">
-                                        Puja por s
+                {!live ? (
+                    <BrandGrid
+                        rows={shown}
+                        screen={screen}
+                        controls={controls}
+                        onError={setError}
+                        error={error}
+                    />
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full min-w-[720px] border-collapse text-compact">
+                            <thead>
+                                <tr className="text-left whitespace-nowrap text-muted">
+                                    <th className="border-b border-border py-2 pr-2 pl-3 font-medium">
+                                        Marca
                                     </th>
-                                )}
-                                <th
-                                    className={
-                                        live
-                                            ? "border-b border-border p-2 text-center font-medium"
-                                            : "border-b border-border p-2 text-right font-medium"
-                                    }
-                                >
-                                    Multiplicador
-                                </th>
-                                {live && (
+                                    <th className="border-b border-border p-2 text-right font-medium">
+                                        Puja/s
+                                    </th>
+                                    <th className="border-b border-border p-2 text-center font-medium">
+                                        Multiplicador
+                                    </th>
                                     <>
                                         <th className="border-b border-border p-2 font-medium">
                                             Coincide con
                                         </th>
                                         <th className="border-b border-border p-2 text-right font-medium">
-                                            Valor por s
+                                            Valor/s
                                         </th>
                                         <th
                                             className="border-b border-border p-2 text-right font-medium"
                                             title="Cada ganadora paga lo justo para seguir ganando, nunca más que su puja."
                                         >
-                                            Paga por s
+                                            Paga/s
                                         </th>
                                         <th className="border-b border-border py-2 pl-2 font-medium">
                                             Resultado
                                         </th>
                                     </>
-                                )}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {shown.map((row) => (
-                                <AuctionRow
-                                    key={row.campaignId}
-                                    row={row}
-                                    screen={screen}
-                                    controls={controls}
-                                    live={live}
-                                    onError={setError}
-                                />
-                            ))}
-                        </tbody>
-                    </table>
-                    {idle.length > 0 && (
-                        <details className="mt-2 pl-3 text-compact text-muted">
-                            <summary className="cursor-pointer">
-                                Sin interés en este momento ({idle.length})
-                            </summary>
-                            <p className="mt-1">{idle.map((row) => row.brand).join(", ")}</p>
-                        </details>
-                    )}
-                    {error && (
-                        <p className="mt-2 text-compact text-danger" role="status">
-                            No se aplicó: {error}
-                        </p>
-                    )}
-                    {!controls && (
-                        <p className="mt-2 pl-3 text-metadata text-muted">
-                            Solo lectura: abre una vez /demo/&lt;clave&gt; para editar.
-                        </p>
-                    )}
-                </div>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {shown.map((row) => (
+                                    <AuctionRow
+                                        key={row.campaignId}
+                                        row={row}
+                                        screen={screen}
+                                        controls={controls}
+                                        live={live}
+                                        onError={setError}
+                                    />
+                                ))}
+                            </tbody>
+                        </table>
+                        {idle.length > 0 && (
+                            <details className="mt-2 pl-3 text-compact text-muted">
+                                <summary className="cursor-pointer">
+                                    Sin interés en este momento ({idle.length})
+                                </summary>
+                                <p className="mt-1">{idle.map((row) => row.brand).join(", ")}</p>
+                            </details>
+                        )}
+                        {error && (
+                            <p className="mt-2 text-compact text-danger" role="status">
+                                No se aplicó: {error}
+                            </p>
+                        )}
+                        {!controls && (
+                            <p className="mt-2 pl-3 text-metadata text-muted">
+                                Solo lectura: abre una vez /demo/&lt;clave&gt; para editar.
+                            </p>
+                        )}
+                    </div>
+                )}
                 {lines.length > 0 && (
                     <div className="flex flex-col gap-2.5">
                         <span className="font-mono text-metadata tracking-wider text-muted uppercase">
@@ -370,6 +385,138 @@ export function AuctionSection({ view, screen }: { view: ScreenView; screen: str
                 )}
             </div>
         </Card>
+    );
+}
+
+/** Standby: every brand as a compact tile, ready to bid, before anyone is seen. */
+function BrandGrid({
+    rows,
+    screen,
+    controls,
+    onError,
+    error,
+}: {
+    rows: readonly BidRow[];
+    screen: string;
+    controls: boolean;
+    onError: (message: string | null) => void;
+    error: string | null;
+}) {
+    const run = (action: Promise<unknown>) => {
+        action.then(
+            () => {
+                onError(null);
+            },
+            (reason: unknown) => {
+                onError(String(reason));
+            },
+        );
+    };
+    return (
+        <div className="flex flex-col gap-2">
+            <ul aria-label="Marcas" className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                {rows.map((row) => (
+                    <li
+                        key={row.campaignId}
+                        data-brand={row.brand}
+                        className="flex items-center gap-3 rounded-control border border-border-subtle bg-surface-raised px-3 py-2"
+                    >
+                        <span
+                            aria-hidden
+                            className="size-2.5 shrink-0 rounded-full"
+                            style={{ background: row.accent ?? "var(--color-border)" }}
+                        />
+                        <span className="flex min-w-0 flex-1 flex-col">
+                            <span className="truncate font-medium">{row.brand}</span>
+                            <span className="truncate text-metadata text-muted">
+                                {categoryLabel(row.category)} · {money(row.remaining)}
+                            </span>
+                        </span>
+                        {controls ? (
+                            <>
+                                <button
+                                    type="button"
+                                    role="switch"
+                                    aria-checked={row.inStock}
+                                    aria-label={`Stock de ${row.brand}`}
+                                    title={row.inStock ? "Con stock" : "Sin stock"}
+                                    className={
+                                        row.inStock
+                                            ? "rounded-control border border-control-edge px-1.5 text-metadata whitespace-nowrap"
+                                            : "rounded-control border border-(--state-danger-edge) px-1.5 text-metadata whitespace-nowrap text-danger"
+                                    }
+                                    onClick={() => {
+                                        run(setStock(screen, row.brandId, !row.inStock));
+                                    }}
+                                >
+                                    {row.inStock ? "Stock" : "Sin stock"}
+                                </button>
+                                <span className="inline-flex items-center rounded-control border border-border bg-surface tabular-nums">
+                                    <Button
+                                        size="icon-sm"
+                                        variant="ghost"
+                                        aria-label={`Bajar puja de ${row.brand}`}
+                                        disabled={stepMultiplier(row.multiplier, -1) === null}
+                                        onClick={() => {
+                                            const next = stepMultiplier(row.multiplier, -1);
+                                            if (next !== null)
+                                                run(
+                                                    setBidMultiplier(
+                                                        row.campaignId,
+                                                        next,
+                                                        row.multiplierSeq,
+                                                    ),
+                                                );
+                                        }}
+                                    >
+                                        <Minus aria-hidden />
+                                    </Button>
+                                    <span className="min-w-9 text-center text-compact">
+                                        ×{decimalCl(row.multiplier, 1)}
+                                    </span>
+                                    <Button
+                                        size="icon-sm"
+                                        variant="ghost"
+                                        aria-label={`Subir puja de ${row.brand}`}
+                                        disabled={stepMultiplier(row.multiplier, 1) === null}
+                                        onClick={() => {
+                                            const next = stepMultiplier(row.multiplier, 1);
+                                            if (next !== null)
+                                                run(
+                                                    setBidMultiplier(
+                                                        row.campaignId,
+                                                        next,
+                                                        row.multiplierSeq,
+                                                    ),
+                                                );
+                                        }}
+                                    >
+                                        <Plus aria-hidden />
+                                    </Button>
+                                </span>
+                            </>
+                        ) : (
+                            <span className="text-compact text-muted tabular-nums">
+                                ×{decimalCl(row.multiplier, 1)}
+                                {!row.inStock && (
+                                    <span className="ml-2 text-danger">Sin stock</span>
+                                )}
+                            </span>
+                        )}
+                    </li>
+                ))}
+            </ul>
+            {error && (
+                <p className="text-compact text-danger" role="status">
+                    No se aplicó: {error}
+                </p>
+            )}
+            {!controls && (
+                <p className="text-metadata text-muted">
+                    Solo lectura: abre una vez /demo/&lt;clave&gt; para editar.
+                </p>
+            )}
+        </div>
     );
 }
 
@@ -419,7 +566,7 @@ function AuctionRow({
                         {row.brand}
                         {row.onAir && <span className="text-metadata text-success">· al aire</span>}
                     </span>
-                    <span className="flex items-center gap-2 pl-4.5 text-metadata text-muted">
+                    <span className="flex items-center gap-2 pl-4.5 text-metadata whitespace-nowrap text-muted">
                         {categoryLabel(row.category)} · {money(row.remaining)}
                         {controls ? (
                             <button

@@ -20,26 +20,32 @@ export function SessionPanel({ view }: { view: ScreenView }) {
     const billed = view.billed;
     return (
         <Panel title="Sesión">
-            <div className="grid grid-cols-2 gap-4">
-                <Metric label="Cobertura" value={auction ? pct(auction.coverage) : "—"} />
-                <Metric label="Cobrado" value={moneyCl(String(billed))} />
-                <Metric
-                    label="vs. una marca"
-                    value={revenueLift === null ? "—" : signedPct(revenueLift)}
-                />
-                <Metric
-                    label="Cámara → pantalla (p50)"
-                    value={ms(p50)}
-                    tone={p50 !== null && p50 > 1500 ? "warning" : "default"}
-                    hint={
-                        p50 === null
-                            ? undefined
-                            : p50 > 1500
-                              ? `Sobre la meta de 1,5 s · p95 ${ms(p95)}`
-                              : `p95 ${ms(p95)}`
-                    }
-                />
-            </div>
+            {auction === null && view.receipts.length === 0 && p50 === null ? (
+                <p className="text-compact text-muted">
+                    Cobertura, cobros y latencia aparecen con el primer aviso pagado.
+                </p>
+            ) : (
+                <div className="grid grid-cols-2 gap-4">
+                    <Metric label="Cobertura" value={auction ? pct(auction.coverage) : "—"} />
+                    <Metric label="Cobrado" value={moneyCl(String(billed))} />
+                    <Metric
+                        label="vs. una marca"
+                        value={revenueLift === null ? "—" : signedPct(revenueLift)}
+                    />
+                    <Metric
+                        label="Cámara → pantalla (p50)"
+                        value={ms(p50)}
+                        tone={p50 !== null && p50 > 1500 ? "warning" : "default"}
+                        hint={
+                            p50 === null
+                                ? undefined
+                                : p50 > 1500
+                                  ? `Sobre la meta de 1,5 s · p95 ${ms(p95)}`
+                                  : `p95 ${ms(p95)}`
+                        }
+                    />
+                </div>
+            )}
             {(view.receipts.length > 0 || view.redemptions.length > 0) && (
                 <div className="mt-4 border-t border-border-subtle pt-3">
                     <p className="mb-2 text-metadata text-muted">Recibos</p>
