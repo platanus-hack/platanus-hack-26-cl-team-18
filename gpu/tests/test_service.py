@@ -269,6 +269,14 @@ def test_parse_objects_drops_people() -> None:
     assert parse_objects(SimpleNamespace(boxes=_Boxes([], []), names={})) == []
 
 
+def test_parse_objects_reports_canonical_labels_for_yoloe_prompts() -> None:
+    result = SimpleNamespace(
+        boxes=_Boxes([[1, 2, 3, 4], [5, 6, 7, 8]], [0.4, 0.3], [0, 1]),
+        names={0: "coffee cup", 1: "energy drink can"},
+    )
+    assert [o["label"] for o in parse_objects(result)] == ["cup", "energy drink can"]
+
+
 def test_fake_model_reads_canned_detections(tmp_path: Path) -> None:
     canned = {"persons": [{"box": [1, 2, 3, 4], "confidence": 0.5, "keypoints": []}], "objects": []}
     path = tmp_path / "canned.json"

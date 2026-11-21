@@ -13,7 +13,8 @@ Config (env):
     GPU_TOKEN            optional bearer token for /infer (constant-time compare)
     GPU_MODEL            "yolo" (default) or "fake"
     GPU_POSE_MODEL       default yolo26s-pose.pt
-    GPU_OBJECT_MODEL     default yolo26s.pt ("" disables objects)
+    GPU_OBJECT_MODEL     default yoloe-26s-seg.pt: YOLOE-26 + the shared vocabulary ("" disables objects)
+    GPU_OBJECT_CONF      default 0.25 (open-vocabulary scores run lower)
     GPU_IMGSZ / GPU_CONF / GPU_DEVICE
     GPU_TENSORRT         "1" exports to TensorRT FP16 once (falls back to .pt)
     GPU_FAKE_DELAY_MS    fake model only: per-frame delay
@@ -55,9 +56,10 @@ def model_from_env() -> InferenceModel:
 
     return YoloModel(
         pose_model=os.environ.get("GPU_POSE_MODEL", "yolo26s-pose.pt"),
-        object_model=os.environ.get("GPU_OBJECT_MODEL", "yolo26s.pt") or None,
+        object_model=os.environ.get("GPU_OBJECT_MODEL", "yoloe-26s-seg.pt") or None,
         imgsz=int(os.environ.get("GPU_IMGSZ", "640")),
         conf=float(os.environ.get("GPU_CONF", "0.35")),
+        object_conf=float(os.environ.get("GPU_OBJECT_CONF", "0.25")),
         device=os.environ.get("GPU_DEVICE") or None,
         tensorrt=os.environ.get("GPU_TENSORRT", "0") == "1",
     )

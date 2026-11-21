@@ -1,4 +1,4 @@
-# gpu/: remote YOLO26 inference service
+# gpu/: remote YOLO26 / YOLOE-26 inference service
 
 The stateless inference half of the perception agent (ADR 0007). It takes a
 JPEG frame over a WebSocket and returns pose and object detections. Capture,
@@ -46,7 +46,8 @@ agent connects over `wss://`. Raw frames travel only over TLS (ADR 0007).
 |---|---|---|
 | `GPU_TOKEN` | unset | If set, `/infer` requires `Authorization: Bearer <token>` (constant-time compare). A bad token is closed with 1008 before accept |
 | `GPU_MODEL` | `yolo` | `yolo`, or `fake` (canned detections, no download) |
-| `GPU_POSE_MODEL` / `GPU_OBJECT_MODEL` | `yolo26s-pose.pt` / `yolo26s.pt` | Weights, downloaded on first use. An empty object model disables objects |
+| `GPU_POSE_MODEL` / `GPU_OBJECT_MODEL` | `yolo26s-pose.pt` / `yoloe-26s-seg.pt` | Weights, downloaded on first use. The object model is YOLOE-26: the shared vocabulary (`service/vocabulary.py`) is baked into `<stem>-vocab-<fingerprint>.pt` once (needs MobileCLIP, ~250 MB, kept on `/models`). An empty object model disables objects |
+| `GPU_OBJECT_CONF` | `0.25` | Object score floor (open-vocabulary scores run lower than pose) |
 | `GPU_DEVICE` | auto | `0`, `cpu`, … |
 | `GPU_IMGSZ` / `GPU_CONF` | `640` / `0.35` | Same as the local detector |
 | `GPU_TENSORRT` | `0` | `1` exports each `.pt` to a `.engine` (FP16) next to it once, reuses it after that, and falls back to `.pt` if the export fails |

@@ -1,4 +1,4 @@
-"""The model behind the service: a small port, the real YOLO26 adapter, and a fake.
+"""The model behind the service: a small port, the real YOLO26/YOLOE-26 adapter, and a fake.
 
 `InferenceModel.infer` takes a decoded HxWx3 **BGR** uint8 array (what the
 edge agent's local detector passes to Ultralytics) and returns wire-ready
@@ -19,6 +19,14 @@ from pathlib import Path
 from typing import Any, Protocol
 
 import numpy as np
+
+from service.vocabulary import (
+    DEFAULT_OBJECT_MODEL,
+    OBJECT_CONF,
+    bake_object_model,
+    canonical_label,
+    load_object_model,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -42,20 +50,23 @@ class InferenceModel(Protocol):
 
 
 class YoloModel:
-    """YOLO26 pose (people + keypoints) and YOLO26 detect (objects) on one device.
+    """YOLO26 pose (people + keypoints) and YOLOE-26 (open-vocabulary objects) on one device.
 
-    With `tensorrt=True` each `.pt` is exported once to a TensorRT FP16
-    `.engine` next to it (reused on later starts); any export failure falls
-    back to the `.pt` weights so the service still starts.
+    The object classes are the shared vocabulary (`service/vocabulary.py`, a copy
+    of edge's), baked into the weights once. With `tensorrt=True` each `.pt` is
+    exported once to a TensorRT FP16 `.engine` next to it (reused on later
+    starts); any export failure falls back to the `.pt` weights so the service
+    still starts.
     """
 
     def __init__(
         self,
         *,
         pose_model: str = "yolo26s-pose.pt",
-        object_model: str | None = "yolo26s.pt",
+        object_model: str | None = DEFAULT_OBJECT_MODEL,
         imgsz: int = 640,
         conf: float = 0.35,
+        object_conf: float = OBJECT_CONF,
         device: str | None = None,
         tensorrt: bool = False,
     ) -> None:
@@ -63,14 +74,17 @@ class YoloModel:
 
         self._imgsz = imgsz
         self._conf = conf
+        self._object_conf = object_conf
         self._device = device
         pose_path = _maybe_engine(pose_model, "pose", tensorrt, imgsz, device)
         self._pose = YOLO(pose_path, task="pose")
         self._objects = None
         object_path = None
         if object_model:
-            object_path = _maybe_engine(object_model, "detect", tensorrt, imgsz, device)
-            self._objects = YOLO(object_path, task="detect")
+            if object_model.endswith(".pt"):
+                object_model = bake_object_model(object_model)
+            object_path = _maybe_engine(object_model, "segment", tensorrt, imgsz, device)
+            self._objects = load_object_model(object_path)
         self._lock = threading.Lock()  # Ultralytics predictors aren't thread-safe
         self.name = f"yolo:{Path(pose_path).name}+{Path(object_path).name if object_path else '-'}"
 
@@ -90,7 +104,12 @@ class YoloModel:
             found: list[Object] = []
             if objects and self._objects is not None:
                 result = self._objects.predict(
-                    image, imgsz=self._imgsz, conf=self._conf, device=self._device, verbose=False
+                    image,
+                    imgsz=self._imgsz,
+                    conf=self._object_conf,
+                    device=self._device,
+                    retina_masks=False,
+                    verbose=False,
                 )[0]
                 found = parse_objects(result)
         return Inference(persons=parse_persons(pose), objects=found)
@@ -144,7 +163,7 @@ def parse_persons(result: Any) -> list[Person]:
 
 
 def parse_objects(result: Any) -> list[Object]:
-    """Same reading as edge `adapters._objects` (people are dropped), as wire dicts."""
+    """Same reading as edge `adapters._objects` (prompts → canonical labels), as wire dicts."""
     boxes = result.boxes
     if boxes is None or len(boxes) == 0:
         return []
@@ -156,7 +175,7 @@ def parse_objects(result: Any) -> list[Object]:
         boxes.cls.cpu().numpy(),
         strict=False,
     ):
-        label = str(names[int(cls)])
+        label = canonical_label(str(names[int(cls)]))
         if label == "person":
             continue
         out.append(

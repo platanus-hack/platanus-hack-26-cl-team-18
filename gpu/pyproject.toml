@@ -12,7 +12,14 @@ dependencies = [
 
 [project.optional-dependencies]
 # The real model. Tests never need it (they use FakeModel). `uv sync --extra yolo`.
-yolo = ["ultralytics>=8.4,<9"]
+# clip/ftfy/regex: YOLOE-26 text prompts (service/vocabulary.py), pinned so
+# Ultralytics never pip-installs them from git at runtime.
+yolo = [
+    "ultralytics>=8.4,<9",
+    "clip @ git+https://github.com/ultralytics/CLIP.git",
+    "ftfy>=6.3",
+    "regex>=2024.0",
+]
 
 [dependency-groups]
 dev = [
