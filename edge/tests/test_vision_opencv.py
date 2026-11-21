@@ -117,5 +117,30 @@ def test_unopenable_video_fails_loudly(tmp_path: Path) -> None:
         ClipSource(str(tmp_path / "missing.mp4"))
 
 
+def test_live_video_replay_seeks_to_current_frame_after_inference_stalls(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from agent.vision.capture import VideoFileSource
+
+    path = tmp_path / "paced.avi"
+    writer = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"MJPG"), 10.0, (64, 48))
+    for i in range(30):
+        writer.write(np.full((48, 64, 3), i * 8, np.uint8))
+    writer.release()
+    clock = [0.0]
+    monkeypatch.setattr("agent.vision.capture.time.monotonic", lambda: clock[0])
+    source = VideoFileSource(str(path), loop=False)
+    try:
+        first = source.latest(0)
+        assert first is not None and first[0].mean() == pytest.approx(0, abs=2)
+        clock[0] = 1.5
+        current = source.latest(1)
+        assert current is not None and current[0].mean() == pytest.approx(120, abs=2)
+        clock[0] = 3.0
+        assert source.latest(2) is None and source.finished
+    finally:
+        source.close()
+
+
 def test_snapshot_import_is_the_vendored_contract() -> None:
     assert AudienceSnapshot.model_fields["people"].annotation is not None

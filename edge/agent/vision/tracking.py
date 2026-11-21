@@ -1,8 +1,8 @@
 """Anonymous, session-local person tracking (ADR 0007: tracking stays on the laptop).
 
-A greedy IoU tracker, not ByteTrack: with ≤ 10 people at 10–30 fps it is
-enough, it is pure Python, and it works the same whether detections come from
-the remote GPU or the local fallback, so a failover never loses tracks.
+Association is injected: the live composition root uses local ByteTrack;
+the dependency-free default uses greedy IoU for tests and synthetic replays.
+Both consume the same detections from remote GPU or local fallback.
 
 Ids are a session counter (`t1`, `t2`, …), never reused and never linked
 across sessions or screens. Nothing here can re-identify a person.
@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from typing import Protocol
 
 from agent.contract import DistanceBand
 from agent.vision.geometry import DEFAULT_GEOMETRY, GeometryConfig, distance_band, is_looking
@@ -22,6 +23,7 @@ from agent.vision.types import Box, FrameDetections, PersonDetection
 class TrackerConfig:
     min_iou: float = 0.3
     min_person_score: float = 0.4
+    min_recovery_score: float = 0.1
     # Near-screen filter: a person counts only when their box is at least this tall
     # relative to the frame. Far passers-by in a busy hall are not the audience.
     # 0.18 matches the stand-in validated in evals/video/perceive.py.
@@ -73,31 +75,62 @@ class TrackView:
     attention_candidate_at: datetime | None = None
 
 
+class PersonAssociator(Protocol):
+    """Returns local tracking keys and their current, unmodified pose observations."""
+
+    def update(
+        self, people: list[PersonDetection], width: int, height: int
+    ) -> list[tuple[int, PersonDetection]]: ...
+
+    def reset(self) -> None: ...
+
+
 class PersonTracker:
     def __init__(
         self,
         config: TrackerConfig | None = None,
         geometry: GeometryConfig = DEFAULT_GEOMETRY,
+        *,
+        associator: PersonAssociator | None = None,
     ) -> None:
         self._config = config or TrackerConfig()
         self._geometry = geometry
         self._tracks: dict[str, Track] = {}
         self._counter = 0
+        self._associator = associator
+        self._association_ids: dict[int, str] = {}
+        self._last_at: datetime | None = None
+        self._shape: tuple[int, int] | None = None
 
     def update(self, frame: FrameDetections) -> list[TrackView]:
         now = frame.measured_at
-        people = [
-            p
-            for p in frame.persons
-            if p.score >= self._config.min_person_score and self._near(p, frame.height)
-        ]
-        matched = self._match(people)
-        for person, track in matched:
-            self._refresh(track, person, frame)
-        for person in people:
-            if not any(person is p for p, _ in matched):
-                self._refresh(self._new_track(person, now), person, frame)
+        if self._last_at is not None and now <= self._last_at:
+            return []
+        shape = (frame.width, frame.height)
+        if (
+            self._shape is not None
+            and self._last_at is not None
+            and (shape != self._shape or now - self._last_at > self._config.max_gap)
+        ):
+            self.reset()
+        self._last_at = now
+        self._shape = shape
+        # Expire before association. A stalled detector must not revive an old
+        # track merely because someone now stands in the same part of the frame.
         self._expire(now)
+        threshold = (
+            self._config.min_recovery_score if self._associator else self._config.min_person_score
+        )
+        people = [p for p in frame.persons if p.score >= threshold and self._near(p, frame.height)]
+        if self._associator is not None:
+            self._associate(people, frame)
+        else:
+            matched = self._match(people)
+            for person, track in matched:
+                self._refresh(track, person, frame)
+            for person in people:
+                if not any(person is p for p, _ in matched):
+                    self._refresh(self._new_track(person, now), person, frame)
         for track in self._tracks.values():
             if track.last_seen < now and track.missing_since is None:
                 track.missing_since = now
@@ -118,6 +151,28 @@ class PersonTracker:
 
     def reset(self) -> None:
         self._tracks.clear()
+        self._association_ids.clear()
+        self._last_at = None
+        self._shape = None
+        if self._associator is not None:
+            self._associator.reset()
+
+    def _associate(self, people: list[PersonDetection], frame: FrameDetections) -> None:
+        assert self._associator is not None
+        self._association_ids = {
+            key: tid for key, tid in self._association_ids.items() if tid in self._tracks
+        }
+        for key, person in self._associator.update(people, frame.width, frame.height):
+            tid = self._association_ids.get(key)
+            if tid is None:
+                # Weak detections may recover an existing track, never create one.
+                if person.score < self._config.min_person_score:
+                    continue
+                track = self._new_track(person, frame.measured_at)
+                self._association_ids[key] = track.id
+            else:
+                track = self._tracks[tid]
+            self._refresh(track, person, frame)
 
     def _near(self, person: PersonDetection, frame_height: int) -> bool:
         if frame_height <= 0:

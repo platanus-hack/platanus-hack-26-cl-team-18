@@ -7,6 +7,7 @@ falling behind (docs/stack.md §3). OpenCV is imported lazily.
 
 from __future__ import annotations
 
+import math
 import threading
 import time
 from collections.abc import Sequence
@@ -75,29 +76,44 @@ class VideoFileSource:
         import cv2
 
         self._cv2 = cv2
-        self._path = path
         self._loop = loop
         self._cap = cv2.VideoCapture(path)
         if not self._cap.isOpened():
             raise RuntimeError(f"video {path} could not be opened")
-        fps = self._cap.get(cv2.CAP_PROP_FPS) or 30.0
-        self._interval = 1.0 / fps
-        self._next_at = time.monotonic()
+        fps = self._cap.get(cv2.CAP_PROP_FPS)
+        frames = self._cap.get(cv2.CAP_PROP_FRAME_COUNT)
+        if not math.isfinite(fps) or not math.isfinite(frames) or fps <= 0 or frames < 1:
+            self._cap.release()
+            raise RuntimeError("video has no usable frame rate or duration")
+        self._fps = fps
+        self._frame_count = int(frames)
+        self._started: float | None = None
+        self._last_target = -1
+        self._next_index = 0
         self._serial = 0
+        self.finished = False
 
     def latest(self, after_serial: int) -> tuple[Any, datetime, int] | None:
-        now = time.monotonic()
-        if now < self._next_at:
+        if self.finished:
             return None
+        now = time.monotonic()
+        if self._started is None:
+            self._started = now  # models warm up before the playback clock starts
+        target = int((now - self._started) * self._fps)
+        if target <= self._last_target:
+            return None
+        if not self._loop and target >= self._frame_count:
+            self.finished = True
+            return None
+        index = target % self._frame_count
+        if index != self._next_index:
+            self._cap.set(self._cv2.CAP_PROP_POS_FRAMES, index)
         ok, frame = self._cap.read()
         if not ok:
-            if not self._loop:
-                return None
-            self._cap.set(self._cv2.CAP_PROP_POS_FRAMES, 0)
-            ok, frame = self._cap.read()
-            if not ok:
-                return None
-        self._next_at = max(self._next_at + self._interval, now)
+            self.finished = True
+            return None
+        self._last_target = target
+        self._next_index = index + 1
         self._serial += 1
         return frame, datetime.now(UTC), self._serial
 

@@ -152,7 +152,7 @@ def test_box_iou_and_expand() -> None:
 
 
 def test_tracks_keep_anonymous_ids_and_accumulate_dwell() -> None:
-    tracker = PersonTracker(FAST)
+    tracker = PersonTracker(TrackerConfig(min_hits=1, max_gap=timedelta(seconds=3)))
     first = tracker.update(frame(T0, person(400)))
     later = tracker.update(frame(ms(2000), person(410)))
     assert [t.id for t in first] == ["t1"]

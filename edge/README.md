@@ -70,8 +70,9 @@ Uncertainty is qualitative, not a calibrated probability.
 The existing gateway has no agent/classifier authentication. Consequently both
 the recognition HTTP read endpoint and VLM processing are disabled in `prod`;
 the in-process classifier subscription remains available. Do not expose the
-local gateway publicly. Audio inference remains disabled. Remote GPU failover,
-browser upload/debug view and production VLM deployment remain unfinished.
+local gateway publicly. Audio inference remains disabled. Browser upload/debug
+view and production VLM deployment remain unfinished. The canonical vision
+pipeline supports remote GPU failover with `--gpu-url` (see below).
 Real-world tracking, redaction coverage and CPU throughput still need testing
 on representative venue video and deployment hardware.
 
@@ -107,22 +108,30 @@ The frame path, in `agent/vision/` (ADR 0004, 0007, 0008):
 - **Capture:** `capture.py`. `LatestFrameCamera` reads 1280×720 MJPG with a
   buffer of 1 in its own thread and keeps only the newest frame; a slow
   detector skips frames, never queues them. `VideoFileSource` replays a
-  recorded video at its frame rate (replay mode).
+  recorded video on a fixed playback clock (replay mode). Slow inference seeks
+  to the current playback frame instead of showing old frames in slow motion.
 - **Detection:** `adapters.py`. `UltralyticsDetector` runs YOLO26 pose every
-  frame and YOLO26 objects every `--object-every` frames. `ArucoMarkerDetector`
+  frame and YOLO26 objects on a 200 ms capture-time deadline (or every
+  `--object-every` frames when overridden). `ArucoMarkerDetector`
   finds prop markers (about 7 ms). Provider types stop here: everything
   downstream uses `types.py`.
 - **Failover:** `detector.py`. `FailoverDetector(primary, secondary)` switches
   from the remote GPU to local inference when the primary is down or its p95
-  exceeds 150 ms, and probes back after 10 s. The remote adapter for `gpu/`
-  is not written yet; it plugs in as `primary` (ADR 0007).
+  exceeds 150 ms, and probes back after 10 s. `remote.py` implements the `gpu/`
+  WebSocket protocol, with at most two frames in flight and invalid replies
+  triggering local fallback. Use `--gpu-url wss://host/infer` and `GPU_TOKEN`;
+  the local detector is warmed before capture begins (ADR 0007).
 - **Geometry:** `geometry.py`. Looking = nose and both eyes visible with the
   nose centered; distance band from shoulder width; the blur box from face
   keypoints (top of the person box when keypoints are missing, so no face is
   left unblurred).
-- **Tracking:** `tracking.py`. A greedy IoU tracker with session-counter ids
-  (`t1`, `t2`, …, never reused), dwell, and looking smoothed over 500 ms. It
-  runs on the laptop so failover never loses tracks.
+- **Tracking:** `tracking.py` owns session-counter ids (`t1`, `t2`, …, never
+  reused), dwell and looking smoothed over 500 ms. The live composition root
+  injects `association.py`'s local ByteTrack adapter: boxes and confidence
+  only, with no image or appearance features. Weak observations may recover
+  an existing track but never create a new one. Inference failover retains
+  tracks; gaps over 800 ms and resolution changes reset association. The
+  dependency-free IoU matcher remains available for synthetic tests.
 - **Held products:** `held.py`. A marker near a person box, seen in 3 of the
   last 8 frames, is a held product. `props/markers.json` maps marker id →
   brand slug. Until the contract has a field, a held product travels as
@@ -143,7 +152,10 @@ The frame path, in `agent/vision/` (ADR 0004, 0007, 0008):
 - **Record mode** (ADR 0008 D11): `--record` reads the clip on clip time
   (`ClipSource`: sampled at `--sample-fps`, not paced, no wall clock) and
   writes the eval replay contract `{"t_s", "snapshot"}` per line, plus a
-  `.meta.json` with inference p50/max. `make eval-perception` scores it.
+  `.meta.json` with inference p50/p95/max. `make eval-perception` scores it.
+  Live mode retains no per-frame latency list; only finite recordings collect
+  samples for these percentiles. Duplicate or out-of-order detections are
+  dropped before tracking, safety votes or publication.
 - **Keyframes:** `pipeline.py` sends a blurred, 512 px JPEG at most every
   1.5 s while someone is in frame.
 
