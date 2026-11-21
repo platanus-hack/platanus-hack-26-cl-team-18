@@ -90,7 +90,7 @@ class SpeechGate:
         *,
         threshold: float = 0.5,
         start_frames: int = 3,  # ~96 ms
-        hangover_frames: int = 16,  # ~512 ms
+        hangover_frames: int = 10,  # ~320 ms: speech end -> final 227 ms vs 431 ms at 512 ms (bench)
         preroll_frames: int = 10,  # ~320 ms
         max_segment_frames: int = 470,  # ~15 s
     ) -> None:

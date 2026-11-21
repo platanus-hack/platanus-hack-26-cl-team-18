@@ -1,7 +1,7 @@
 """Compose the local simulator's snapshot-to-creative flow."""
 
 from base64 import b64encode
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from decimal import ROUND_CEILING, Decimal
@@ -68,6 +68,7 @@ from app.modules.common.domain.value_objects.utc_timestamp import UtcTimestamp
 from app.modules.creative.application.briefing import CreativeCatalog, build_brief
 from app.modules.creative.application.ports.copywriter import CopyWriter
 from app.modules.creative.application.rendering import render_spec
+from app.modules.creative.application.speech_text import offer_line, spoken_line_for
 from app.modules.creative.application.studio import CreativeStudio, StudioConfig
 from app.modules.creative.application.template import compose_template
 from app.modules.creative.application.voiceover import InvalidSpokenLine, VoiceoverService
@@ -128,6 +129,7 @@ def register_demo(
     copy_timeout_s: float = 2.5,
     hourly_budget_usd: str = "2",
     budget_clp: int = 50_000,
+    startup: list[Callable[[], Awaitable[None]]] | None = None,
 ) -> DemoControls:
     screen_id = ScreenId.create(ids.new_uuid7())
     # Reuse the existing project mark for these fictional fixture brands.
@@ -218,7 +220,21 @@ def register_demo(
     auctions = auction_log or InMemoryAuctionLog()
     delivery = DeliveryDesk(ledger=ledger or InMemoryChargeLedger(), ids=ids, budgets=book)
     campaign_of = {bidder.campaign_id: bidder for bidder in bidders}
-    vision_catalog = {"sports ball": fitness, "tap handle fixture": beer}
+    vision_catalog = {
+        # Simulator fixture labels (scripts/replay_audience.py, evals/scenarios).
+        "sports ball": fitness,
+        "tap handle fixture": beer,
+        # Real COCO labels the perception agent emits (edge/agent/vision/snapshot.py).
+        # Without these a live camera never maps to a segment and only the house ad plays.
+        "bottle": fitness,  # the gym-bottle prop
+        "cup": coffee,
+        "wine glass": beer,
+        # Held demo props, read from their ArUco markers (edge/props/markers.json, ADR 0008 D2).
+        "product:voltio": fitness,
+        "product:rayo": fitness,
+        "product:cafe-patio": coffee,
+        "product:malta-sur": beer,
+    }
     sound_catalog = {"coffee service fixture": coffee}
     segment_labels = {
         fitness: "Sports & fitness",
@@ -473,7 +489,7 @@ def register_demo(
         spec = house_spec
         brief = build_brief(moment=decision.moment, result=result, catalog=catalog)
         if brief is not None:
-            spec = render_spec(brief, studio.compose(brief).draft, kits_by_id)
+            spec = with_cached_voice(render_spec(brief, studio.compose(brief).draft, kits_by_id))
         current_brief = brief
         ready_at = clock.now_utc()
         trace = decision.trace.model_copy(update={"ready_at": ready_at})
@@ -747,7 +763,7 @@ def register_demo(
             if target.creative_id != job.creative_id or current_brief != job.brief:
                 return
             # A fresh spec drops the old voice-over: it no longer matches the new line.
-            spec = render_spec(job.brief, draft, kits_by_id)
+            spec = with_cached_voice(render_spec(job.brief, draft, kits_by_id))
             trace = target.trace.model_copy(update={"upgraded_at": clock.now_utc()})
             current_creative = target.model_copy(update={"spec": spec, "trace": trace})
             upgraded = CreativeUpgraded(
@@ -767,7 +783,29 @@ def register_demo(
     # ------------------------------------------------------------ voice-overs (warm)
 
     def spoken_copy(spec: CreativeSpec) -> str:
-        return spec.slots[0].copy_text
+        # The approved offer (stable per tier, so pre-generated and always cached),
+        # normalized for speech; the lead copy only when there is no offer.
+        return spoken_line_for(spec)
+
+    def with_cached_voice(spec: CreativeSpec) -> CreativeSpec:
+        """Hot path: attach a pre-generated voice-over now (a file check), so it plays
+        with the creative instead of arriving later as an upgrade."""
+        if voiceovers is None or (voice := voice_for(spec)) is None:
+            return spec
+        cached = voiceovers.cached_url(spoken_copy(spec), voice)
+        return spec if cached is None else spec.model_copy(update={"voiceover_url": cached})
+
+    async def prewarm_voiceovers() -> None:
+        """Cold path: synthesize every approved offer line once (budget-guarded, cached on disk)."""
+        if voiceovers is None or narrator_voice_id is None:
+            return
+        for basket in sorted(offer_book.baskets(), key=lambda b: sorted(map(str, b))):
+            for tier in offer_book.tiers(basket):
+                line = offer_line(tier.label, tier.text, str(tier.price.amount))
+                await voiceovers.voiceover_url(line, narrator_voice_id)
+
+    if startup is not None and voiceovers is not None:
+        startup.append(prewarm_voiceovers)
 
     def voice_for(spec: CreativeSpec) -> str | None:
         return narrator_voice_id  # co-brand and solo both use the narrator until kits carry voices

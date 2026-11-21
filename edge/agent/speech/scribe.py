@@ -51,10 +51,16 @@ KEEPALIVE_CHUNK = bytes(MIN_CHUNK_BYTES)
 @dataclass(frozen=True)
 class ScribeConfig:
     api_key: str = field(repr=False)
-    model_id: str = "scribe_v2_realtime"
+    # v3 Live: keyterm -> partial ~200 ms vs ~1200 ms on v2 (which buffers ~2 s first);
+    # same WER on our fixture, 44% lower semantic WER per the docs. `python -m agent.speech.bench`.
+    model_id: str = "scribe_v3_live"
     language_code: str = "es"
     keyterms: tuple[str, ...] = ()
     url: str = DEFAULT_URL
+    # manual (our VAD commits), vad (server VAD), turn_prediction (scribe_v3_live only)
+    commit_strategy: str = "manual"
+    # Additional documented query parameters (benchmarks, model-specific options).
+    extra_params: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         if not self.api_key:
@@ -67,9 +73,10 @@ class ScribeConfig:
             ("model_id", self.model_id),
             ("audio_format", f"pcm_{SAMPLE_RATE}"),
             ("language_code", self.language_code),
-            ("commit_strategy", "manual"),
+            ("commit_strategy", self.commit_strategy),
         ]
         params += [("keyterms", term) for term in self.keyterms]
+        params += list(self.extra_params)
         return f"{self.url}?{urlencode(params)}"
 
     def headers(self) -> dict[str, str]:

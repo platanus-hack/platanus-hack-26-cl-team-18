@@ -65,6 +65,7 @@ def app_for(tmp_path: Path, *, speech: bool = True, synth: FakeSynth | None = No
         demo_simulator=True,
         media_dir=tmp_path,
         elevenlabs_budget_file=tmp_path / "budget.json",
+        voiceover_prewarm=kw.pop("voiceover_prewarm", False),
         speech_mode_screens=["demo-01"] if speech else [],
         elevenlabs_narrator_voice_id=NARRATOR if synth else None,
         **kw,
@@ -170,7 +171,9 @@ def test_voiceover_upgrades_the_creative_and_is_served_from_media(tmp_path: Path
         assert upgraded.spec.slots == ready.spec.slots  # only the voice changed
         (request,) = synth.requests
         assert request.voice_id == NARRATOR and request.model_id == "eleven_flash_v2_5"
-        assert "Voltio + Café Patio" in request.text
+        # The approved offer, normalized for speech: no "$", no "+", price in words.
+        assert "Voltio y Café Patio" in request.text and "pesos" in request.text
+        assert "$" not in request.text and "+" not in request.text
 
         media = client.get(upgraded.spec.voiceover_url)
         assert media.status_code == 200 and media.content == MP3
@@ -180,7 +183,7 @@ def test_voiceover_upgrades_the_creative_and_is_served_from_media(tmp_path: Path
             assert creative(again).spec.voiceover_url == upgraded.spec.voiceover_url
 
 
-def test_cached_voiceover_is_applied_on_the_hot_path_without_a_new_call(tmp_path: Path) -> None:
+def test_cached_voiceover_rides_in_creative_ready_without_a_new_call(tmp_path: Path) -> None:
     synth = FakeSynth()
     app, clock = app_for(tmp_path, synth=synth)
     with (
@@ -191,17 +194,38 @@ def test_cached_voiceover_is_applied_on_the_hot_path_without_a_new_call(tmp_path
         creative(player)
         agent.send_text(snapshot_for("co-brand", 1, clock.now_utc()).model_dump_json())
         creative(player)
-        player.receive_json()  # voice upgrade
+        player.receive_json()  # first time: the voice arrives as an upgrade
         for seq, scene in ((2, "empty"), (3, "co-brand")):
             agent.send_text(
                 snapshot_for(
                     scene, seq, clock.advance(timedelta(milliseconds=200))
                 ).model_dump_json()
             )
+            again = creative(player)
+        # Second time: the cached voice is already in creative.ready (no upgrade round trip).
+        assert again.spec.voiceover_url is not None
+        assert len(synth.requests) == 1
+
+
+def test_prewarmed_offers_play_with_their_voice_from_the_first_frame(tmp_path: Path) -> None:
+    synth = FakeSynth()
+    app, clock = app_for(tmp_path, synth=synth, voiceover_prewarm=True)
+    with TestClient(app) as client:
+        deadline = datetime.now() + timedelta(seconds=5)
+        while datetime.now() < deadline:  # startup pre-generation runs in the background
+            if client.get("/health").status_code == 200 and synth.requests:
+                break
+        with (
+            client.websocket_connect("/ws/screen/demo-01") as player,
+            client.websocket_connect("/ws/agent") as agent,
+        ):
             creative(player)
-        upgraded = CreativeUpgraded.model_validate(player.receive_json())
-        assert upgraded.spec.voiceover_url is not None
-        assert len(synth.requests) == 1  # second time: cache hit
+            before = len(synth.requests)
+            agent.send_text(snapshot_for("co-brand", 1, clock.now_utc()).model_dump_json())
+            ready = creative(player)
+            assert ready.spec.voiceover_url is not None  # voice from the very first frame
+            assert len(synth.requests) == before  # nothing synthesized at play time
+            assert all("$" not in r.text and "pesos" in r.text for r in synth.requests)
 
 
 def test_quota_exhaustion_degrades_to_silent_creatives_and_tells_the_console(
@@ -224,9 +248,9 @@ def test_quota_exhaustion_degrades_to_silent_creatives_and_tells_the_console(
 
 def test_character_budget_stops_new_lines_but_cached_ones_keep_playing(tmp_path: Path) -> None:
     synth = FakeSynth()
-    # Fits one demo line (~65 chars) but not a second one (~45): copy can change,
+    # Fits one demo line (~90 chars spoken) but not a second one: copy can change,
     # so the test asserts the arithmetic instead of hard-coding lengths.
-    budget = 100
+    budget = 120
     app, clock = app_for(tmp_path, synth=synth, elevenlabs_char_budget=budget)
     with (
         TestClient(app) as client,
@@ -252,8 +276,9 @@ def test_character_budget_stops_new_lines_but_cached_ones_keep_playing(tmp_path:
                 "co-brand", 3, clock.advance(timedelta(milliseconds=200))
             ).model_dump_json()
         )
-        assert set(paid_brands(creative(player))) == {"Voltio", "Café Patio"}
-        again = CreativeUpgraded.model_validate(player.receive_json())  # cache hit: free
+        again = creative(player)
+        assert set(paid_brands(again)) == {"Voltio", "Café Patio"}
+        # Cache hit: free, and the voice rides in creative.ready itself.
         assert again.spec.voiceover_url == first.spec.voiceover_url
         assert len(synth.requests) == 1
     assert f'"spent": {spent}' in (tmp_path / "budget.json").read_text()
