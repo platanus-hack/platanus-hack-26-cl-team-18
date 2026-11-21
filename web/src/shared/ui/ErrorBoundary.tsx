@@ -21,7 +21,7 @@ export class ErrorBoundary extends Component<Props, { error: Error | null }> {
         if (this.state.error) {
             return (
                 this.props.fallback ?? (
-                    <p className="text-danger">{this.props.label} failed to render.</p>
+                    <p className="text-compact text-danger">No se pudo mostrar esta sección.</p>
                 )
             );
         }

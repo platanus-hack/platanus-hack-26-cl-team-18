@@ -1,6 +1,8 @@
 import { ErrorBoundary } from "@/shared/ui/ErrorBoundary";
-import { WorkspaceHeader } from "@/shared/ui/WorkspaceHeader";
-import { Activity, Monitor, SlidersHorizontal, Store } from "lucide-react";
+import { Button } from "@/shared/ui/button";
+import { Card } from "@/shared/ui/card";
+import { AppShell, PageHeader } from "@/shared/ui/page";
+import { Activity, ChevronRight, Monitor, SlidersHorizontal, Store } from "lucide-react";
 import { lazy, Suspense } from "react";
 
 // Each route is its own chunk: the kiosk player never downloads console code.
@@ -28,99 +30,63 @@ const TOOLS = [
     {
         href: "/console",
         icon: Activity,
-        title: "Console en vivo",
-        label: "Observar",
-        description: "Audiencia, subastas y atención. Cada decisión, a la vista.",
+        title: "Consola",
+        description: "Audiencia, subasta, latencia y cobros de cada pantalla.",
     },
     {
         href: "/screen?id=demo-01",
         icon: Monitor,
         title: "Pantalla",
-        label: "Reproducir",
-        description: "Ofertas que se adaptan al grupo, listas para el próximo momento.",
+        description: "El reproductor que ve la gente en la tienda.",
     },
     {
         href: "/advertiser",
         icon: SlidersHorizontal,
-        title: "Anunciantes",
-        label: "Participar",
-        description: "Elige tu marca y ajusta su puja en el mercado en vivo.",
+        title: "Pujas",
+        description: "Sube o baja la puja de una marca en vivo.",
     },
     {
         href: "/clerk?id=demo-01",
         icon: Store,
-        title: "Tienda",
-        label: "Gestionar",
-        description: "Actualiza el stock para ofrecer lo que sí está disponible.",
+        title: "Stock",
+        description: "Marca un producto sin stock y sale de la oferta.",
     },
 ];
 
 function Index() {
     return (
-        <div className="paper-theme">
-            <WorkspaceHeader />
-            <main className="workspace-content">
-                <section className="grid gap-8 border-b border-rule py-12 md:grid-cols-3 md:py-20">
-                    <div className="md:col-span-2">
-                        <p className="eyebrow mb-6">Publicidad para el mundo físico</p>
-                        <h1 className="text-hero leading-none font-medium tracking-tight text-balance">
-                            Una pantalla.
-                            <br />
-                            Muchas necesidades.
-                            <br />
-                            <span className="text-accent">Un mismo momento.</span>
-                        </h1>
-                    </div>
-                    <div className="flex flex-col justify-end gap-6">
-                        <p className="text-lg leading-relaxed text-muted">
-                            Productos que se complementan. Ofertas para quienes están juntos. Marcas
-                            que pagan por atención real.
-                        </p>
-                        <a
-                            href="/console"
-                            className="self-start rounded-control bg-accent px-5 py-3 font-medium text-white transition-opacity hover:opacity-90"
-                        >
-                            Abrir console
-                        </a>
-                        <p className="text-metadata text-muted">Cero atención. Cero cobro.</p>
-                    </div>
-                </section>
-                <section className="py-10" aria-labelledby="tools-title">
-                    <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-                        <h2 id="tools-title" className="text-section font-medium">
-                            Tu espacio de operación
-                        </h2>
-                        <span className="text-metadata text-muted">Del momento a la venta</span>
-                    </div>
-                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                        {TOOLS.map(({ href, icon: Icon, title, label, description }) => (
-                            <a key={href} href={href} className="tool-card tool-link">
-                                <Icon
-                                    className="size-6 text-accent"
-                                    strokeWidth={1.5}
-                                    aria-hidden
-                                />
-                                <div>
-                                    <h3 className="mb-2 text-xl font-medium tracking-tight">
-                                        {title}
-                                    </h3>
-                                    <p className="text-body leading-relaxed text-muted">
-                                        {description}
-                                    </p>
-                                </div>
-                                <span className="mt-auto border-t border-border pt-4 text-metadata font-medium text-accent">
-                                    {label}
-                                </span>
-                            </a>
-                        ))}
-                    </div>
-                </section>
-                <footer className="flex flex-wrap justify-between gap-3 border-t border-border py-6 text-metadata text-muted">
-                    <span>Vendemos momentos, no espacios.</span>
-                    <span>Sin identidad. Sin guardar imágenes ni audio.</span>
-                </footer>
-            </main>
-        </div>
+        <AppShell>
+            <PageHeader
+                title="Avisos en canasta para pantallas en tienda"
+                description="Dos marcas complementarias comparten la pantalla y pagan solo por segundo de atención."
+                actions={
+                    <Button asChild variant="primary">
+                        <a href="/console">Abrir consola</a>
+                    </Button>
+                }
+            />
+            <Card className="divide-y divide-border-subtle">
+                {TOOLS.map(({ href, icon: Icon, title, description }) => (
+                    <a
+                        key={href}
+                        href={href}
+                        className="flex items-center gap-4 px-4 py-4 transition-colors hover:bg-surface-hover"
+                    >
+                        <span className="grid size-9 shrink-0 place-items-center rounded-control bg-accent-soft text-(--ui-selected-text)">
+                            <Icon className="size-4" aria-hidden />
+                        </span>
+                        <span className="min-w-0">
+                            <span className="block font-medium">{title}</span>
+                            <span className="block text-compact text-muted">{description}</span>
+                        </span>
+                        <ChevronRight className="ml-auto size-4 shrink-0 text-muted" aria-hidden />
+                    </a>
+                ))}
+            </Card>
+            <p className="text-compact text-muted">
+                Sin identidad: no se guardan imágenes ni audio.
+            </p>
+        </AppShell>
     );
 }
 

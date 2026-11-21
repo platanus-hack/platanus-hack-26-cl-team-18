@@ -116,14 +116,9 @@ export function CreativeView({
                                 <span>{slot.brand_name}</span>
                             </div>
                         ))}
-                        {spec.slots.length > 1 && (
-                            <span className="creative-partnership">JUNTOS EN ESTE MOMENTO</span>
-                        )}
                     </div>
                     <div className="creative-story">
-                        <span className="creative-eyebrow">
-                            {spec.offer?.label ?? "Tu próxima pausa empieza aquí"}
-                        </span>
+                        {spec.offer && <span className="creative-eyebrow">{spec.offer.label}</span>}
                         <p
                             key={`${stage.name}:${stage.copy_text}`}
                             className="creative-headline"
@@ -150,12 +145,6 @@ export function CreativeView({
                             )}
                             {stage.name === "close" && <CloseCall spec={spec} />}
                         </div>
-                    </div>
-                    <div className="creative-footer">
-                        <span>UNA OFERTA PARA TU MOMENTO</span>
-                        <span>
-                            {spec.slots.length > 1 ? "DOS MARCAS · UN SOLO COMBO" : "AQUÍ AL LADO"}
-                        </span>
                     </div>
                 </div>
             )}

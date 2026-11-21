@@ -58,12 +58,6 @@
     height: 2.9cqw;
     object-fit: contain;
 }
-.creative-partnership {
-    margin-left: auto;
-    color: var(--color-muted);
-    font-size: 0.7cqw;
-    letter-spacing: 0.18em;
-}
 .creative-story {
     width: 65%;
     margin-top: auto;
@@ -97,15 +91,6 @@
     color: var(--color-canvas);
     font-size: 2.1cqw;
     font-weight: 750;
-}
-.creative-footer {
-    display: flex;
-    justify-content: space-between;
-    padding-top: 2cqh;
-    color: var(--color-muted);
-    border-top: 1px solid var(--color-border);
-    font-size: 0.7cqw;
-    letter-spacing: 0.15em;
 }
 .creative-close {
     display: flex;

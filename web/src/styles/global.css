@@ -24,88 +24,153 @@
     font-weight: 700;
     font-display: swap;
 }
+@font-face {
+    font-family: "Geist Mono";
+    src: url("/fonts/GeistMono-Regular.woff2") format("woff2");
+    font-weight: 400;
+    font-display: swap;
+}
+@font-face {
+    font-family: "Geist Mono";
+    src: url("/fonts/GeistMono-Medium.woff2") format("woff2");
+    font-weight: 500;
+    font-display: swap;
+}
 
 /*
- * Design tokens. The scale is closed: every color, radius, shadow, duration and
- * z-index comes from a token here. If a need has no token, add one; never an
- * inline value (`text-[13px]`, `#hex`, `duration-[..]`).
+ * Design tokens, ported from Relvo's design system (Puchworks Round 3 palette,
+ * relvo/frontend/src/app/globals.css). The scale is closed: every color,
+ * radius, shadow, duration and z-index comes from a token here. If a need has
+ * no token, add one; never an inline value (`text-[13px]`, `#hex`).
  *
- * Three layers: raw palette (--palette-*) -> semantic roles (--color-*) ->
+ * Three layers: raw palette -> semantic roles (--ui-*, --state-*) ->
  * Tailwind utilities generated from @theme (bg-surface, text-muted, ...).
- * White surfaces and ink typography keep the workspace consistent across tools.
+ * The player (/screen) keeps its own dark creative look in creative.css.
  */
 
 :root {
-    --palette-ink-950: #13131e;
-    --palette-ink-900: #1e1e2c;
-    --palette-ink-800: #292938;
-    --palette-ink-600: #9a9aa6;
+    color-scheme: light;
+    /* Puchworks Round 3 */
+    --palette-negro: #13131e;
+    --palette-blanco: #ffffff;
+    --palette-gris: #e8e8e8;
+    --palette-gris-oscuro: #ababb7;
+    --palette-naranjo: #ff9566;
+    --palette-morado: #633bf2;
+    --palette-verde: #72ddaa;
+    --palette-menta: #dff4eb;
+    --palette-lila: #e3c0f2;
+    --palette-salmon: #f4b08e;
+    --palette-verde-oscuro: #186666;
+    --palette-noche: #3f28b2;
+    --palette-mezcla: #aa5639;
+    /* The player's dark creative theme (creative.css) reads these; keep them. */
+    --palette-ink-950: var(--palette-negro);
     --palette-ink-300: #c9c9d2;
-    --palette-ink-50: #ffffff;
-    --palette-paper: #ffffff;
-    --palette-paper-soft: #f6f7f8;
-    --palette-line: #dcdce2;
-    --palette-text-soft: #5c5c69;
-    --palette-text-muted: #6e6e7a;
-    --palette-teal: #186666;
-    --palette-teal-soft: #f0f9f5;
-    --palette-olive: #3f7a1c;
-    --palette-review: #8a5a00;
-    --palette-review-soft: #fbf3e4;
-    --palette-negative: #a3302a;
-    --palette-negative-soft: #fceeed;
-    --palette-mint: #72ddaa;
-    --palette-amber: oklch(0.82 0.16 78);
-    --palette-red: oklch(0.66 0.21 25);
-    --palette-sky: oklch(0.74 0.13 235);
+    --palette-ink-50: var(--palette-blanco);
+    --palette-mint: var(--palette-verde);
+
+    /* Semantic roles (relvo --ui-*) */
+    --ui-selected: var(--palette-morado);
+    --ui-selected-soft: color-mix(in srgb, var(--palette-lila) 38%, white);
+    --ui-selected-text: var(--palette-noche);
+    --ui-neutral-text: #66666f;
+
+    /* Status families: edge, fill, ink (relvo --state-*) */
+    --state-success-edge: var(--palette-verde);
+    --state-success-fill: var(--palette-menta);
+    --state-success-ink: var(--palette-verde-oscuro);
+    --state-warning-edge: var(--palette-salmon);
+    --state-warning-fill: color-mix(in srgb, var(--palette-salmon) 20%, white);
+    --state-warning-ink: var(--palette-mezcla);
+    --state-danger-edge: color-mix(in srgb, #b42318 45%, white);
+    --state-danger-fill: #fdecea;
+    --state-danger-ink: #b42318;
+    --state-info-edge: color-mix(in srgb, var(--palette-noche) 35%, white);
+    --state-info-fill: color-mix(in srgb, var(--palette-lila) 30%, white);
+    --state-info-ink: var(--palette-noche);
+    --state-neutral-edge: #c9c2b7;
+    --state-neutral-fill: var(--palette-gris);
+    --state-neutral-ink: var(--ui-neutral-text);
+
+    --control-edge: #8f877b;
+    --target-min: 1.5rem;
 }
 
 @theme {
-    --color-canvas: var(--palette-paper);
-    --color-surface: var(--palette-paper);
-    --color-surface-raised: var(--palette-paper-soft);
-    --color-border: var(--palette-line);
-    --color-fg: var(--palette-ink-950);
-    --color-muted: var(--palette-text-soft);
-    --color-subtle: var(--palette-text-muted);
+    --color-canvas: #fffdf8;
+    --color-surface: var(--palette-blanco);
+    --color-surface-raised: #faf9f6;
+    --color-surface-sunken: #faf9f6;
+    --color-surface-hover: #f6f4ef;
+    --color-surface-pressed: #f3f1ed;
+    --color-border: #ddd7cb;
+    --color-border-subtle: #ddd8cf;
+    --color-border-strong: #c9c2b7;
+    --color-control-edge: var(--control-edge);
+    --color-fg: var(--palette-negro);
+    --color-ink: var(--palette-negro);
+    --color-muted: #63636e;
+    --color-subtle: var(--ui-neutral-text);
+    --color-ring: var(--palette-morado);
 
-    --color-accent: var(--palette-teal);
-    --color-rule: var(--palette-ink-950);
-    --color-accent-soft: var(--palette-teal-soft);
-    --color-success: var(--palette-olive);
-    --color-warning: var(--palette-review);
-    --color-danger: var(--palette-negative);
-    --color-info: var(--palette-teal);
-    --color-success-soft: var(--palette-teal-soft);
-    --color-warning-soft: var(--palette-review-soft);
-    --color-danger-soft: var(--palette-negative-soft);
-    --color-info-soft: var(--palette-teal-soft);
+    --color-accent: var(--palette-morado);
+    --color-accent-soft: var(--ui-selected-soft);
+    --color-rule: var(--color-border);
+    --color-success: var(--state-success-ink);
+    --color-warning: var(--state-warning-ink);
+    --color-danger: var(--state-danger-ink);
+    --color-info: var(--state-info-ink);
+    --color-success-soft: var(--state-success-fill);
+    --color-warning-soft: var(--state-warning-fill);
+    --color-danger-soft: var(--state-danger-fill);
+    --color-info-soft: var(--state-info-fill);
 
     --font-sans: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
-    --font-mono: "JetBrains Mono", ui-monospace, monospace;
+    --font-mono: "Geist Mono", ui-monospace, monospace;
 
-    /* Type tiers */
-    --text-micro: 0.75rem;
-    --text-metadata: 0.8125rem;
-    --text-body: 1rem;
-    --text-section: 1rem;
-    --text-kpi: 2.5rem;
+    /* Type tiers (relvo --type-*) */
+    --text-micro: 0.625rem;
+    --text-metadata: 0.6875rem;
+    --text-compact: 0.8125rem;
+    --text-body: 0.9375rem;
+    --text-section: 1.05rem;
+    --text-title: 1.5rem;
+    --text-kpi: 2rem;
     --text-display: 4.5rem;
-    --text-title: 2rem;
-    --text-hero: clamp(2.75rem, 6vw, 5.5rem);
+    --text-hero: clamp(2.25rem, 5vw, 3.25rem);
 
     /* Radius tiers */
-    --radius-control: 0.375rem;
-    --radius-container: 0.625rem;
+    --radius-control: 6px;
+    --radius-container: 8px;
 
     /* Exactly two elevations */
-    --shadow-resting: 0 1px 0 rgb(19 19 30 / 0.04);
-    --shadow-overlay: 0 1px 0 rgb(19 19 30 / 0.04), 0 8px 20px -10px rgb(19 19 30 / 0.18);
+    --shadow-resting: 0 1px 2px rgb(19 19 30 / 0.04);
+    --shadow-overlay: 0 4px 12px rgb(19 19 30 / 0.08), 0 1px 3px rgb(19 19 30 / 0.06);
 
     /* Motion tiers; --duration-crossfade is the player's swap (docs/stack.md §6) */
     --duration-fast: 120ms;
     --duration-base: 180ms;
     --duration-crossfade: 250ms;
+}
+
+/* Grows a small control's pointer area to --target-min without changing its painted size. */
+@utility hit-target {
+    position: relative;
+    &::after {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: max(100%, var(--target-min));
+        height: max(100%, var(--target-min));
+        transform: translate(-50%, -50%);
+    }
+}
+
+/* Selected row: a 2px bar in the selection hue, no fill (relvo A3). */
+@utility row-selected {
+    box-shadow: inset 2px 0 0 var(--ui-selected);
 }
 
 /* Named layers (z-index) */
@@ -127,14 +192,33 @@ body {
     background: var(--color-canvas);
     color: var(--color-fg);
     font-family: var(--font-sans);
+    font-size: var(--text-body);
     -webkit-font-smoothing: antialiased;
-    color-scheme: light;
 }
 
 /* One focus ring, everywhere. */
 :focus-visible {
-    outline: 2px solid var(--color-accent);
+    outline: 2px solid var(--color-ring);
     outline-offset: 2px;
+}
+
+:where(button, a[href], select, summary, [role="button"], input[type="range"]) {
+    cursor: pointer;
+}
+:disabled,
+[aria-disabled="true"] {
+    cursor: default;
+}
+input::placeholder {
+    color: var(--ui-neutral-text);
+    opacity: 1;
+}
+input[type="range"] {
+    accent-color: var(--color-ink);
+}
+::selection {
+    background: var(--ui-selected-soft);
+    color: var(--color-fg);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -146,10 +230,6 @@ body {
     }
 }
 
-/* Player: the incoming layer's crossfade. A keyframe animation, not a transition: a
-   transition needs a painted starting value, and when the assets are already decoded
-   the layer mounts at opacity 0 and turns 1 in the same frame, so it popped in
-   (measured in Chromium by evals/browser.py). Keyframes always start from 0. */
 @keyframes player-crossfade-in {
     from {
         opacity: 0;
@@ -171,134 +251,18 @@ body {
     }
 }
 
-/* All workspace routes share the same white brand surface. */
+/* Workspace pages (everything but the fullscreen player). */
 .paper-theme {
     min-height: 100dvh;
     background: var(--color-canvas);
     color: var(--color-fg);
 }
-.workspace-nav {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 1rem;
-    padding: 1rem clamp(1rem, 4vw, 3rem);
-    border-bottom: 1px solid var(--color-border);
-    background: var(--color-surface);
-}
-.workspace-brand {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.75rem;
-    font-size: 1.125rem;
-    font-weight: 600;
-    letter-spacing: -0.04em;
-}
-.workspace-mark {
-    display: grid;
-    place-items: center;
-    width: 2rem;
-    height: 2rem;
-    border: 1px solid var(--color-accent);
-    border-radius: var(--radius-control);
-    color: var(--color-accent);
-}
-.workspace-links {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.25rem;
-}
-.workspace-links a {
-    padding: 0.5rem 0.75rem;
-    color: var(--color-muted);
-    border-radius: var(--radius-control);
-    font-size: var(--text-body);
-    transition:
-        background var(--duration-fast),
-        color var(--duration-fast);
-}
-.workspace-links a:hover,
-.workspace-links a[aria-current="page"] {
-    background: var(--color-accent-soft);
-    color: var(--color-accent);
-}
-.workspace-content {
-    max-width: 100rem;
-    margin: 0 auto;
-    padding: 2rem clamp(1rem, 4vw, 3rem) 3rem;
-}
+/* Mono label: relvo's compact metadata voice (uppercase, letter-spaced). */
 .eyebrow {
-    color: var(--color-accent);
+    color: var(--color-muted);
+    font-family: var(--font-mono);
     font-size: var(--text-metadata);
-    font-weight: 600;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-}
-.page-heading {
-    font-size: var(--text-title);
     font-weight: 500;
-    line-height: 1.15;
-    letter-spacing: -0.035em;
-}
-.tool-card {
-    border: 1px solid var(--color-border);
-    border-top: 1px solid var(--color-rule);
-    border-radius: var(--radius-container);
-    background: var(--color-surface);
-    padding: 1.5rem;
-}
-.tool-link {
-    display: flex;
-    flex-direction: column;
-    gap: 1.25rem;
-    transition:
-        border-color var(--duration-base),
-        background var(--duration-base);
-}
-.tool-link:hover {
-    border-color: var(--color-accent);
-    background: var(--color-accent-soft);
-}
-.operator-page {
-    margin: 0 auto;
-    max-width: 38rem;
-    padding: 3rem 1rem;
-}
-button:not(:disabled),
-input[type="range"] {
-    cursor: pointer;
-}
-button {
-    transition:
-        background var(--duration-fast),
-        border-color var(--duration-fast);
-}
-button:hover {
-    border-color: var(--color-accent);
-}
-input[type="range"] {
-    accent-color: var(--color-accent);
-}
-table th {
-    padding-bottom: 0.75rem;
-}
-table td {
-    padding-block: 0.75rem;
-    border-top: 1px solid var(--color-border);
-}
-::selection {
-    background: var(--color-accent);
-    color: var(--color-canvas);
-}
-
-@media (max-width: 40rem) {
-    .workspace-links {
-        width: 100%;
-        gap: 0.25rem;
-    }
-    .workspace-links a {
-        padding-inline: 0.5rem;
-        font-size: 0.875rem;
-    }
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
 }

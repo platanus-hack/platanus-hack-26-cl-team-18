@@ -1,29 +1,28 @@
 import type { ReactNode } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "./card";
 import { ErrorBoundary } from "./ErrorBoundary";
 
-/** A console panel. Each one has its own error boundary: one crash can't blank the console. */
+/** A console card. Each has its own error boundary: one crash can't blank the page. */
 export function Panel({
     title,
     aside,
     children,
+    className,
 }: {
     title: string;
     aside?: ReactNode;
     children: ReactNode;
+    className?: string;
 }) {
     return (
-        <section className="flex min-h-0 flex-col rounded-container border border-t border-border border-t-rule bg-surface shadow-resting">
-            <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-surface-raised/50 px-5 py-4">
-                <h2 className="text-section font-semibold">{title}</h2>
-                {aside}
-            </header>
-            <div className="min-h-0 flex-1 overflow-auto p-5 text-body">
+        <Card className={className}>
+            <CardHeader>
+                <CardTitle>{title}</CardTitle>
+                {aside && <span className="text-compact text-muted tabular-nums">{aside}</span>}
+            </CardHeader>
+            <CardContent>
                 <ErrorBoundary label={title}>{children}</ErrorBoundary>
-            </div>
-        </section>
+            </CardContent>
+        </Card>
     );
-}
-
-export function Empty({ children }: { children: ReactNode }) {
-    return <p className="text-muted">{children}</p>;
 }
