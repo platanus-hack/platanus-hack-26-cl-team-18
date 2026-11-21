@@ -52,3 +52,20 @@ This refines the rendering readiness rule in `docs/stack.md`; it changes no
 stack component. Deterministic player tests lock down the display budget and
 late/stale voice behavior. Measurements are in `docs/creative-generation.md`
 §8; camera-to-TV latency remains a separate hardware rehearsal measurement.
+
+## Amendment: isolate outbound clients and shared voice consumers
+
+A controlled slow-console probe showed a healthy console waiting 361 ms behind
+another client's 120 ms writes. Concurrent sends to one player also overlapped.
+Preserve ordered batches per connection rather than holding a global console
+lock. Bound pending batches per connection (32 by default); on overflow or a
+send timeout, retire its pending writes and close with 1013 so it reconnects to
+the current state. A healthy connection proceeds independently. The player
+continues showing the last good creative while reconnecting.
+
+A voice result shared across screens must not reserve an additional provider
+slot per waiting screen. Screens subscribe to the existing synthesis and apply
+the result only while their current line and voice match. Unique syntheses
+retain provider admission limits, budget checks and single-flight caching.
+This changes neither the stack nor first-visual readiness. Measurements and
+regressions are recorded in `docs/latency-feedback-loop.md` (second loop).

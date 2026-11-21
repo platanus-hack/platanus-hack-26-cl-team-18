@@ -145,3 +145,109 @@ def test_concurrent_requests_for_one_line_share_a_single_synthesis(tmp_path: Pat
     assert urls[0] is not None and urls == [urls[0], urls[0]]
     assert voiceovers.stats.synthesized == 1
     assert voiceovers.stats.coalesced == 1
+
+
+def test_shared_voice_subscribers_do_not_occupy_worker_slots_for_other_lines(
+    tmp_path: Path,
+) -> None:
+    import asyncio
+
+    from app.realtime.warm_worker import WarmWorker
+
+    async def run() -> None:
+        worker = WarmWorker({"elevenlabs": 2})
+        started, release, fresh_started = asyncio.Event(), asyncio.Event(), asyncio.Event()
+
+        class Synth(FakeSynth):
+            async def synthesize(self, request: VoiceRequest) -> SynthesizedVoice:
+                if request.text == "Shared offer":
+                    started.set()
+                    await release.wait()
+                else:
+                    fresh_started.set()
+                return await super().synthesize(request)
+
+        synth = Synth()
+        svc = service(tmp_path, synth)
+        delivered = []
+
+        async def request(screen: str, line: str) -> None:
+            if svc.subscribe_pending(line, VOICE, consumer=screen, on_ready=delivered.append):
+                return
+            delivered.append(await svc.voiceover_url(line, VOICE))
+
+        worker.submit("elevenlabs", "first", lambda: request("one", "Shared offer"))
+        async with asyncio.timeout(1):
+            await started.wait()
+        worker.submit("elevenlabs", "second", lambda: request("two", "Shared offer"))
+        worker.submit("elevenlabs", "different", lambda: request("three", "Different offer"))
+        try:
+            async with asyncio.timeout(0.1):
+                await fresh_started.wait()
+            assert not release.is_set()
+        finally:
+            release.set()
+            await worker.drain()
+        assert len(synth.requests) == 2
+        assert len(delivered) == 3 and all(delivered)
+
+    anyio.run(run)
+
+
+def test_voice_subscriptions_replace_the_same_consumer_and_isolate_callback_failure(
+    tmp_path: Path,
+) -> None:
+    import asyncio
+
+    async def run() -> None:
+        synth = SlowSynth()
+        svc = service(tmp_path, synth)
+        owner = asyncio.create_task(svc.voiceover_url("Shared offer", VOICE))
+        await asyncio.sleep(0)
+        delivered = []
+
+        def broken(_url):
+            raise RuntimeError("subscriber failed")
+
+        assert svc.subscribe_pending("Shared offer", VOICE, consumer="one", on_ready=broken)
+        assert svc.subscribe_pending(
+            "Shared offer", VOICE, consumer="one", on_ready=delivered.append
+        )
+        assert svc.subscribe_pending("Shared offer", VOICE, consumer="broken", on_ready=broken)
+        assert svc.subscribe_pending(
+            "Shared offer", VOICE, consumer="two", on_ready=delivered.append
+        )
+        synth.release.set()
+        url = await owner
+        assert delivered == [url, url]
+        assert len(synth.requests) == 1
+        assert not svc.subscribe_pending("Shared offer", VOICE, consumer="one", on_ready=broken)
+
+    anyio.run(run)
+
+
+def test_provider_quota_failure_notifies_every_voice_subscriber_without_retry(
+    tmp_path: Path,
+) -> None:
+    import asyncio
+
+    async def run() -> None:
+        synth = SlowSynth()
+        synth.fail = VoiceFailure.QUOTA
+        svc = service(tmp_path, synth)
+        owner = asyncio.create_task(svc.voiceover_url("Shared offer", VOICE))
+        await asyncio.sleep(0)
+        delivered = []
+        assert svc.subscribe_pending(
+            "Shared offer", VOICE, consumer="one", on_ready=delivered.append
+        )
+        assert svc.subscribe_pending(
+            "Shared offer", VOICE, consumer="two", on_ready=delivered.append
+        )
+        synth.release.set()
+        assert await owner is None
+        assert delivered == [None, None]
+        assert svc.stats.disabled_by is VoiceFailure.QUOTA
+        assert len(synth.requests) == 1
+
+    anyio.run(run)

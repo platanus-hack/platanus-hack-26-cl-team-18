@@ -282,3 +282,92 @@ def test_character_budget_stops_new_lines_but_cached_ones_keep_playing(tmp_path:
         assert again.spec.voiceover_url == first.spec.voiceover_url
         assert len(synth.requests) == 1
     assert f'"spent": {spent}' in (tmp_path / "budget.json").read_text()
+
+
+@pytest.mark.parametrize("retire_subscriber", [False, True])
+def test_shared_voice_result_reaches_each_screen_without_blocking_another_offer(
+    tmp_path: Path,
+    retire_subscriber: bool,
+) -> None:
+    import asyncio
+    from contextlib import ExitStack
+
+    class GatedSynth(FakeSynth):
+        def __init__(self) -> None:
+            super().__init__()
+            self.started = threading.Event()
+            self.release = threading.Event()
+            self.different_started = threading.Event()
+            self.first_line: str | None = None
+
+        async def synthesize(self, request: VoiceRequest) -> SynthesizedVoice:
+            if self.first_line is None:
+                self.first_line = request.text
+            if request.text == self.first_line:
+                self.started.set()
+                while not self.release.is_set():
+                    await asyncio.sleep(0.001)
+            else:
+                self.different_started.set()
+            return await super().synthesize(request)
+
+    synth = GatedSynth()
+    app, _clock = app_for(
+        tmp_path,
+        synth=synth,
+        creative_ai_copy=False,
+        audience_ai=False,
+        warm_concurrency={"elevenlabs": 2},
+    )
+    with TestClient(app) as client, ExitStack() as stack:
+        players = [
+            stack.enter_context(client.websocket_connect(f"/ws/screen/{name}"))
+            for name in ("one", "two", "three")
+        ]
+        agent = stack.enter_context(client.websocket_connect("/ws/agent"))
+        for player in players:
+            assert creative(player).auction_id is None
+        ready = []
+        observed = []
+
+        class Observer:
+            async def send_text(self, text):
+                import json
+
+                observed.append(json.loads(text))
+
+        observer = Observer()
+        client.portal.call(app.state.container.hub.add_player, "two", observer)
+        try:
+            for index, scene in enumerate(("co-brand", "co-brand", "fitness")):
+                snapshot = snapshot_for(scene, 1, T0).model_copy(
+                    update={"screen_id": ("one", "two", "three")[index]}
+                )
+                agent.send_text(snapshot.model_dump_json())
+                ready.append(creative(players[index]))
+                assert ready[-1].auction_id is not None
+                if index == 0:
+                    assert synth.started.wait(1)
+            assert synth.different_started.wait(0.5), (
+                "shared-result waiters must release provider slots"
+            )
+            if retire_subscriber:
+                now = _clock.advance(timedelta(milliseconds=100))
+                snapshot = snapshot_for("empty", 2, now).model_copy(update={"screen_id": "two"})
+                agent.send_text(snapshot.model_dump_json())
+                assert creative(players[1]).auction_id is None
+        finally:
+            synth.release.set()
+        active = (0, 2) if retire_subscriber else (0, 1, 2)
+        upgrades = [CreativeUpgraded.model_validate(players[i].receive_json()) for i in active]
+        for original, upgrade in zip([ready[i] for i in active], upgrades, strict=True):
+            assert upgrade.creative_id == original.creative_id
+            assert upgrade.upgrade_kind is UpgradeKind.VOICE
+            assert upgrade.spec.voiceover_url is not None
+        if not retire_subscriber:
+            assert upgrades[0].spec.voiceover_url == upgrades[1].spec.voiceover_url
+        else:
+            client.portal.call(app.state.container.warm.drain)
+            assert not any(m["type"] == "creative.upgraded" for m in observed)
+        assert len(synth.requests) == 2
+        client.portal.call(app.state.container.hub.remove_player, "two", observer)

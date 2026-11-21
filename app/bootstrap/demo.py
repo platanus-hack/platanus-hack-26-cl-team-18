@@ -1097,20 +1097,8 @@ def register_demo(
         except InvalidSpokenLine:
             return
 
-        async def job() -> None:
+        def deliver_voice(url: str | None) -> None:
             nonlocal voice_degraded
-            # A queued line may no longer belong to the current ad. Reuse by line
-            # and voice (not creative id) when the same offer returns before admission.
-            with lock:
-                if (
-                    spoken_copy(current_creative.spec) != line
-                    or voice_for(current_creative.spec) != voice
-                ):
-                    return
-            characters = voiceovers.stats.characters
-            url = await voiceovers.voiceover_url(line, voice)
-            if (spent := voiceovers.stats.characters - characters) > 0:
-                studio.record_spend(GenerationKind.VOICE, studio.cost_model.voice(spent))
             if url is not None:
                 upgrade_voice(None, line, voice, url)
             elif voiceovers.stats.disabled_by is not None and not voice_degraded:
@@ -1120,6 +1108,25 @@ def register_demo(
                         screen_id=wire_screen_id, flags=[DegradationFlag.VOICE_FALLBACK]
                     )
                 )
+
+        async def job() -> None:
+            # A queued line may no longer belong to the current ad. Reuse by line
+            # and voice (not creative id) when the same offer returns before admission.
+            with lock:
+                if (
+                    spoken_copy(current_creative.spec) != line
+                    or voice_for(current_creative.spec) != voice
+                ):
+                    return
+            if voiceovers.subscribe_pending(
+                line, voice, consumer=wire_screen_id, on_ready=deliver_voice
+            ):
+                return  # Shared synthesis owns the provider slot; don't reserve another.
+            characters = voiceovers.stats.characters
+            url = await voiceovers.voiceover_url(line, voice)
+            if (spent := voiceovers.stats.characters - characters) > 0:
+                studio.record_spend(GenerationKind.VOICE, studio.cost_model.voice(spent))
+            deliver_voice(url)
 
         warm.submit_threadsafe("elevenlabs", f"voice:{wire_screen_id}:{key}", job)
 
