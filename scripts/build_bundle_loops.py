@@ -94,7 +94,9 @@ def main() -> int:
     out_dir = media_dir / LOOP_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
     ffmpeg = ffmpeg_exe()
-    built, kept = [], []
+    built: list[str] = []
+    kept: list[str] = []
+    no_footage: list[str] = []
     for bundle in sorted(bundles, key=lambda b: sorted(_slug(kits[x].name) for x in b)):
         # Basket order = BundleLoopLibrary key order (sorted slugs), left to right.
         brands = sorted(bundle, key=lambda b: _slug(kits[b].name))
@@ -102,6 +104,9 @@ def main() -> int:
         out = out_dir / f"{key}.mp4"
         if out.is_file() and not args.force:
             kept.append(key)
+            continue
+        if any(category[b] not in CLIP_BY_CATEGORY for b in brands):
+            no_footage.append(key)  # no approved footage for this category yet
             continue
         members = [
             (VIDEOS / CLIP_BY_CATEGORY[category[b]], kits[b].accent_color or "#ffffff")
@@ -111,6 +116,7 @@ def main() -> int:
         built.append(key)
     print(f"built {len(built)}: {', '.join(built) or '—'}")
     print(f"kept {len(kept)} existing: {', '.join(kept) or '—'}")
+    print(f"no footage {len(no_footage)}: {', '.join(no_footage) or '—'} (player uses brand media)")
     print(f"→ {out_dir}")
     return 0
 

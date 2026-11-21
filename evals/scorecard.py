@@ -147,7 +147,10 @@ SPECS: dict[str, Spec] = {
     ),
     "video_paid_share": Spec("info", label="Video: paid screen-time share"),
     "video_flicker_per_minute": Spec(
-        "ratchet", "lower", tolerance=0.5, label="Video: screen changes/min"
+        "ratchet", "lower", tolerance=0.5, label="Video: screen changes/min (incl. refreshes)"
+    ),
+    "video_brand_swaps_per_minute": Spec(
+        "ratchet", "lower", tolerance=0.5, label="Video: brand swaps/min (flicker)"
     ),
     "video_clips_with_unmapped_signals": Spec(
         "info", "lower", label="Video: clips with objects seen but not understood"

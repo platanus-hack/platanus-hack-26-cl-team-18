@@ -202,6 +202,12 @@ def score(clip: dict[str, Any], recording: Path, run: RunRecord) -> ClipResult:
         "inappropriate_ad_seconds": round(bad, 2),
         "screen_changes": len(timeline) - 1,
         "flicker_per_minute": (len(timeline) - 1) * 60 / total,
+        # A brand swap is flicker; the same brands re-sizing their offer is a refresh.
+        "brand_swaps_per_minute": sum(
+            1 for a, b in itertools.pairwise(timeline) if a.brands != b.brands
+        )
+        * 60
+        / total,
         "raw_fact_changes": _changes([x["raw"] for x in lines if "raw" in x])
         if any("raw" in x for x in lines)
         else meta.get("raw_fact_changes"),
@@ -319,6 +325,10 @@ def main(argv: list[str] | None = None) -> int:
         "video_ad_precision": sum(precisions) / len(precisions) if precisions else None,
         "video_sensible_ad_reach": sum(reaches) / len(reaches) if reaches else None,
         "video_paid_share": sum(r.metrics["paid_share"] for r in results) / max(len(results), 1),
+        "video_brand_swaps_per_minute": sum(
+            r.metrics["brand_swaps_per_minute"] for r in results
+        )
+        / max(len(results), 1),
         "video_flicker_per_minute": sum(r.metrics["flicker_per_minute"] for r in results)
         / max(len(results), 1),
         "video_clips_with_unmapped_signals": sum(bool(r.unmapped) for r in results),
