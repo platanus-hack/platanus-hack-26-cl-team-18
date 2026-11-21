@@ -218,7 +218,21 @@ def register_demo(
     auctions = auction_log or InMemoryAuctionLog()
     delivery = DeliveryDesk(ledger=ledger or InMemoryChargeLedger(), ids=ids, budgets=book)
     campaign_of = {bidder.campaign_id: bidder for bidder in bidders}
-    vision_catalog = {"sports ball": fitness, "tap handle fixture": beer}
+    vision_catalog = {
+        # Simulator fixture labels (scripts/replay_audience.py, evals/scenarios).
+        "sports ball": fitness,
+        "tap handle fixture": beer,
+        # Real COCO labels the perception agent emits (edge/agent/vision/snapshot.py).
+        # Without these a live camera never maps to a segment and only the house ad plays.
+        "bottle": fitness,  # the gym-bottle prop
+        "cup": coffee,
+        "wine glass": beer,
+        # Held demo props, read from their ArUco markers (edge/props/markers.json, ADR 0008 D2).
+        "product:voltio": fitness,
+        "product:rayo": fitness,
+        "product:cafe-patio": coffee,
+        "product:malta-sur": beer,
+    }
     sound_catalog = {"coffee service fixture": coffee}
     segment_labels = {
         fitness: "Sports & fitness",
