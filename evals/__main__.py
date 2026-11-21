@@ -193,6 +193,7 @@ def _suite_args(parser: argparse.ArgumentParser) -> None:
 def _run_suite(args: argparse.Namespace) -> int:
     scenarios = load_scenarios(only=set(args.only) if args.only else None)
     runs = [run_scenario(scenario) for scenario in scenarios]
+    probes = {scenario.name for scenario in scenarios if not scenario.kpis}
     beats = {scenario.name: scenario.beat for scenario in scenarios}
     soak: RunRecord | None = None
     if args.soak:
@@ -209,7 +210,7 @@ def _run_suite(args: argparse.Namespace) -> int:
             sum(all(c.passed for c in run.checks) for run in runs), len(runs)
         ),
         "invariant_violations": len(violations),
-        **m.product_kpis(decisions),
+        **m.product_kpis([d for d in decisions if d.source not in probes]),
         **m.latency_kpis(timed),
     }
     if soak:

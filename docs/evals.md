@@ -201,8 +201,23 @@ timeline:
 ```
 
 Expectations: `brands` (set; `[]` = house ad), `layout`, `excluded`
-(brand → reason), `min_coverage`, `copy_contains`, `no_change` (nothing
-arrives within 250 ms). `hold: n` repeats the scene n times and expects no
+(brand → reason), `min_coverage`, `max_coverage`, `copy_contains`,
+`no_change` (nothing arrives within 250 ms). Segment affinity
+(`docs/architecture.md` §6 step 2) adds `matches` (brand → specs its bid line
+must contain, each `"related"` or `"related:Coffee>Pastry/Doughnuts"`, i.e.
+kind or kind:bid label>moment label), `no_bid` (brands that must not bid) and
+`max_price_per_as` (brand → the most its winning slot may clear). A scenario
+with `"kpis": false` is a **probe**: it scripts edge cases on purpose (weak
+cues, no-fills), so its checks and every invariant gate still run, but its
+decisions stay out of the product-KPI ratchets, which track the demo mix.
+
+Segment-affinity oracles run on every decision (scripted, replay, rehearsal):
+a bid reaches each moment segment once; an exact match keeps the whole bid and
+an approximate one strictly less (`bid_match_inconsistent`); an age-restricted
+category only ever matches exactly (`restricted_reach_widened`); a solo winner
+never clears above its best matched rate × live multiplier
+(`charged_above_matched_bid`). `affinity_bid_share` and `affinity_only_bids`
+are informational KPIs. `evals/scenarios/11_segment_affinity.json` is the probe. `hold: n` repeats the scene n times and expects no
 re-auction. `measured_offset_s` simulates stale facts or a fast device clock.
 Run a single scenario with `make eval ARGS="--only basket-ad --soak 0"`.
 

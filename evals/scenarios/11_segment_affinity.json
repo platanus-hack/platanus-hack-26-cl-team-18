@@ -1,7 +1,8 @@
 {
   "name": "segment-affinity",
+  "kpis": false,
   "beat": "Targeting: a bid reaches related segments at a discount, never overcharged",
-  "description": "Café Patio bids on Coffee and Fast Food only. A donut tags Pastry/Doughnuts, which the catalog pairs with Coffee (0.4): Patio bids at 2 CLP/AS, which can't clear the reserve on its own, so the house ad plays and nobody pays. Add a cup and the exact Coffee viewer wins it, with the donut eater counted as a partial reach. A soda next to a sandwich reaches Fast Food the same way. Alcohol never widens its reach, and a bicycle (nobody bids on the sports family) stays a house ad.",
+  "description": "Segment affinity on the seeded book (app/bootstrap/demo_catalog.py). A donut tags Pastry/Doughnuts: Miga bids on it exactly, and Café Patio reaches it through the catalog's Coffee ↔ Pastry pair at 0.4 (2 CLP/AS). Weak signals stay cheap and can't buy the screen alone. With a cup the exact bidders compete and the related reach only adds value. A soda next to a sandwich reaches the burger brands through the Fast Food ↔ Soft Drinks pair while Cola Sur bids exactly on both. Alcohol only ever matches exactly, a bicycle (nobody bids on the sports family) stays a house ad, and minor_likely leaves an unrestricted basket alone.",
   "steps": [
     {
       "scene": "empty",
@@ -17,16 +18,18 @@
           "donut": 0.95
         }
       },
-      "note": "related only: a weak, cheap match that can't buy the screen alone",
+      "note": "exact and related bids on one weak cue: both below reserve, nobody pays",
       "expect": {
         "brands": [],
         "matches": {
-          "Café Patio": ["related:Coffee>Pastry/Doughnuts"]
+          "Café Patio": ["related:Coffee>Pastry/Doughnuts"],
+          "Miga": ["exact:Pastry/Doughnuts>Pastry/Doughnuts"]
         },
         "excluded": {
-          "Café Patio": "below_reserve"
+          "Café Patio": "below_reserve",
+          "Miga": "below_reserve"
         },
-        "no_bid": ["Voltio", "Rayo", "Malta Sur"]
+        "no_bid": ["Voltio", "Rayo", "Malta Sur", "Brasa Burger"]
       }
     },
     {
@@ -38,17 +41,20 @@
           "cup": 0.9
         }
       },
-      "note": "exact + related on one bid: each segment counted once, at its own weight",
+      "note": "each segment counts once per bid: Patio's related reach adds to its exact Coffee",
       "expect": {
-        "brands": ["Café Patio"],
+        "brands": ["Miga"],
         "matches": {
-          "Café Patio": ["exact:Coffee>Coffee", "related:Coffee>Pastry/Doughnuts"]
+          "Café Patio": ["exact:Coffee>Coffee", "related:Coffee>Pastry/Doughnuts"],
+          "Miga": ["exact:Coffee>Coffee", "exact:Pastry/Doughnuts>Pastry/Doughnuts"]
+        },
+        "excluded": {
+          "Café Patio": "outbid"
         },
         "max_price_per_as": {
-          "Café Patio": "5"
+          "Miga": "4"
         },
-        "min_coverage": 0.5,
-        "max_coverage": 1.0
+        "min_coverage": 0.9
       }
     },
     {
@@ -60,15 +66,21 @@
           "sandwich": 0.9
         }
       },
-      "note": "a soft drink reaches the Fast Food bid through the curated combo pair",
+      "note": "a soft drink reaches the burger bid through the curated combo pair, at its weight",
       "expect": {
-        "brands": ["Café Patio"],
+        "brands": ["Brasa Burger"],
         "matches": {
-          "Café Patio": ["exact:Fast Food>Fast Food", "related:Fast Food>Carbonated Soft Drinks"]
+          "Brasa Burger": ["exact:Fast Food>Fast Food", "related:Fast Food>Carbonated Soft Drinks"],
+          "Cola Sur": ["exact:Carbonated Soft Drinks>Carbonated Soft Drinks"],
+          "Pacífica": ["related:Carbonated Soft Drinks>Fast Food"]
+        },
+        "excluded": {
+          "Toro Burger": "competitor"
         },
         "max_price_per_as": {
-          "Café Patio": "5"
-        }
+          "Brasa Burger": "7"
+        },
+        "max_coverage": 0.75
       }
     },
     {
@@ -85,6 +97,9 @@
         "brands": ["Malta Sur"],
         "matches": {
           "Malta Sur": ["exact:Alcoholic Beverages>Alcoholic Beverages"]
+        },
+        "max_price_per_as": {
+          "Malta Sur": "12"
         }
       }
     },
@@ -99,7 +114,26 @@
       "note": "a segment no campaign reaches, exactly or by affinity: house ad, nobody bids",
       "expect": {
         "brands": [],
-        "no_bid": ["Voltio", "Rayo", "Café Patio", "Malta Sur"]
+        "no_bid": ["Voltio", "Rayo", "Agua Cumbre", "Café Patio", "Miga", "Malta Sur"]
+      }
+    },
+    {
+      "scene": {
+        "people": 2,
+        "looking": 2,
+        "objects": {
+          "cake": 0.9
+        }
+      },
+      "note": "related only (Pastry ↔ Desserts 0.6): visible in the console, too weak to buy the screen",
+      "expect": {
+        "brands": [],
+        "matches": {
+          "Miga": ["related:Pastry/Doughnuts>Desserts and Baking"]
+        },
+        "excluded": {
+          "Miga": "below_reserve"
+        }
       }
     },
     {
@@ -112,9 +146,9 @@
         },
         "minor": true
       },
-      "note": "minor_likely blocks only restricted categories; the coffee basket still plays",
+      "note": "minor_likely blocks only restricted categories; the bakery still plays",
       "expect": {
-        "brands": ["Café Patio"],
+        "brands": ["Miga"],
         "matches": {
           "Café Patio": ["related:Coffee>Pastry/Doughnuts"]
         }

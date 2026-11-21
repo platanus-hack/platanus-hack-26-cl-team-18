@@ -81,6 +81,10 @@ class Scenario:
     beat: str
     description: str
     steps: tuple[Step, ...]
+    # False for a probe that scripts edge cases on purpose (weak cues, no-fills):
+    # its checks and the invariant gates still apply, but its decisions stay out
+    # of the product-KPI ratchets, which track a representative demo mix.
+    kpis: bool = True
 
 
 def load_scenes(path: Path = SCENES_FILE) -> dict[str, Scene]:
@@ -133,6 +137,7 @@ def parse_scenario(raw: dict[str, Any], scenes: dict[str, Scene]) -> Scenario:
         beat=raw.get("beat", ""),
         description=raw.get("description", ""),
         steps=tuple(steps),
+        kpis=bool(raw.get("kpis", True)),
     )
 
 

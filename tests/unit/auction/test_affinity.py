@@ -525,3 +525,13 @@ def test_nobody_looking_sells_nothing_whatever_the_table() -> None:
 def test_low_confidence_scales_an_approximate_value_linearly() -> None:
     fan = bidder(0, "bikes", {SPORTS: "10"})
     assert _valuation(fan, segment(CYCLING, 2, confidence=50)).value == 8
+
+
+def test_coverage_uses_the_strongest_reach_not_the_best_paying_route() -> None:
+    # Found by test_affinity_properties: the pricier broader bid sets the rate, but
+    # the campaign also bids on Cycling exactly, so the cyclists are fully reached.
+    fan = bidder(0, "bikes", {CYCLING: "1", SPORTS: "10"})
+    result = clear(opportunity(moment(segment(CYCLING, 2)), fan, affinity=AFFINITY))
+    (bid,) = result.bids
+    assert [(m.bid_segment, m.kind) for m in bid.matches] == [(SPORTS, MatchKind.BROADER)]
+    assert result.coverage == 1

@@ -30,8 +30,8 @@ from app.modules.auction.domain.rules import (
 )
 from app.modules.auction.domain.valuation import (
     held_basket_boost,
-    match_segments,
     price_ceiling,
+    reach_weights,
     valuate,
 )
 from app.modules.audience.domain.value_objects.segment import SegmentId
@@ -442,10 +442,10 @@ def _coverage(opportunity: AdOpportunity, winners: Sequence[Winner]) -> Decimal:
     present = frozenset(segment.segment_id for segment in opportunity.moment.segments)
     reached: dict[SegmentId, Decimal] = {}
     for winner in winners:
-        for match in match_segments(winner.bidder, present, opportunity.affinity):
-            reached[match.moment_segment] = max(
-                reached.get(match.moment_segment, ZERO), match.weight
-            )
+        for segment_id, weight in reach_weights(
+            winner.bidder, present, opportunity.affinity
+        ).items():
+            reached[segment_id] = max(reached.get(segment_id, ZERO), weight)
     covered = sum(
         (
             segment.viewer_count * reached[segment.segment_id]

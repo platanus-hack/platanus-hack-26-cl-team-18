@@ -86,6 +86,24 @@ def match_segments(
     return tuple(best[segment][1] for segment in sorted(best, key=lambda item: item.value))
 
 
+def reach_weights(
+    bidder: Bidder, present: frozenset[SegmentId], affinity: SegmentAffinity
+) -> dict[SegmentId, Decimal]:
+    """How fully this bidder targets each present segment: its strongest route's weight.
+
+    Pricing follows the best-*paying* route (`match_segments`), but reach is about
+    whether the campaign wants these viewers at all: a cheap exact bid on a segment
+    reaches it fully even when a pricier broader bid sets the rate.
+    """
+    table = affinity if bidder.broad_match and not bidder.age_restricted else _EXACT_ONLY
+    reach: dict[SegmentId, Decimal] = {}
+    for bid in bidder.segment_bids:
+        for link in table.reach(bid.segment_id):
+            if link.moment_segment in present:
+                reach[link.moment_segment] = max(reach.get(link.moment_segment, ZERO), link.weight)
+    return reach
+
+
 def valuate(bidder: Bidder, opportunity: AdOpportunity) -> Valuation:
     moment = opportunity.moment
     segments = {segment.segment_id: segment for segment in moment.segments}
