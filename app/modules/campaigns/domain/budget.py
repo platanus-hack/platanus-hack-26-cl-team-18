@@ -38,6 +38,12 @@ class BudgetAccount:
     spent: Money
     reservations: tuple[Reservation, ...] = ()
 
+    def __post_init__(self) -> None:
+        self._same_currency(self.budget)
+        self._same_currency(self.spent)
+        for reservation in self.reservations:
+            self._same_currency(reservation.amount)
+
     @classmethod
     def open(cls, campaign_id: CampaignId, budget: Money) -> BudgetAccount:
         return cls(
@@ -99,3 +105,5 @@ class BudgetAccount:
     def _same_currency(self, money: Money) -> None:
         if money.currency != self.budget.currency:
             raise BudgetCurrencyMismatch()
+        if money.amount < 0:
+            raise ValueError("Budget, reservations and charges cannot be negative")

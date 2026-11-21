@@ -92,16 +92,18 @@ class LiveCampaignBook:
         """
         short: set[CampaignId] = set()
         with self._lock:
+            updated: dict[CampaignId, BudgetAccount] = {}
             for campaign_id, amount in holds.items():
                 account = self._entry(campaign_id).account
                 if account is None:
                     continue
+                # Validate and stage before publishing any member of the basket.
+                extended = account.reserve(key, amount, at=at)
                 if account.available_for(key) < amount:
                     short.add(campaign_id)
                     continue
-                self._update(
-                    campaign_id, lambda current, held=amount: current.reserve(key, held, at=at)
-                )
+                updated[campaign_id] = extended
+            self._apply_accounts(updated)
         return frozenset(short)
 
     def entries(self) -> tuple[BookEntry, ...]:
@@ -131,16 +133,27 @@ class LiveCampaignBook:
 
     def reserve(self, key: str, holds: dict[CampaignId, Money], *, at: datetime) -> None:
         with self._lock:
-            for campaign_id, amount in holds.items():
-                self._update(
-                    campaign_id, lambda account, held=amount: account.reserve(key, held, at=at)
-                )
+            updated = {
+                campaign_id: account.reserve(key, amount, at=at)
+                for campaign_id, amount in holds.items()
+                if (account := self._entry(campaign_id).account) is not None
+            }
+            self._apply_accounts(updated)
             self._expire(at)
 
     def settle(self, key: str, charges: dict[CampaignId, Money]) -> None:
         with self._lock:
-            for campaign_id, charge in charges.items():
-                self._update(campaign_id, lambda account, paid=charge: account.settle(key, paid))
+            updated = {
+                campaign_id: account.settle(key, charge)
+                for campaign_id, charge in charges.items()
+                if (account := self._entry(campaign_id).account) is not None
+            }
+            self._apply_accounts(updated)
+
+    def _apply_accounts(self, accounts: dict[CampaignId, BudgetAccount]) -> None:
+        """Publish a fully validated basket under the caller's lock."""
+        for campaign_id, account in accounts.items():
+            self._update(campaign_id, lambda current, updated=account: updated)
 
     def release(self, key: str) -> None:
         with self._lock:

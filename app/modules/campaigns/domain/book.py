@@ -93,6 +93,8 @@ class Bidder:
             raise ValueError("A brand cannot be its own partner")
         if any(bonus.partner not in self.partners for bonus in self.basket_bonuses):
             raise ValueError("A basket bonus requires the partner on the allow-list")
+        if len({bonus.partner for bonus in self.basket_bonuses}) != len(self.basket_bonuses):
+            raise ValueError("A bidder offers at most one basket bonus per partner")
 
     def rate_for(self, segment_id: SegmentId) -> MoneyRate | None:
         return next((bid.rate for bid in self.segment_bids if bid.segment_id == segment_id), None)

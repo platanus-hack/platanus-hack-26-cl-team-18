@@ -527,3 +527,34 @@ Also: the console says "Charged $0: nobody looked" only when attention is
 zero, not when a tiny charge rounds to $0. Covered paths that had no tests
 before: concurrent slider calls (settle on the highest seq), a stock-out of a
 held winner, budget exhaustion during a long play, and both engine-down orders.
+
+### 10.4 Mixed boundaries and rejected budget updates
+
+Additional regression coverage lives in:
+
+- `tests/unit/auction/test_mixed_scenarios.py`: 72 combinations of pricing
+  rule, minor safety, stock, budgets just below/at/above exposure, and reserve
+  boundaries. Inactive and foreign-currency bidders compete in every case.
+  Another 150 generated cases combine speech, context, held-product relevance,
+  live multipliers and basket bonuses, checking contractual price ceilings,
+  individual rationality and independence from bidder order.
+- `tests/unit/auction/test_input_boundaries.py`: reject nonpositive/nonfinite
+  play exposure, duplicate campaign entries, conflicting category multipliers
+  and duplicate partner bonuses before clearing. These previously admitted
+  ambiguous inputs, inflated bonus totals and invalid budget exposure.
+- `tests/unit/campaigns/test_book_atomicity.py`: a rejected second campaign
+  must leave the first campaign and the book version unchanged, across
+  reservations, settlement and lease extensions. Updates now stage validated
+  immutable accounts before publishing them under the existing lock. Negative
+  budgets, reservations and charges are rejected; they previously allowed
+  accidental budget credit. Concurrent charges cannot consume another screen's
+  reservation or exceed the shared campaign budget.
+- `tests/unit/api/test_bidding_mixed_scenarios.py`: malformed bids leave the
+  book unchanged; slider endpoints accept inclusive limits and deduplicate
+  retries; stock-out supersedes a pending bidding-war swap, followed by an
+  immediate minor-safety swap through the real HTTP/WebSocket loop.
+
+These checks supplement the live scenario/soak and pipeline evaluations.
+They do not establish camera-to-TV latency, live provider reliability,
+restart recovery or production database durability; those require separate
+hardware, failure-recovery and Postgres exercises.

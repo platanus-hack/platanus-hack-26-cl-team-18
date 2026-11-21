@@ -115,6 +115,14 @@ class AdOpportunity:
     incumbent: frozenset[CampaignId] | None = None
 
     def __post_init__(self) -> None:
+        if not self.max_play_seconds.is_finite() or self.max_play_seconds <= ZERO:
+            raise ValueError("Maximum play duration must be positive and finite")
+        if len({bidder.campaign_id for bidder in self.bidders}) != len(self.bidders):
+            raise ValueError("Each campaign may enter an opportunity only once")
+        if len({item.category for item in self.category_multipliers}) != len(
+            self.category_multipliers
+        ):
+            raise ValueError("Context multiplier categories must be unique")
         if not self.layouts:
             raise ValueError("An opportunity needs at least one layout")
         if len({layout.name for layout in self.layouts}) != len(self.layouts):
