@@ -89,6 +89,12 @@
     {"id": "big-group", "beat": "Basket ad", "basket": ["Voltio", "Café Patio"], "looking": 8, "people": 9,
      "segments": [{"id": "FIT", "viewers": 6}],
      "expect": {"angle": "post_workout", "offer": "Pack x4 post-entreno", "price": "$10.990", "must_contain": ["grupo"], "must_not": ["los 6", "los 8"]}},
+    {"id": "crowd-of-15", "beat": "Basket ad", "basket": ["Voltio", "Café Patio"], "looking": 15, "people": 18,
+     "segments": [{"id": "FIT", "viewers": 10}],
+     "expect": {"angle": "post_workout", "offer": "Pack x4 post-entreno", "price": "$10.990", "must_contain": ["grupo"], "must_not": ["los 15", "los 4"]}},
+    {"id": "five-at-a-4-pack", "beat": "Basket ad", "basket": ["Voltio", "Café Patio"], "looking": 5,
+     "segments": [{"id": "FIT", "viewers": 5}],
+     "expect": {"angle": "post_workout", "offer": "Pack x4 post-entreno", "price": "$10.990", "must_contain": ["grupo"], "must_not": ["los 5", "los 4"]}},
     {"id": "hungry-group-of-4", "beat": "It heard me", "basket": ["Brasa", "Voltio"], "looking": 4,
      "segments": [{"id": "FOOD", "viewers": 2, "speech": 85}, {"id": "FIT", "viewers": 2}],
      "expect": {"angle": "hunger", "offer": "Pack x4 bajón", "price": "$16.990", "must_contain": ["los 4", "hambre|bajón|comer"]}}

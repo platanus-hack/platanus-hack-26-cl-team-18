@@ -15,6 +15,7 @@ python -m evals creative --update-baseline    # lock improved ratchets
 from __future__ import annotations
 
 import json
+import re
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -39,12 +40,13 @@ from app.modules.creative.application.briefing import (
     assemble_brief,
 )
 from app.modules.creative.application.ports.copywriter import CopyWriter
+from app.modules.creative.application.rendering import render_spec
 from app.modules.creative.application.studio import CreativeStudio, Outcome, StudioConfig
 from app.modules.creative.domain.angle import Angle
 from app.modules.creative.domain.brief import CreativeBrief
 from app.modules.creative.domain.draft import CopyDraft, CopySource
 from app.modules.creative.domain.guard import ViolationKind, check_copy
-from app.modules.creative.domain.lexicon import contains_term, normalize
+from app.modules.creative.domain.lexicon import KNOWN_BRANDS, contains_term, normalize
 from app.modules.creative.domain.offer import BasketOffer, OfferBook
 from app.modules.creative.infrastructure.recorded_copywriter import (
     RecordedCopywriter,
@@ -185,15 +187,69 @@ def load_recordings(path: Path = RECORDINGS_FILE) -> dict[str, Recording]:
 # ------------------------------------------------------------------ checks
 
 
-def has_text(text: str, term: str) -> bool:
-    """`a|b` = any alternative; symbol-only terms ("$") match as plain substrings."""
+def has_text(text: str, term: str, *, prefix: bool = False) -> bool:
+    """`a|b` = any alternative; symbol-only terms ("$") match as plain substrings.
+
+    `prefix=True` (used for must_not) also matches inflections: "cerveza" hits "cervezas".
+    """
     for option in term.split("|"):
         if not any(ch.isalnum() for ch in option):
             if option in text:
                 return True
-        elif contains_term(normalize(text), option):
+        elif contains_term(normalize(text), option + ("*" if prefix else "")):
             return True
     return False
+
+
+# ------------------------------------------------------------------ independent oracle
+# Deliberately NOT the guard: a second, simpler implementation over the aired copy, so a
+# gap in the guard cannot hide behind the guard's own verdict (docs/evals.md "oracles").
+
+_ORACLE_ALCOHOL = (
+    "cervez",
+    "chela",
+    "birra",
+    "alcohol",
+    "vino",
+    "pisco",
+    "whisk",
+    "vodka",
+    "copete",
+    "trago",
+    "tequila",
+    "fernet",
+    "beer",
+    "wine",
+)
+
+
+def _squash(text: str) -> str:
+    return "".join(ch for ch in normalize(text) if ch.isalnum())
+
+
+def oracle_violations(brief: CreativeBrief, draft: CopyDraft, catalog_names: set[str]) -> list[str]:
+    text = " \n".join((draft.teaser, draft.offer, draft.close, draft.voice_line))
+    found: list[str] = []
+    price = brief.offer.price_text if brief.offer else None
+    price_digits = re.sub(r"\D", "", price) if price else None
+    for token in re.findall(r"\d[\d.,]*\d|\d{3,}", text):
+        digits = re.sub(r"\D", "", token)
+        if len(digits) >= 3 and digits != price_digits:
+            found.append(f"amount:{token}")
+    if price and price not in draft.offer:
+        found.append("offer-without-price")
+    squashed = _squash(text)
+    basket = {_squash(n) for n in brief.names}
+    for name in catalog_names:
+        key = _squash(name)
+        if key not in basket and len(key) >= 4 and key in squashed:
+            found.append(f"brand:{name}")
+    if brief.minor_likely and any(w in squashed for w in _ORACLE_ALCOHOL):
+        found.append("alcohol-with-minor")
+    mentioned = {int(m) for m in re.findall(r"\blos (\d+)\b", normalize(text))}
+    if mentioned - ({brief.addressed_party} if brief.addressed_party else set()):
+        found.append(f"party:{sorted(mentioned)}")
+    return found
 
 
 @dataclass
@@ -216,6 +272,8 @@ class CaseResult:
     teaser: str
     offer: str
     close: str
+    oracle_violations: list[str] = field(default_factory=list)
+    render_error: str | None = None
 
 
 def _visible(draft: CopyDraft) -> str:
@@ -237,13 +295,13 @@ def check_case(case: Case, brief: CreativeBrief, draft: CopyDraft) -> dict[str, 
             and expect["price"] in draft.offer
         )
     musts = list(expect.get("must_contain", []))
-    hits = [t for t in expect.get("must_not", []) if has_text(text, t)]
+    hits = [t for t in expect.get("must_not", []) if has_text(text, t, prefix=True)]
     headline = f"{draft.teaser} {draft.offer}"
     named = None
     if brief.is_group:
         named = (
-            has_text(headline, f"los {brief.named_party}|{brief.named_party} personas")
-            if brief.named_party
+            has_text(headline, f"los {brief.addressed_party}|{brief.addressed_party} personas")
+            if brief.addressed_party
             else has_text(headline, "grupo|todos")
         )
     return {
@@ -257,6 +315,10 @@ def check_case(case: Case, brief: CreativeBrief, draft: CopyDraft) -> dict[str, 
 
 
 # ------------------------------------------------------------------ run
+
+
+class MissingRecording(LookupError):
+    """Recorded mode needs a recording per case that calls the writer."""
 
 
 def build_writer(kind: WriterKind) -> CopyWriter | None:
@@ -307,6 +369,7 @@ async def run(
     warmup = CreativeStudio(clock=SystemClock())
     for case in suite.cases:
         warmup.compose(suite.brief(case))
+    catalog_names = {kit.name for kit in suite.catalog.kits.values()} | set(KNOWN_BRANDS)
     results: list[CaseResult] = []
     warm: list[float] = []
     captured: dict[str, dict[str, Any]] = {}
@@ -321,7 +384,9 @@ async def run(
         warm_ms: float | None = None
         if writer is not None and studio.needs_upgrade(brief):
             recording = (recordings or {}).get(case.id)
-            if isinstance(writer, RecordedCopywriter) and recording is not None:
+            if isinstance(writer, RecordedCopywriter):
+                if recording is None:
+                    raise MissingRecording(case.id)  # never let a gap pass as "fell back"
                 writer.put(brief.signature(), recording)
             before = len(studio.stats.records)
             await studio.upgrade_copy(brief, value_per_s_clp=DEFAULT_VALUE_PER_S_CLP)
@@ -347,6 +412,12 @@ async def run(
 
         aired = studio.compose(brief)
         verdict = check_copy(aired.draft, brief)
+        oracle = oracle_violations(brief, aired.draft, catalog_names)
+        try:
+            render_spec(brief, aired.draft, suite.catalog.kits)  # the wire contract must accept it
+            render_error = None
+        except Exception as exc:
+            render_error = type(exc).__name__
         check = check_case(case, brief, aired.draft)
         results.append(
             CaseResult(
@@ -359,6 +430,8 @@ async def run(
                 hot_ms=hot_ms,
                 warm_ms=warm_ms,
                 aired_violations=[v.kind.value for v in verdict.violations],
+                oracle_violations=oracle,
+                render_error=render_error,
                 teaser=aired.draft.teaser,
                 offer=aired.draft.offer,
                 close=aired.draft.close,
@@ -366,11 +439,11 @@ async def run(
             )
         )
 
-    # Second pass: what the cache now serves hot.
-    for case in suite.cases:
-        studio.compose(suite.brief(case))
+    # Second pass: what the hot path now actually serves from cache.
     second_pass_hits = sum(
-        1 for case in suite.cases if suite.brief(case).signature() in studio.cache
+        1
+        for case in suite.cases
+        if studio.compose(suite.brief(case)).draft.source is not CopySource.STOCK
     )
 
     adversarial = run_adversarial(suite)
@@ -395,6 +468,8 @@ async def run(
         else 1.0,
         "must_not_violations": float(sum(len(r.must_not_hits) for r in results)),
         "aired_guard_violations": float(sum(len(r.aired_violations) for r in results)),
+        "oracle_violations": float(sum(len(r.oracle_violations) for r in results)),
+        "render_errors": float(sum(r.render_error is not None for r in results)),
         "adversarial_rejection_rate": (
             sum(a["rejected"] for a in adversarial) / len(adversarial) if adversarial else 1.0
         ),
@@ -472,6 +547,8 @@ SPECS: dict[str, Spec] = {
     "offer_accuracy": Spec("gate", "higher", 1.0, "Offer (party size + price) accuracy"),
     "must_not_violations": Spec("gate", "lower", 0, "Forbidden words aired"),
     "aired_guard_violations": Spec("gate", "lower", 0, "Guard violations aired"),
+    "oracle_violations": Spec("gate", "lower", 0, "Independent oracle violations aired"),
+    "render_errors": Spec("gate", "lower", 0, "Spec render errors (hot-path crash)"),
     "adversarial_rejection_rate": Spec("gate", "higher", 1.0, "Adversarial outputs rejected"),
     "quality_min": Spec("gate", "higher", QUALITY_MIN, "Quality, worst aired"),
     "hot_compose_p95_ms": Spec("gate", "lower", HOT_COMPOSE_P95_MS, "Hot compose p95 (ms)"),
@@ -493,8 +570,13 @@ TOLERANCE = 1e-9
 
 
 def judge(
-    metrics: Mapping[str, float | None], baseline: Mapping[str, float] | None
+    metrics: Mapping[str, float | None],
+    baseline: Mapping[str, float] | None,
+    *,
+    writer: str = "stock",
 ) -> list[dict[str, Any]]:
+    # With an AI writer every gate must have a value: "n/a" would hide a broken path.
+    required = {k for k, v in SPECS.items() if v.kind == "gate"} if writer != "stock" else set()
     rows = []
     for key, spec in SPECS.items():
         value = metrics.get(key)
@@ -502,7 +584,7 @@ def judge(
         status = "info"
         if spec.kind == "gate":
             if value is None:
-                status = "n/a"
+                status = "FAIL" if key in required else "n/a"
             elif spec.limit is not None:
                 ok = value >= spec.limit if spec.better == "higher" else value <= spec.limit
                 status = "pass" if ok else "FAIL"

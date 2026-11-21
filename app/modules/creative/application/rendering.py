@@ -50,7 +50,7 @@ def render_spec(
                 price=MoneyDTO(
                     amount=str(offer.price.amount), currency=offer.price.currency.value.value
                 ),
-                party_size=max(brief.party, offer.min_party, 1),
+                party_size=offer.min_party,  # the group the approved price is for (<= 12)
             )
             if offer is not None
             else None

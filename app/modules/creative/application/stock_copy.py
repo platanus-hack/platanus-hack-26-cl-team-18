@@ -49,7 +49,7 @@ class StockCopywriter:
     def compose(self, brief: CreativeBrief) -> CopyDraft:
         names = _join(brief.names)
         angle = brief.angle.angle
-        n = brief.named_party
+        n = brief.addressed_party
         held = brief.held_brand or brief.names[0]
         partners = tuple(name for name in brief.names if name != held) or brief.names
         if angle is Angle.COMPLETE_BASKET and brief.held_brand is None:

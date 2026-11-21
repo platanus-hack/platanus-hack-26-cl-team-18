@@ -12,7 +12,7 @@ WALL_CLOCK = frozenset({"hot_compose_p95_ms"})
 @pytest.mark.parametrize("writer", ["stock", "recorded"])
 def test_offline_creative_eval_passes_every_gate(writer: runner.WriterKind) -> None:
     report = anyio.run(lambda: runner.run(writer))
-    rows = runner.judge(report.metrics, runner.load_baseline(writer))
+    rows = runner.judge(report.metrics, runner.load_baseline(writer), writer=writer)
     # Wall-clock gates depend on machine load; `make eval-creative` gates them, not unit tests.
     gates = {r["metric"]: r for r in rows if r["kind"] == "gate" and r["metric"] not in WALL_CLOCK}
     failing = {k: r["value"] for k, r in gates.items() if r["status"] == "FAIL"}

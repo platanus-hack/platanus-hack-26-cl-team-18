@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 import time
 from collections import OrderedDict, deque
 from collections.abc import Callable, Iterable
@@ -44,7 +45,7 @@ from app.modules.creative.domain.cost import (
     plan_upgrades,
 )
 from app.modules.creative.domain.draft import CopyDraft, CopySource
-from app.modules.creative.domain.guard import ViolationKind
+from app.modules.creative.domain.guard import ViolationKind, check_copy
 from app.modules.creative.domain.scoring import QualityScore, score_draft
 
 logger = logging.getLogger(__name__)
@@ -152,6 +153,9 @@ class CreativeStudio:
         self.disabled_by: CopyFailure | None = None
         self.stats = StudioStats()
         self._memo: OrderedDict[CreativeBrief, tuple[CopyDraft, QualityScore]] = OrderedDict()
+        # compose() runs on worker threads (under the demo lock); upgrades run on the event
+        # loop thread. One lock guards the memo, the cache and the ledger between them.
+        self._lock = threading.RLock()
 
     @property
     def ai_enabled(self) -> bool:
@@ -161,18 +165,19 @@ class CreativeStudio:
 
     def compose(self, brief: CreativeBrief) -> Composed:
         started = self._timer()
-        memo = self._memo.get(brief)
-        if memo is None:
-            memo = self._decide(brief)
-            self._memo[brief] = memo
-            while len(self._memo) > MEMO_ENTRIES:
-                self._memo.popitem(last=False)
-        draft, score = memo
-        if draft.source is not CopySource.STOCK:
-            self.stats.cache_hits += 1
-            self.cache.stats.hits += 1
-            draft = draft.cached()
-        self.stats.composed += 1
+        with self._lock:
+            memo = self._memo.get(brief)
+            if memo is None:
+                memo = self._decide(brief)
+                self._memo[brief] = memo
+                while len(self._memo) > MEMO_ENTRIES:
+                    self._memo.popitem(last=False)
+            draft, score = memo
+            if draft.source is not CopySource.STOCK:
+                self.stats.cache_hits += 1
+                self.cache.stats.hits += 1
+                draft = draft.cached()
+            self.stats.composed += 1
         return Composed(
             brief=brief, draft=draft, score=score, compose_ms=(self._timer() - started) * 1000
         )
@@ -218,7 +223,8 @@ class CreativeStudio:
 
     def needs_upgrade(self, brief: CreativeBrief) -> bool:
         """Hot-path check: is there anything for the warm path to do?"""
-        return self.ai_enabled and brief.signature() not in self.cache
+        with self._lock:
+            return self.ai_enabled and brief.signature() not in self.cache
 
     async def upgrade_copy(
         self, brief: CreativeBrief, *, value_per_s_clp: Decimal
@@ -230,7 +236,8 @@ class CreativeStudio:
             self._record(signature, "none", Outcome.DISABLED, 0.0, UsdCost.zero())
             return None
         if (cached := self.cache.get(signature)) is not None:
-            return cached
+            # Same signature, possibly a different brief (e.g. 7 vs 9 people): re-check.
+            return cached if check_copy(cached, brief).passed else None
         decision = self.plan_copy(brief, value_per_s_clp=value_per_s_clp)
         if not decision.approved:
             self._record(signature, writer.name, Outcome.BUDGET_DENIED, 0.0, UsdCost.zero())
@@ -262,6 +269,18 @@ class CreativeStudio:
             )
             logger.warning("ai copy failed", extra={"source": exc.failure.value})
             return None
+        except Exception:
+            latency = (self._timer() - started) * 1000
+            self._record(
+                signature,
+                writer.name,
+                Outcome.FAILED,
+                latency,
+                UsdCost.zero(),
+                failure=CopyFailure.UNAVAILABLE,
+            )
+            logger.exception("ai copy writer raised", extra={"source": writer.name})
+            return None
         latency = (self._timer() - started) * 1000
 
         cost = self._usage_cost(written.usage, written.draft)
@@ -274,8 +293,9 @@ class CreativeStudio:
             outcome = Outcome.LOWER_SCORE
         else:
             outcome = Outcome.ACCEPTED
-            self.cache.put(signature, written.draft)
-            self._memo.clear()  # briefs sharing this signature now air the AI draft
+            with self._lock:
+                self.cache.put(signature, written.draft)
+                self._memo.clear()  # briefs sharing this signature now air the AI draft
         self._record(
             signature,
             writer.name,
@@ -302,7 +322,8 @@ class CreativeStudio:
         return sum(results)
 
     def record_spend(self, kind: GenerationKind, cost: UsdCost) -> None:
-        self.ledger.record(kind, cost, at=self._clock.now_utc())
+        with self._lock:
+            self.ledger.record(kind, cost, at=self._clock.now_utc())
 
     # ------------------------------------------------------------------ internals
 
@@ -318,7 +339,8 @@ class CreativeStudio:
 
     def _spend(self, cost: UsdCost) -> None:
         if cost.micros:
-            self.ledger.record(GenerationKind.COPY, cost, at=self._clock.now_utc())
+            with self._lock:
+                self.ledger.record(GenerationKind.COPY, cost, at=self._clock.now_utc())
 
     def _record(
         self,

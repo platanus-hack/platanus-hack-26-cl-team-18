@@ -8,6 +8,7 @@ back to stock copy and the verdict is kept for the console and the eval.
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -17,6 +18,7 @@ from app.modules.creative.domain.draft import CopyDraft, Stage
 from app.modules.creative.domain.lexicon import (
     FORBIDDEN_CLAIMS,
     GROUP_WORDS,
+    KNOWN_BRANDS,
     NUMBER_WORDS,
     RESTRICTED_FOR_MINORS,
     SENSITIVE_OR_CREEPY,
@@ -38,6 +40,7 @@ class ViolationKind(StrEnum):
     UNAPPROVED_CLAIM = "unapproved_claim"
     SENSITIVE_INFERENCE = "sensitive_inference"
     CONTACT_OR_LINK = "contact_or_link"
+    UNSAFE_CHARACTERS = "unsafe_characters"  # hidden/look-alike characters that dodge the rules
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -61,6 +64,25 @@ class GuardVerdict:
 
 _PRICE = re.compile(r"\$\s?\d[\d.,]*|\b\d{1,3}(?:\.\d{3})+\s?(?:pesos|clp)\b", re.IGNORECASE)
 _PERCENT = re.compile(r"\d+\s?%")
+# Any amount-looking number (>= 100) must be the approved price: "9990 pesos", "12.990".
+_AMOUNT = re.compile(r"(?<![\w.,])\d[\d.,]*\d(?![\w])|(?<![\w.,])\d{3,}(?![\w])")
+# Money said in words or slang dodges the digit check: never allowed unless approved.
+_SPELLED_MONEY = ("mil", "millon*", "luca*", "luka*", "cientos", "quinientos")
+# Promo mechanics (2x1, 3x2) are claims: only if the brand approved them.
+_PROMO = re.compile(r"\b\d\s?x\s?\d\b")
+_THOUSANDS = re.compile(r"\b\d+\s?k\b|\b\d+\s?lucas?\b")  # "9k", "9 lucas"
+_SOCIAL = re.compile(r"\b(?:instagram|insta|tiktok|facebook|whatsapp|twitter|youtube)\b")
+
+
+def brand_mentioned(normalized: str, name: str) -> bool:
+    """A brand at a word start, letters possibly split by separators ("R-a-y-o", "Rayos")."""
+    letters = [ch for ch in normalize(name) if ch.isalnum()]
+    if not letters:
+        return False
+    pattern = r"[\W_]*".join(re.escape(ch) for ch in letters)
+    return re.search(rf"(?<![a-z0-9]){pattern}", normalized) is not None
+
+
 _LINK = re.compile(r"https?://|www\.|\.(?:cl|com|net)\b|@\w|\+?\d[\d\s-]{7,}\d")
 _PARTY_NUMBER = r"(\d{1,2}|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho)"
 _PARTY_PATTERNS = (
@@ -92,6 +114,19 @@ class CopyGuard(Specification[tuple[CopyDraft, CreativeBrief]]):
     def is_satisfied_by(self, candidate: tuple[CopyDraft, CreativeBrief]) -> bool:
         draft, brief = candidate
         return check_copy(draft, brief).passed
+
+
+def _unsafe_characters(text: str) -> str | None:
+    """Invisible (Cf/Cc) or non-Latin letters: zero-width tricks, Cyrillic look-alikes, emoji."""
+    for ch in text:
+        category = unicodedata.category(ch)
+        if category in {"Cf", "Cc", "Co", "Cs"} and ch not in "\n":
+            return f"U+{ord(ch):04X}"
+        if category.startswith("L") and not unicodedata.name(ch, "").startswith("LATIN"):
+            return ch
+        if category == "So":  # emoji and pictographs
+            return ch
+    return None
 
 
 def check_copy(draft: CopyDraft, brief: CreativeBrief) -> GuardVerdict:
@@ -144,18 +179,45 @@ def check_copy(draft: CopyDraft, brief: CreativeBrief) -> GuardVerdict:
                 )
         if _LINK.search(text):
             out.append(Violation(kind=ViolationKind.CONTACT_OR_LINK, where=where))
-        for name in sorted(brief.avoid_names):
-            if contains_term(norm, name):
+        if (bad := _unsafe_characters(text)) is not None:
+            out.append(Violation(kind=ViolationKind.UNSAFE_CHARACTERS, where=where, detail=bad))
+        priced = {m.span() for m in _PRICE.finditer(text)}
+        for match in _AMOUNT.finditer(text):
+            if any(a <= match.start() < b for a, b in priced):
+                continue  # already checked as a $ price
+            amount = _digits(match.group(0))
+            if len(amount) >= 3 and amount != approved_price:
+                out.append(
+                    Violation(kind=ViolationKind.PRICE_CHANGED, where=where, detail=match.group(0))
+                )
+        if (term := any_term(norm, _SPELLED_MONEY)) and not contains_term(approved_text, term):
+            out.append(Violation(kind=ViolationKind.PRICE_CHANGED, where=where, detail=term))
+        for match in _PROMO.finditer(norm):
+            if match.group(0).replace(" ", "") not in approved_text.replace(" ", ""):
+                out.append(
+                    Violation(
+                        kind=ViolationKind.UNAPPROVED_CLAIM, where=where, detail=match.group(0)
+                    )
+                )
+        basket = {normalize(n) for n in brief.names}
+        for name in sorted(brief.avoid_names | set(KNOWN_BRANDS)):
+            if normalize(name) not in basket and brand_mentioned(norm, name):
                 out.append(Violation(kind=ViolationKind.COMPETITOR_NAME, where=where, detail=name))
+        if _SOCIAL.search(norm):
+            out.append(Violation(kind=ViolationKind.CONTACT_OR_LINK, where=where, detail="social"))
+        if (m := _THOUSANDS.search(norm)) and not contains_term(approved_text, m.group(0)):
+            out.append(Violation(kind=ViolationKind.PRICE_CHANGED, where=where, detail=m.group(0)))
         if brief.minor_likely and (term := any_term(norm, RESTRICTED_FOR_MINORS)):
             out.append(Violation(kind=ViolationKind.RESTRICTED_FOR_MINOR, where=where, detail=term))
         if (term := any_term(norm, FORBIDDEN_CLAIMS)) and not contains_term(approved_text, term):
             out.append(Violation(kind=ViolationKind.UNAPPROVED_CLAIM, where=where, detail=term))
         if term := any_term(norm, SENSITIVE_OR_CREEPY):
             out.append(Violation(kind=ViolationKind.SENSITIVE_INFERENCE, where=where, detail=term))
-        allowed_party = {brief.named_party or brief.party} | party_mentions(approved_text)
-        if offer is not None:
-            allowed_party.add(offer.min_party)
+        # Only the exact group the offer is priced for may be named (or numbers the brand
+        # itself put in the offer label/text): never "Para los 5" next to a 4-pack price.
+        allowed_party = party_mentions(approved_text)
+        if brief.addressed_party is not None:
+            allowed_party.add(brief.addressed_party)
         for size in sorted(party_mentions(norm) - allowed_party):
             out.append(
                 Violation(kind=ViolationKind.PARTY_MISMATCH, where=where, detail=f"says {size}")

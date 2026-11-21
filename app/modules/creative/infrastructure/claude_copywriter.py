@@ -55,7 +55,8 @@ You receive a JSON brief and return four lines in Chilean Spanish:
 - voice_line: one sentence a narrator says aloud, natural to speak, no symbols.
 
 Hard rules (copy that breaks one never airs):
-1. Prices: write the offer price exactly as `offer.price`. Never write any other price, \
+1. Prices: write the offer price exactly as `offer.price`, in digits, in every line \
+that mentions it (the voice line too: "$8.990", never "ocho mil"). Never write any other price, \
 percentage, discount, "gratis" or "regalo" unless it is in the offer or `claims`.
 2. Brands: name every brand in `brands` across teaser, offer and close; name them all in \
 the offer line when you can. Never name anything in `avoid`.
@@ -92,8 +93,8 @@ def brief_payload(brief: CreativeBrief) -> dict[str, object]:
         "brands": [{"name": b.name, "category": b.category} for b in brief.brands],
         "party": brief.party,
         "address_group_as": (
-            f"para los {brief.named_party}"
-            if brief.named_party and brief.is_group
+            f"para los {brief.addressed_party}"
+            if brief.addressed_party
             else "para todo el grupo"
             if brief.is_group
             else None
@@ -159,6 +160,8 @@ class ClaudeCopywriter:
             raise CopyWriterError(CopyFailure.REFUSED) from exc
         except ProviderOutputIncomplete as exc:
             raise CopyWriterError(CopyFailure.INVALID_OUTPUT) from exc
+        except Exception as exc:
+            raise CopyWriterError(CopyFailure.UNAVAILABLE) from exc
         try:
             out = parse_pydantic_json(response.output, _CopyOut)
         except Exception as exc:

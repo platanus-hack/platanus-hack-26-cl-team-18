@@ -44,7 +44,7 @@ BETTER = CopyDraft(
     teaser="¿Bajón los 4? Voltio + Café Patio",
     offer="Para los 4 · Pack x4 post-entreno: Voltio + Café Patio por $10.970",
     close="Muestra el QR en caja · válido 10 min",
-    voice_line="Para los 4: Voltio y Café Patio por diez mil novecientos setenta",
+    voice_line="Para los 4: Voltio y Café Patio por $10.970",
     source=CopySource.AI,
     model_version="fake@low",
 )
@@ -191,3 +191,26 @@ def test_usd_cost_is_exact_micros() -> None:
     assert str(UsdCost.create("0.0002")) == "$0.000200"
     with pytest.raises(TypeError):
         UsdCost.create(0.1)  # type: ignore[arg-type]
+
+
+def test_a_crowd_renders_with_the_largest_offer_and_no_count() -> None:
+    """Regression: 15 people looking crashed render_spec (CreativeOffer.party_size <= 12)."""
+    from app.modules.campaigns.domain.book import BrandKit
+    from app.modules.creative.application.rendering import render_spec
+    from tests.unit.creative.factory import BRANDS
+
+    kits = {
+        b: BrandKit(
+            brand_id=b,
+            name=v.name,
+            logo_url="/l.png",
+            stock_copy=v.stock_copy,
+            accent_color="#ffffff",
+        )
+        for b, v in BRANDS.items()
+    }
+    crowd = brief(party=15, angle=Angle.HUNGER)
+    composed = studio().compose(crowd)
+    spec = render_spec(crowd, composed.draft, kits)
+    assert spec.offer is not None and spec.offer.party_size == 4
+    assert "todo el grupo" in spec.stages[1].copy_text and composed.score.verdict.passed

@@ -93,13 +93,23 @@ class CreativeBrief:
         """The number the copy may say ("para los 4"); None = too many to count aloud."""
         return self.party if self.party <= MAX_NAMED_PARTY else None
 
+    @property
+    def addressed_party(self) -> int | None:
+        """The number the copy says ("para los 3"): only when the offer is priced for exactly
+        this group (or there is no offer). Otherwise the copy says "todo el grupo"."""
+        if not self.is_group or self.named_party is None:
+            return None
+        if self.offer is not None and self.offer.min_party != self.party:
+            return None
+        return self.party
+
     def signature(self) -> str:
         """Cache key: two briefs with the same signature deserve the same copy."""
         material = "\x1f".join(
             (
                 ",".join(sorted(str(b) for b in self.brand_ids)),
                 self.layout,
-                str(self.named_party or "group"),
+                str(self.addressed_party or ("group" if self.is_group else self.party)),
                 self.angle.angle.value,
                 str(self.offer.min_party) if self.offer else "-",
                 self.offer.price_text if self.offer else "-",
