@@ -1,0 +1,11 @@
+{
+  "name": "basket-ad",
+  "beat": "2. Basket ad",
+  "description": "A group with fitness and coffee cues gets one joint offer; the competing energy brand is excluded and the group standing still never re-auctions.",
+  "steps": [
+    {"scene": "empty", "expect": {"brands": []}, "note": "first moment: house ad"},
+    {"scene": "co-brand", "hold": 3, "expect": {
+      "brands": ["Voltio", "Café Patio"], "layout": "duo", "min_coverage": 1.0,
+      "copy_contains": "$3.490", "excluded": {"Rayo": "competitor"}}}
+  ]
+}

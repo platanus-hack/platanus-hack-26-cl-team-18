@@ -60,6 +60,8 @@ IO_COLLABORATOR_SUFFIXES = (
 # never by deleting the original row.
 APPEND_ONLY_TABLES = {
     "outbox_event",
+    "auction",
+    "charge",
     # Add tables whose rows are history: audit log, sensor readings, ...
 }
 
@@ -69,6 +71,8 @@ APPEND_ONLY_TABLES = {
 # on the statement or in the lines just above it. Tables with a real lifecycle
 # (`campaign`, `screen`, `outbox_event`, ...) are deliberately absent.
 IMMUTABLE_ROW_TABLES: set[str] = {
+    "auction",
+    "charge",
     # Add tables whose rows are immutable facts, e.g. raw sensor readings.
 }
 

@@ -14,19 +14,35 @@ sys.path.insert(0, str(ROOT))
 
 from app.contract.codegen import OUTPUT_PATH, render  # noqa: E402
 
+EDGE_COPY = "edge/agent/contract.py"
+SOURCE = "app/contract/messages.py"
+
+
+def outputs() -> dict[str, str]:
+    """Every generated artifact: the TS zod module and the agent's vendored copy."""
+    return {
+        OUTPUT_PATH: render(),
+        EDGE_COPY: (ROOT / SOURCE).read_text(encoding="utf-8"),
+    }
+
 
 def main(argv: list[str]) -> int:
-    target = ROOT / OUTPUT_PATH
-    fresh = render()
+    stale = []
+    for rel, fresh in outputs().items():
+        target = ROOT / rel
+        current = target.read_text(encoding="utf-8") if target.exists() else None
+        if "--check" in argv:
+            if current != fresh:
+                stale.append(rel)
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(fresh, encoding="utf-8")
+        print(f"wrote {rel}")
+    if stale:
+        print(f"stale: {', '.join(stale)}: run `make contract`", file=sys.stderr)
+        return 1
     if "--check" in argv:
-        if not target.exists() or target.read_text(encoding="utf-8") != fresh:
-            print(f"{OUTPUT_PATH} is stale: run `make contract`", file=sys.stderr)
-            return 1
-        print(f"{OUTPUT_PATH} is up to date")
-        return 0
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(fresh, encoding="utf-8")
-    print(f"wrote {OUTPUT_PATH}")
+        print("contract artifacts are up to date")
     return 0
 
 

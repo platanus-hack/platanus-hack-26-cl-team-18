@@ -1,0 +1,63 @@
+[project]
+name = "team18-edge"
+version = "0.1.0"
+description = "Perception agent: camera + mic on the venue laptop (ADR 0004)"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "pydantic>=2.7",
+    "websockets>=15",
+    "numpy>=2.0",
+]
+
+[project.optional-dependencies]
+# Real hardware + models. Tests never need these.
+audio = [
+    "sounddevice>=0.5",
+    "onnxruntime>=1.20",
+]
+# Camera + YOLO + ArUco markers (agent/vision). `uv sync --extra vision`.
+vision = [
+    "opencv-python-headless>=4.10",
+    "ultralytics>=8.3",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-timeout>=2.3",
+    "anyio>=4.0",
+    "ruff>=0.16.0",
+    "mypy>=2.4.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+timeout = 30
+addopts = '-q -m "not live"'  # live tests spend real credits: `-m live` to run
+markers = [
+    "live: calls the real ElevenLabs API (needs ELEVENLABS_API_KEY); run on purpose",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+# Vendored verbatim from app/contract/messages.py (make contract): never reformat.
+extend-exclude = ["agent/contract.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "C4", "PERF", "RUF"]
+ignore = [
+    "E501",                          # line length: formatter handles it
+    "RUF001", "RUF002", "RUF003",    # Spanish text is intentional
+    "SIM105", "UP040", "UP046", "UP047",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["agent", "tests"]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+check_untyped_defs = true

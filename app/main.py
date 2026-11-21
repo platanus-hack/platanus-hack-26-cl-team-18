@@ -33,6 +33,7 @@ def create_app(
             yield
         finally:
             await built.warm.aclose()
+            await built.aclose()
 
     app = FastAPI(
         title="team18",

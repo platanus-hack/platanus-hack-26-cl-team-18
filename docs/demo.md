@@ -13,9 +13,12 @@
 - **The console:** a second monitor or the projector, showing `/console`.
   Judges watch the brain while the screen does its job.
 - **The "counter":** a table set up as a convenience-store counter with:
-  - **Props:** cups and cans printed with the fictional brands (Grano Café
-    cup, Voltio can, Rayo can), a gym bottle and a laptop. Labels are **big,
-    high-contrast and color-coded per brand** so the VLM reads them reliably.
+  - **Props:** a Café Patio cup, a Voltio can and a Rayo can printed with the
+    fictional brands, plus a gym bottle and a laptop. Each branded prop also
+    carries a small printed **ArUco marker** (DICT_4X4_50, ids in
+    `edge/props/markers.json`), so "complete the basket" is recognized in
+    about 7 ms and never depends on reading a label (ADR 0008 D2). Labels stay
+    big and color-coded for the parallel VLM path.
   - **Clerk tablet** on `/clerk` (stock toggles).
   - **"Checkout":** a USB thermal printer (if we have one) that prints the
     moment receipt on redemption.
@@ -36,7 +39,7 @@
 │ group size · dwell        │   partner                    │ basket offer "Trío $X"  │
 │ segments w/ confidence    │ winning basket + VCG prices  │ "why this ad" chips     │
 ├───────────────────────────┴──────────────────────────────┴─────────────────────────┤
-│ HELD: Grano Café cup → boosts Miga · STOCK: Miga ✓ · CONTEXT: weekday morning     │
+│ HELD: Café Patio cup → boosts Miga · STOCK: Miga ✓ · CONTEXT: weekday morning     │
 │ KPIs: coverage 83% (solo 41%) · revenue/h $X vs single-brand $Y (+Z%)              │
 │       attention-seconds · charged $0 when nobody looked · redemptions 3 (both      │
 │       brands credited) · glass-to-glass p50 1.2 s / p95 1.9 s                      │
@@ -55,10 +58,10 @@ complementary products sold at that counter.
 | t | Beat | What happens | What judges should feel |
 |---|---|---|---|
 | 0:00 | **1. Scene hook** | *"You're in line at a gas station with two friends. The screen above the register shows a car-insurance ad. Three hungry people, a coffee machine two meters away, and the screen has no idea."* Point at the static screen, then: *"Store screens are still blind. Watch ours."* | Recognition |
-| 0:20 | **2. Basket ad** | Three people walk up (a gym bottle, a laptop, empty hands). In about 1 s: **"Trío post-gym: Voltio + Brasa Burger, $X"**. Teaser, then offer as they keep looking. Coverage 40 % → 90 %; chip: top burger bid ✗ competitor. | The core insight: N people, several brands, one offer sized to the group |
-| 0:55 | **3. Complete the basket** | A judge picks up the **Grano Café cup**. About 1.5 s later: *"Your Grano needs a Miga. 2 min, $X."* Console: `HELD: Grano Café → boosts Miga`. | "It sees what I'm holding, not who I am" |
+| 0:20 | **2. Basket ad** | Three people walk up (a gym bottle, a laptop, empty hands). In about 1 s: **"Combo post-entreno · Voltio + Café Patio por $3.490"**, sized to the group. Teaser, then offer as they keep looking. **Coverage 40 % → 90 %** (the live headline, ADR 0008 D5); chip: Rayo ✗ competitor. | The core insight: N people, several brands, one offer sized to the group |
+| 0:55 | **3. Complete the basket** | A judge picks up the **Café Patio cup** (marker). Within about 1 s: *"Tu Café Patio pide una Miga. A 2 minutos, $1.990."* Console: `HELD: Café Patio → boosts Miga`. | "It sees what I'm holding, not who I am" |
 | 1:25 | **4. Bidding war** | Two judges on phones: one is **Voltio**, the other is its competitor **Rayo**. They push their bid sliders for the moment in front of the screen; the room watches the winner flip live. Competitor rule: they never share a basket. | "It's a real market, and I'm in it" |
-| 2:00 | **5. Close → receipt → $0** | The ad reaches **close**: QR + "valid 10 min". A judge scans and redeems, the **receipt prints**: *"Voltio credited $0.12 · Brasa $0.09 · 7.4 AS"*. Everyone walks away; console: **"charged $0: nobody looked"**. Closing line: *"We don't sell screen slots, we sell moments. Brands pay only when people look, and the receipt proves the sale. We start with convenience-store counters."* | Proof, fairness, investable |
+| 2:00 | **5. Close → receipt → $0** | The ad reaches **close**: QR + "valid 10 min". A judge scans and redeems, the **receipt prints**: *"Voltio $114 · Café Patio $86 · 7,4 s de atención"*. Everyone walks away; console: **"charged $0: nobody looked"**. Closing line: *"We don't sell screen slots, we sell moments. Brands pay only when people look, and the receipt proves the sale. We start with convenience-store counters."* | Proof, fairness, investable |
 
 **Backup moments** (swap one in if a beat fails, or use if time allows; never
 add a sixth beat):
@@ -69,28 +72,24 @@ add a sixth beat):
 | **"It heard me"** (speech mode) | Someone says "uf, qué hambre"; the burger bid jumps, with a voice-over |
 | **Context switch** | The console toggles "hot afternoon"; cold-drink bids rise and the basket changes |
 | **Safety** | A judge holds a toy stroller; the beer brand's top bid is blocked (✗ minor-safe chip) |
-| **Queue mode** | Three people line up; the copy switches to *"Line's 2 min: grab a Grano Café, ready when you pay"* |
+| **Queue mode** | Three people line up; the copy switches to *"Fila de 2 minutos: pide tu Café Patio, listo al pagar"* |
 | **Conquest** (optional, edgy) | A judge holds a Rayo can; Voltio shows a "switch" deal |
 
 **Sponsor angle:** add sponsors and the hackathon itself as advertisers in the
 seed data (with mock creatives clearly labeled as mock). A judge seeing their
 own company win a basket slot is memorable.
 
-**Brands:** to avoid trademark issues, use fictional brands in complementary
-convenience-store categories, with competitor pairs among them. For example:
-energy drinks "Voltio" vs "Rayo", burgers "Brasa Burger" vs "Toro Burger",
-coffee "Grano Café", pastry "Miga", colas "Cola Sur" vs "Pacífica", snack
-"Crunchi", beer "Lúpulo Sur" (age-restricted), water "Agua Cumbre". Search
-each name before the demo to make sure it isn't a real brand. Real logos only
-with permission or clearly marked as a mock.
+**Brands: the seed is the source of truth** (`app/bootstrap/demo.py`, ADR 0008
+D9): Voltio (energy), Café Patio (coffee), Malta Sur (beer, age-restricted)
+and Rayo (energy, Voltio's competitor). Approved baskets today: Voltio + Café
+Patio, Rayo + Café Patio. **Seed additions the script needs:** Miga (pastry,
+partner of Café Patio, for beat 3), each kit's stable **slug** (`voltio`,
+`cafe-patio`, `rayo`, `miga`, `malta-sur`) for the prop markers, and offers for
+1, 2 and 3+ people. Search every name before the demo to make sure it isn't a
+real brand; real logos only with permission or clearly marked as a mock.
 
-**Held products in the seed data:** Grano Café cup, Voltio can, Rayo can,
-Agua Cumbre bottle. Each maps to a brand id the VLM must return in
-`held_products[]`.
-
-**Partner allow-lists in the seed data:** Voltio ↔ Brasa Burger, Voltio ↔
-Crunchi, Grano Café ↔ Miga, Cola Sur ↔ Brasa Burger, Agua Cumbre ↔ Crunchi.
-Every allowed pair gets an approved bundle loop.
+**Prop markers:** `edge/props/markers.json` maps marker id → brand slug. Print
+each marker at least 4 × 4 cm on the prop, facing the camera when held.
 
 **Group-size offers in the seed data:** each basket defines offers for 1, 2
 and 3+ people ("Combo", "2×1", "Trío").
@@ -127,15 +126,19 @@ slice with co-brand, minor-safety and no-fill scenes.
 8. **QR redemption fallback:** the offer page is served by the backend on the
    laptop's hotspot IP, and the console has a "simulate redemption" button in
    case the judge's phone can't reach it.
-9. **Held product not recognized:** the console has a "simulate held product"
-   button per prop. Labels are color-coded so a brand can also be inferred from
-   color.
-10. **Bidding war phones:** `/advertiser` is served on the hotspot IP and
-    joined by QR from the console. If a phone fails, the console has the same
-    sliders.
-11. **No printer:** the receipt also shows full-screen on the console for
+9. **Held product not recognized:** markers make this rare (ADR 0008 D2); the
+   console still has a "simulate held product" button per prop.
+10. **Bidding war phones and QR redemptions go through a tunnel** (ADR 0008
+    D3): `cloudflared tunnel --url http://127.0.0.1:8000` exposes `/advertiser`
+    and `/r/{code}` publicly, so judges use mobile data, not the isolated
+    hotspot. The console shows the tunnel URL as a QR. If a phone fails, the
+    console has the same sliders.
+11. **Two laptops** (ADR 0008 D7): the screen laptop runs the agent, the
+    backend and the player; the console runs on a second laptop over the
+    network.
+12. **No printer:** the receipt also shows full-screen on the console for
     5 s.
-12. **Network:** bring a phone hotspot. Scribe, TTS, VLM and video all need
+13. **Network:** bring a phone hotspot. Scribe, TTS, VLM and video all need
    internet, and everything they produce for the scripted demo is
    pre-generated.
 
@@ -155,6 +158,16 @@ Lines that work:
 - "If nobody looks, the brand pays zero."
 - "Basket ads: products that go together, offered to people who are together."
 - "We don't know *who* you are. We know *what this moment* needs."
+
+**Revenue wording (ADR 0008 D5):** the live headline is **coverage**. Revenue
+vs. the static screen is a **session total** (money jars), never a per-beat
+"+X %": with core-adjusted prices a basket can earn less than solo in a given
+moment, and the bidding war is unscripted. The console follows
+`docs/auction-plan.md` D6 (revenue lift shown only when positive). Say "value"
+and "revenue" only as the auction plan defines them.
+
+**Language and money (ADR 0008 D6):** pitch in Spanish; all screen copy and
+voice in Chilean Spanish; all money in CLP ("$3.490").
 
 Vocabulary: say **"presence and attention sensing"**. Never say "facial
 recognition" or "we track people".
@@ -195,6 +208,11 @@ order within each group.
 | **Front-row group moment** | "Everyone in the first row, stand up": 8 people, and the screen shows *"¿Junta de 8? Promo junta: 8 Voltio + 2 pizzas."* | Proves crowd scale and group-sized offers | Very low (a `3+` / `8+` offer band in seed data) |
 | **The pitch counts its own results** | Close on live session numbers: *"During this pitch: 14 moments, 9 baskets, 3 redemptions, $4.20 earned; the static screen earned $0.60."* | Real, from this room, nothing made up | Low (a session KPI view) |
 | **60-second table version + reset button** | A short version for roaming judges (basket ad → complete the basket → receipt) and a console "reset demo" that clears session KPIs, receipts and budgets | Judges will see it many times; every round starts clean | Low |
+
+| **"Combo jurado" close** | The judges stand in front of the screen; it detects 5 and says *"¿Jurado de 5? Combo jurado: 5 Voltio + 5 Miga. Válido por 10 minutos."* | Memorable, funny, shows group offers live | Very low (a `5+` offer band and a voice line) |
+| **Shopper's privacy receipt** | The QR offer page also shows *"Todo lo que esta pantalla supo de ti: 1 adulto, con un café, miró 6 s. Nada guardado."* | Turns the creepiness question into trust, on the judge's own phone | Low |
+| **Winning brand's phone buzzes** | In the bidding war, the judge's `/advertiser` page vibrates on a win: *"Ganaste un momento: 3 personas, $114."* | Makes the market tactile | Very low (Vibration API) |
+| **Live A/B** | Two copy variants alternate between groups; the console shows attention per variant | Shows the system learning | Medium |
 
 ### 7.2 Visuals
 

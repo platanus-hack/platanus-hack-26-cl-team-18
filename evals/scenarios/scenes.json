@@ -1,0 +1,12 @@
+{
+  "_comment": "Structured perception facts per scene. Labels match the simulator's fixture catalogs in app/bootstrap/demo.py. Scores are 0..1.",
+  "empty": {"people": 0, "looking": 0},
+  "passer-by": {"people": 1, "looking": 0, "objects": {"sports ball": 1.0}},
+  "co-brand": {"people": 2, "looking": 2, "objects": {"sports ball": 1.0}, "sound": {"coffee service fixture": 1.0}},
+  "co-brand-minor": {"people": 3, "looking": 3, "objects": {"sports ball": 1.0}, "sound": {"coffee service fixture": 1.0}, "minor": true},
+  "fitness": {"people": 1, "looking": 1, "objects": {"sports ball": 1.0}},
+  "coffee": {"people": 1, "looking": 1, "sound": {"coffee service fixture": 1.0}},
+  "adult": {"people": 1, "looking": 1, "objects": {"tap handle fixture": 1.0}},
+  "minor-safe": {"people": 1, "looking": 1, "objects": {"tap handle fixture": 1.0}, "minor": true},
+  "low-confidence": {"people": 1, "looking": 1, "objects": {"sports ball": 0.05}}
+}

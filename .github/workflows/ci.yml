@@ -15,10 +15,19 @@ jobs:
           python-version: "3.14"
           enable-cache: true
       - run: uv sync --extra dev --locked
-      - run: uv run ruff check app tests
-      - run: uv run ruff format --check app tests
-      - run: uv run mypy app
-      - run: uv run pytest -m "not integration"
+      - run: uv run ruff check app tests evals
+      - run: uv run ruff format --check app tests evals
+      - run: uv run mypy app evals
+      - run: uv run pytest -m "not integration and not live"
+      # Product evals on a live backend: gates + baseline ratchet (docs/evals.md).
+      # The scorecard goes to the job summary and is kept as an artifact.
+      - run: uv run python -m evals --soak 300
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-scorecard
+          path: evals/results/
+          if-no-files-found: ignore
 
   web:
     runs-on: ubuntu-latest
@@ -36,3 +45,34 @@ jobs:
       # typecheck + lint (type-aware, zero warnings) + prettier + vitest + knip
       - run: npm run check
       - run: npm run build
+
+  edge:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: edge
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: edge/uv.lock
+      - run: uv sync --extra dev --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy agent
+      # live tests spend ElevenLabs credits and are deselected by default
+      - run: uv run pytest
+
+  sandbox:
+    # Real processes (backend + edge agent) against a local fake ElevenLabs: no secrets needed.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --extra dev --locked --python 3.14
+      - run: cd edge && uv sync --extra dev --locked --python 3.12
+      - run: uv run pytest -m sandbox -o addopts="" -v tests/integration/test_sandbox_e2e.py

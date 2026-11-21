@@ -59,7 +59,14 @@ function bufferVideo(url: string): Promise<void> {
     });
 }
 
-export async function preloadCreative(spec: CreativeSpec, signal: AbortSignal): Promise<void> {
+/** Optional audio preparation (the voice player decodes the voice-over into a buffer). */
+export type PrepareAudio = (url: string, signal: AbortSignal) => Promise<void>;
+
+export async function preloadCreative(
+    spec: CreativeSpec,
+    signal: AbortSignal,
+    prepareAudio?: PrepareAudio,
+): Promise<void> {
     const required = spec.slots.map((slot) =>
         withTimeout(decodeImage(slot.logo_url), IMAGE_TIMEOUT_MS, signal),
     );
@@ -68,6 +75,11 @@ export async function preloadCreative(spec: CreativeSpec, signal: AbortSignal): 
         .map((url) => withTimeout(decodeImage(url), IMAGE_TIMEOUT_MS, signal));
     if (spec.video_url)
         optional.push(withTimeout(bufferVideo(spec.video_url), VIDEO_TIMEOUT_MS, signal));
+
+    if (spec.voiceover_url && prepareAudio)
+        optional.push(
+            withTimeout(prepareAudio(spec.voiceover_url, signal), VIDEO_TIMEOUT_MS, signal),
+        );
 
     await Promise.all(required);
     await Promise.allSettled(optional);

@@ -26,6 +26,7 @@ Contexts: [`docs/architecture.md` §5](docs/architecture.md#5-bounded-contexts).
 | **Brand kit** | Approved assets: vector logo, product cutouts, colors, fonts, approved claims, stock copy, optional pre-rendered loops. The only visual source for a brand. | AI-generated images (never contain logos). |
 | **Campaign** | A brand's buying intent: segment bids (Money per AS), budget, pacing, schedule, co-brand preferences. | Creative. |
 | **Bid** | Max price per attention-second for viewers in a segment. | Price (what is actually paid). |
+| **Bidder** | The auction's immutable, read-only view of one campaign at clearing time: segment bids, live multiplier, budget left, partner allow-list, category. | Auctioneer (the engine that decides); Advertiser (the organization). |
 | **Compatibility rule** | Competitor exclusion, co-brand allow/block lists, affinity bonuses. Pure `Specification`s. | Brand-safety policy. |
 | **Brand-safety policy** | Moment-dependent eligibility rule (e.g. no alcohol when minor-likely). Pure `Policy`. | Compatibility rule (pairwise between brands). |
 | **Ad opportunity** | The chance to fill a screen for the current moment with a given set of layouts. Input to an auction. | Slot. |
@@ -38,7 +39,7 @@ Contexts: [`docs/architecture.md` §5](docs/architecture.md#5-bounded-contexts).
 | **Group-size band** | `1`, `2` or `3+`, from the moment's looking count. Selects the basket offer. | People present (includes not-looking). |
 | **Dwell stage** | `teaser` → `offer` → `close`. The creative advances as looking tracklets keep dwelling. | Playback (the whole play). |
 | **Held product** | A branded product a person is holding, read from the face-blurred keyframe (`held_products[]`). Boosts its approved partners ("complete the basket"). Describes the object, never the person. | A segment (audience interest). |
-| **Complete the basket** | The feature that offers a held product's complement (Grano Café cup → Miga pastry). | Conquest offer (targets a *competitor's* held product; off by default). |
+| **Complete the basket** | The feature that offers a held product's complement (Café Patio cup → Miga pastry). | Conquest offer (targets a *competitor's* held product; off by default). |
 | **Stock flag** | Per-screen in-stock state per brand, set from `/clerk`. Out of stock = ineligible. | Budget exhaustion. |
 | **Context multiplier** | Pure bid multiplier by daypart × weather × category. | Live multiplier. |
 | **Live multiplier** | Bounded bid multiplier a judge or advertiser sets from `/advertiser` (the bidding war). Recorded as a command. | A bid. |

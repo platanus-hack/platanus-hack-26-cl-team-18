@@ -62,7 +62,11 @@ def test_connection_occupancy_survives_reporting_windows_and_discards(caplog):
     assert second.calls["connection_hold"]["count"] == 2
     assert second.calls["connection_hold"]["max_ms"] == 60500
     assert first.pool_occupancy["checked_out"] == 2
-    assert "101" not in str(second.__dict__)  # no connection IDs in telemetry
+    # No connection IDs in telemetry. Check only our fields: LogRecord internals
+    # (`created`, `msecs`, ...) are wall-clock values that can contain "101".
+    standard = set(logging.makeLogRecord({}).__dict__) | {"message", "asctime"}
+    telemetry = {k: v for k, v in second.__dict__.items() if k not in standard}
+    assert "101" not in str(telemetry)
 
 
 def test_wait_and_hold_histograms_are_bounded_and_use_milliseconds(caplog):

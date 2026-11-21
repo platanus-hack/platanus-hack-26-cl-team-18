@@ -1,5 +1,10 @@
+output "web_url" {
+  description = "Public player/console URL (put this in platanus-hack-project.jsonc deploy-url)."
+  value       = module.web.url
+}
+
 output "service_url" {
-  description = "Public URL (put this in platanus-hack-project.jsonc deploy-url)."
+  description = "Backend URL (HTTP + WS; /health)."
   value       = module.app.service_url
 }
 

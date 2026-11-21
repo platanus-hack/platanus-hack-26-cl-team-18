@@ -106,3 +106,8 @@ Thumbs.db
 *.swo
 *~
 .idea/
+
+# Eval run outputs (scorecards, history). The baseline is committed; runs are not.
+evals/results/
+evals/perception/videos/
+evals/perception/recordings/

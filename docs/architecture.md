@@ -161,7 +161,7 @@ through events and published queries only.
 Inputs: the audience moment (people present `n`, looking `k`, segments
 `s → (count, confidence, source ∈ {vision, vlm, speech})`, flags like
 `minor_likely`), eligible campaigns, and the screen's layouts (`solo`=1 slot,
-`duo`=2, `trio`=3).
+`duo`=2; `trio`=3 is later, ADR 0008 D4).
 
 1. **Eligibility (Specifications, pure):** active, budget left, within
    schedule, **in stock at this screen** (`InStockAtScreen`), passes
@@ -186,17 +186,25 @@ Inputs: the audience moment (people present `n`, looking `k`, segments
    is on **both** brands' partner allow-lists (pre-approved partners only), no
    shared competitor category, an approved basket loop and a basket offer exist
    for the pairing, and a layout fits.
-4. **Bundle value:** `V(B) = Σ_{c∈B} v_c · share(c, layout)` + optional
-   opted-in affinity bonus.
-5. **Winner:** `B* = argmax V(B)` with deterministic tie-break; below the
-   reserve price, show a house ad.
-6. **Prices (VCG):** `p_c = V*(without c) − (V(B*) − v_c·share)`, floored at
-   the reserve.
+4. **Bundle value:** `V(B) = Σ_{c∈B} v_c · efficiency(c, layout)` + the
+   bidders' own opted-in basket bonuses. Slot efficiency (not screen share)
+   is the value a slot keeps for its own viewers; it falls back to share
+   when a member targets the same segments as another slot
+   ([auction plan](auction-plan.md) D1).
+5. **Winner:** `B* = argmax V(B)` with deterministic tie-break (value, fewer
+   slots, campaign ids). Every slot must clear `reserve × looking × share`;
+   with no such bundle, a house ad plays (no-fill).
+6. **Prices:** VCG `p_c = V*(without c) − (V(B*) − own_c)`, then
+   core-adjusted (default) so no losing basket or solo brand would have
+   paid more, floored at the slot reserve and capped at the winner's own
+   value. Payments are per screen-second; the clearing price per
+   attention-second is `p_c / looking` (a `MoneyRate`, 4 dp).
 7. **Record:** all bids, exclusions with reasons (competitor, safety, budget,
    below reserve), winner, prices, and the **single-brand counterfactual**.
 
-Billing: `charge_c = p_c × attention_seconds_measured_during_play`, using
-`Money`, with `ROUND_HALF_EVEN` at the ledger boundary only. **Zero measured
+Billing: `charge_c = price_per_as_c × attention_seconds_measured_during_play`
+(`MoneyRate.total_for`), rounded `ROUND_HALF_EVEN` to `Money` at the ledger
+boundary only. **Zero measured
 attention → zero charge, recorded explicitly** (a `Charge` of 0 with reason
 `no_attention`, so the console can show "charged $0: nobody looked").
 
@@ -272,7 +280,7 @@ promo code). Runs alongside the ad loop and never blocks it.
 ### 7.3 Voice-overs that accompany ads
 
 - Every creative can carry a `voiceover` (spoken copy, ≤ 12 words, e.g.
-  "Post-gym? Voltio and Brasa Burger, two minutes away.").
+  "¿Post-entreno? Voltio y Café Patio, a dos minutos.").
 - Generated with **Flash v2.5** when the creative's copy is final (warm), and
   cached by `(copy_hash, voice_id, model)` as a file in the media cache.
   Cache hits play instantly. Pre-generate at seed time for the demo bundles.

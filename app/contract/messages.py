@@ -74,6 +74,12 @@ class ExclusionReason(StrEnum):
     BUDGET = "budget"
     BELOW_RESERVE = "below_reserve"
     NO_LAYOUT = "no_layout"
+    NOT_PARTNER = "not_partner"
+    OUT_OF_STOCK = "out_of_stock"
+    INACTIVE = "inactive"
+    NO_BASKET_OFFER = "no_basket_offer"
+    OUTBID = "outbid"
+    INVALID_BID = "invalid_bid"
 
 
 class DegradationFlag(StrEnum):
@@ -122,6 +128,9 @@ class LatencyTrace(_Model):
     ready_at: AwareDatetime | None = None
     displayed_at: AwareDatetime | None = None
     upgraded_at: AwareDatetime | None = None
+    # Minimum ad seconds: the earliest instant this decision may replace what plays.
+    # The intentional hold is excluded from glass-to-glass latency.
+    swap_not_before: AwareDatetime | None = None
 
 
 class CreativeSlot(_Model):
@@ -252,6 +261,8 @@ class BidLine(_Model):
     category: Annotated[str, Field(max_length=64)]
     bid_per_as: MoneyDTO  # per attention-second
     value: Annotated[float, Field(ge=0.0)]  # relevance-weighted score, not money
+    value_per_s: MoneyDTO | None = None  # the bid's money value per screen-second
+    multiplier: Annotated[str, Field(pattern=r"^\d+(\.\d+)?$", max_length=16)] | None = None
 
 
 class Exclusion(_Model):
@@ -264,6 +275,7 @@ class Winner(_Model):
     campaign_id: EntityId
     brand_name: Annotated[str, Field(max_length=80)]
     price_per_as: MoneyDTO
+    payment_per_s: MoneyDTO | None = None
 
 
 class ConsoleAuction(_Message):
@@ -276,8 +288,16 @@ class ConsoleAuction(_Message):
     winners: list[Winner]  # empty = no fill (house ad)
     bundle_value: MoneyDTO
     single_brand_value: MoneyDTO  # the single-brand counterfactual
-    coverage: Score  # share of present segments the bundle addresses
+    coverage: Score  # est. share of looking viewers a winner matches (upper bound)
     trace: LatencyTrace
+    # Revenue per screen-second, like-for-like with the single-brand counterfactual.
+    bundle_revenue: MoneyDTO | None = None
+    single_brand_revenue: MoneyDTO | None = None
+    pricing: Annotated[str, Field(max_length=32)] | None = None
+    trigger: Annotated[str, Field(max_length=32)] | None = None
+    swap: Annotated[str, Field(max_length=32)] | None = (
+        None  # swap | held | unchanged | keep_incumbent
+    )
 
 
 class ConsoleLatency(_Message):
@@ -291,6 +311,84 @@ class ConsoleDegradation(_Message):
     type: Literal["console.degradation"] = "console.degradation"
     screen_id: ScreenId
     flags: list[DegradationFlag]
+
+
+# ---------------------------------------------------------------- operator inputs (HTTP bodies)
+# `/advertiser` (judges' phones, through the tunnel) and `/clerk` (stock tablet)
+# post these to /api/*. They are versioned contract messages so the TS side is typed.
+
+Multiplier = Annotated[str, Field(pattern=r"^\d+(\.\d{1,2})?$", max_length=8)]
+
+
+class AdvertiserBidMultiplier(_Message):
+    """The bidding-war slider: bounded live multiplier, idempotent by (campaign_id, seq)."""
+
+    type: Literal["advertiser.bid_multiplier"] = "advertiser.bid_multiplier"
+    campaign_id: EntityId
+    multiplier: Multiplier  # decimal string within [0.2, 5.0]
+    seq: Seq
+
+
+class StockSet(_Message):
+    """A clerk's stock toggle for one brand at one screen. A stock-out re-auctions."""
+
+    type: Literal["stock.set"] = "stock.set"
+    screen_id: ScreenId
+    brand_id: EntityId
+    in_stock: bool
+
+
+class BookLine(_Model):
+    campaign_id: EntityId
+    brand_id: EntityId
+    brand_name: Annotated[str, Field(max_length=80)]
+    category: Annotated[str, Field(max_length=64)]
+    accent_color: Annotated[str, Field(pattern=r"^#[0-9a-fA-F]{6}$")] | None = None
+    multiplier: Multiplier
+    multiplier_seq: Seq
+    in_stock: bool
+    on_air: bool
+    budget: MoneyDTO
+    spent: MoneyDTO
+    reserved: MoneyDTO
+    remaining: MoneyDTO
+
+
+class ConsoleBook(_Message):
+    """The live campaign book for one screen: bids, stock and budgets (also GET /api/book)."""
+
+    type: Literal["console.book"] = "console.book"
+    screen_id: ScreenId
+    lines: list[BookLine]
+
+
+class ChargeReason(StrEnum):
+    ATTENTION = "attention"
+    NO_ATTENTION = "no_attention"
+
+
+class ChargeLine(_Model):
+    campaign_id: EntityId
+    brand_name: Annotated[str, Field(max_length=80)]
+    attention_seconds: Annotated[str, Field(pattern=r"^\d+(\.\d+)?$", max_length=16)]
+    price_per_as: MoneyDTO
+    amount: MoneyDTO
+    reason: ChargeReason
+
+
+class ConsoleReceipt(_Message):
+    """The moment receipt: who looked, for how long, and what each brand paid."""
+
+    type: Literal["console.receipt"] = "console.receipt"
+    screen_id: ScreenId
+    creative_id: EntityId
+    auction_id: EntityId
+    people: Annotated[int, Field(ge=0)]
+    looking: Annotated[int, Field(ge=0)]
+    played_s: Annotated[str, Field(pattern=r"^\d+(\.\d+)?$", max_length=16)]
+    attention_seconds: Annotated[str, Field(pattern=r"^\d+(\.\d+)?$", max_length=16)]
+    charges: list[ChargeLine]
+    total: MoneyDTO
 
 
 # ---------------------------------------------------------------- any direction
@@ -321,7 +419,9 @@ ConsoleOutbound = Annotated[
     | ConsoleDegradation
     | CreativeReady
     | CreativeUpgraded
-    | ErrorMessage,
+    | ErrorMessage
+    | ConsoleBook
+    | ConsoleReceipt,
     Field(discriminator="type"),
 ]
 
@@ -340,6 +440,8 @@ CONSOLE_OUTBOUND: TypeAdapter[
     | CreativeReady
     | CreativeUpgraded
     | ErrorMessage
+    | ConsoleBook
+    | ConsoleReceipt
 ] = TypeAdapter(ConsoleOutbound)
 
 AnyMessage = (
@@ -354,6 +456,10 @@ AnyMessage = (
     | ConsoleLatency
     | ConsoleDegradation
     | ErrorMessage
+    | AdvertiserBidMultiplier
+    | StockSet
+    | ConsoleBook
+    | ConsoleReceipt
 )
 
 # Order is the generated TS order; append new messages at the end.
@@ -369,6 +475,10 @@ ALL_MESSAGES: tuple[type[_Message], ...] = (
     ConsoleLatency,
     ConsoleDegradation,
     ErrorMessage,
+    AdvertiserBidMultiplier,
+    StockSet,
+    ConsoleBook,
+    ConsoleReceipt,
 )
 
 # Socket unions exported to TS, by name.
@@ -384,5 +494,7 @@ SOCKET_UNIONS: dict[str, tuple[type[_Message], ...]] = {
         CreativeReady,
         CreativeUpgraded,
         ErrorMessage,
+        ConsoleBook,
+        ConsoleReceipt,
     ),
 }

@@ -32,3 +32,10 @@ def test_wire_fields_are_never_optional_in_ts() -> None:
 
 def test_render_is_deterministic() -> None:
     assert render() == render()
+
+
+def test_agent_vendors_the_contract_verbatim() -> None:
+    """edge/ (Python 3.12, its own project) copies messages.py: run `make contract`."""
+    source = (ROOT / "app/contract/messages.py").read_text(encoding="utf-8")
+    vendored = (ROOT / "edge/agent/contract.py").read_text(encoding="utf-8")
+    assert vendored == source, "edge/agent/contract.py is stale: run `make contract`"

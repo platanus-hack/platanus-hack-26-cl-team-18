@@ -84,16 +84,21 @@ def test_console_explains_the_staged_basket_and_replays_latest_decision(tmp_path
             "sound",
         }
         assert auction.coverage == 1
-        assert auction.bundle_value.amount == "120"
-        assert auction.single_brand_value.amount == "100"
+        # CLP per screen-second: the basket is worth more and earns more than one brand.
+        assert auction.bundle_value.amount == "8.6"
+        assert auction.single_brand_value.amount == "8"
+        assert auction.bundle_revenue is not None and auction.bundle_revenue.amount == "6.95"
+        assert auction.single_brand_revenue is not None
+        assert auction.single_brand_revenue.amount == "6.5"
+        # CLP per attention-second (payment / 2 looking), below each brand's bid.
         assert {winner.brand_name: winner.price_per_as.amount for winner in auction.winners} == {
-            "Voltio": "40",
-            "Café Patio": "30",
+            "Voltio": "2.275",
+            "Café Patio": "1.2",
         }
         bids_by_id = {bid.campaign_id: bid.brand_name for bid in auction.bids}
-        assert [(bids_by_id[item.campaign_id], item.reason) for item in auction.exclusions] == [
-            ("Rayo", "competitor"),
-        ]
+        assert [
+            (bids_by_id[item.campaign_id], item.reason, item.detail) for item in auction.exclusions
+        ] == [("Rayo", "competitor", "Rayo: same category as Voltio")]
 
         with client.websocket_connect("/ws/console") as reopened:
             assert ConsoleMoment.model_validate(reopened.receive_json()) == moment

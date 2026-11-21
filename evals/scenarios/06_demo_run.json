@@ -1,0 +1,13 @@
+{
+  "name": "demo-run",
+  "beat": "Full demo script (docs/demo.md §3), in order",
+  "description": "The judged run end to end: solo, basket, safety, back to basket, walk away.",
+  "steps": [
+    {"scene": "fitness", "expect": {"brands": ["Voltio"]}},
+    {"scene": "co-brand", "hold": 2, "expect": {"brands": ["Voltio", "Café Patio"], "min_coverage": 1.0}},
+    {"scene": "adult", "expect": {"brands": ["Malta Sur"]}},
+    {"scene": "minor-safe", "expect": {"brands": [], "excluded": {"Malta Sur": "safety"}}},
+    {"scene": "co-brand", "expect": {"brands": ["Voltio", "Café Patio"]}},
+    {"scene": "empty", "expect": {"brands": []}}
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "name": "minor-safety",
+  "beat": "Invariant 2: minors protected, never targeted",
+  "description": "A beer ad yields to the house ad the moment a minor is likely, records the safety exclusion, and returns when the minor leaves.",
+  "steps": [
+    {"scene": "adult", "expect": {"brands": ["Malta Sur"], "layout": "solo"}},
+    {"scene": "minor-safe", "expect": {"brands": [], "excluded": {"Malta Sur": "safety"}}},
+    {"scene": "adult", "expect": {"brands": ["Malta Sur"]}}
+  ]
+}

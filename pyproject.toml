@@ -22,6 +22,7 @@ dev = [
     "ruff>=0.16.0",
     "mypy>=2.4.0",
     "pyright[nodejs]>=1.1.414",
+    "hypothesis>=6.100",
 ]
 
 [tool.ruff]
@@ -55,8 +56,10 @@ check_untyped_defs = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 timeout = 40
-addopts = "-q"
+addopts = '-q -m "not live and not sandbox"'  # live tests spend real credits: `-m live` to run
 markers = [
     "unit: Fast, in-memory unit tests (no DB, no network)",
     "integration: Tests that require a real database connection",
+    "live: Calls a real paid provider API (ElevenLabs); run on purpose, never in CI",
+    "sandbox: Spawns real processes against a local fake provider (make test-sandbox)",
 ]
