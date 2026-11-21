@@ -3,9 +3,11 @@ SHELL := /bin/bash
 
 ENV ?= prod
 TF  := scripts/tf.sh $(ENV)
-TF_ROOTS := terraform/modules/render-app terraform/envs/prod
+TF_ROOTS := terraform/modules/render-app terraform/modules/render-static-site terraform/envs/prod
+LOCAL_DATABASE_URL := postgresql://team18:team18@localhost:5432/team18
 
-.PHONY: help install dev web-install web-dev web-check contract contract-check lint format typecheck test check migrate migrate-status \
+.PHONY: help install edge-install edge-check test-live test-sandbox dev web-install web-dev web-check contract contract-check lint format typecheck test check migrate migrate-status db-up db-down db-reset \
+        eval eval-baseline eval-replay eval-perception eval-record eval-rehearsal \
         tf-init tf-fmt tf-fmt-check tf-validate tf-test tf-check tf-plan tf-apply tf-output tf-lock
 
 help: ## Show this help
@@ -18,6 +20,20 @@ install: ## Create .venv with locked dev dependencies
 
 dev: ## Run the backend with reload on :8000 (HTTP + WebSockets)
 	uv run uvicorn app.main:app --reload --port 8000
+
+edge-install: ## Install the perception agent (edge/, Python 3.12) with dev tools
+	cd edge && env -u VIRTUAL_ENV uv sync --extra dev
+
+edge-check: ## edge/: ruff + format + mypy + tests (what CI runs)
+	cd edge && env -u VIRTUAL_ENV uv run ruff check . && env -u VIRTUAL_ENV uv run ruff format --check . \
+	  && env -u VIRTUAL_ENV uv run mypy agent && env -u VIRTUAL_ENV uv run pytest
+
+test-sandbox: ## Real processes (backend + edge agent) against a local fake ElevenLabs; no credentials
+	uv run pytest -m sandbox -o addopts="" -v tests/integration/test_sandbox_e2e.py
+
+test-live: ## LIVE ElevenLabs tests (spend credits; needs ELEVENLABS_API_KEY)
+	uv run pytest -m live -s tests/integration
+	cd edge && env -u VIRTUAL_ENV uv run pytest -m live -s
 
 web-install: ## Install web/ dependencies (npm ci)
 	cd web && npm ci
@@ -40,19 +56,55 @@ lint: ## Ruff lint
 format: ## Ruff format (writes files)
 	uv run ruff format .
 
-typecheck: ## mypy over app/
-	uv run mypy app
+typecheck: ## mypy over app/ and evals/
+	uv run mypy app evals
 
 test: ## Unit tests (no DB, no network)
 	uv run pytest -q
 
 check: lint typecheck test tf-check ## Everything CI runs, locally
 
+# ------------------------------------------------------------------ evals (docs/evals.md)
+# The product feedback loop: run the real loop, score it, ratchet the baseline.
+
+EVAL_REC_OUT ?= evals/results/rehearsal.jsonl
+
+eval: ## Scenarios + soak on a live backend -> evals/results/latest.md (fails on gate/regression)
+	uv run python -m evals $(ARGS)
+
+eval-baseline: ## Lock improved ratchet metrics into evals/baseline.json (refuses a failing run)
+	uv run python -m evals --update-baseline
+
+eval-replay: ## Real-video perception recording -> live backend (REC=path.jsonl [SPEED=1])
+	uv run python -m evals replay $(REC) --speed $(or $(SPEED),1)
+
+eval-perception: ## Score the agent on a labelled clip (LABELS=labels.json REC=recording.jsonl)
+	uv run python -m evals perception $(LABELS) $(REC)
+
+eval-record: ## Record a live rehearsal from :8000 until Ctrl-C (OUT=path.jsonl)
+	uv run python -m evals record --out $(or $(OUT),$(EVAL_REC_OUT))
+
+eval-rehearsal: ## Score a recorded rehearsal (REC=path.jsonl)
+	uv run python -m evals rehearsal $(REC)
+
 migrate: ## Apply pending SQL migrations to DATABASE_URL
 	uv run python scripts/migrate.py
 
 migrate-status: ## Show applied/pending migrations for DATABASE_URL
 	uv run python scripts/migrate.py status
+
+# Local Postgres goes through the same migrate.py ledger as Render's pre-deploy,
+# so `make migrate` against it never re-runs an applied file.
+db-up: ## Start local Postgres (docker compose) and apply migrations
+	docker compose up -d --wait postgres
+	DATABASE_URL=$(LOCAL_DATABASE_URL) uv run python scripts/migrate.py
+
+db-down: ## Stop local Postgres (keeps the data volume)
+	docker compose down
+
+db-reset: ## Wipe the local Postgres volume and re-apply every migration
+	docker compose down -v
+	$(MAKE) db-up
 
 # ------------------------------------------------------------------ terraform (Render)
 # Offline targets (no credentials): tf-fmt, tf-fmt-check, tf-validate, tf-test, tf-check.

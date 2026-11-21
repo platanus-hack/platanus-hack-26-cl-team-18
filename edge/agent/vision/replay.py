@@ -71,11 +71,12 @@ class LocalDetector:
         detections = []
         for box in result.boxes:
             track_id = int(box.id.item()) if box.id is not None else None
+            x1, y1, x2, y2 = (float(x) for x in box.xyxy[0].tolist())
             detections.append(
                 Detection(
                     str(result.names[int(box.cls.item())]),
                     float(box.conf.item()),
-                    tuple(float(x) for x in box.xyxy[0].tolist()),
+                    (x1, y1, x2, y2),
                     track_id,
                 )
             )

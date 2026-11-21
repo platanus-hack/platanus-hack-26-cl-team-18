@@ -45,8 +45,7 @@ def create_app(
             except asyncio.CancelledError:
                 pass
             await built.warm.aclose()
-            if built.vlm is not None:
-                await built.vlm.ai.aclose()
+            await built.aclose()
 
     app = FastAPI(
         title="team18",

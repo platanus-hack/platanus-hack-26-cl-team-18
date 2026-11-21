@@ -5,8 +5,15 @@ import { TypedSocket } from "@/lib/ws/typed-socket";
 import { useEffect, useState } from "react";
 import { CreativeView } from "./CreativeView";
 import { HOUSE_AD } from "./house-ad";
-import { initialPlayerState, other, playerReducer, type Playable } from "./player-machine";
+import {
+    frontCreative,
+    initialPlayerState,
+    other,
+    playerReducer,
+    type Playable,
+} from "./player-machine";
 import { preloadCreative } from "./preload";
+import { VoicePlayer } from "./voice";
 
 const CROSSFADE_MS = 250; // matches --duration-crossfade
 
@@ -46,6 +53,7 @@ export function ScreenPage() {
                 },
             }),
     );
+    const [voice] = useState(() => new VoicePlayer());
     const state = useStore(store, (s) => s);
 
     useEffect(() => {
@@ -61,7 +69,9 @@ export function ScreenPage() {
     useEffect(() => {
         if (preloadingId === null || back === null) return;
         const controller = new AbortController();
-        preloadCreative(back.spec, controller.signal).then(
+        preloadCreative(back.spec, controller.signal, (url, signal) =>
+            voice.prepare(url, signal),
+        ).then(
             () => {
                 store.dispatch({ type: "preloaded", creativeId: preloadingId, at: Date.now() });
             },
@@ -74,7 +84,18 @@ export function ScreenPage() {
         return () => {
             controller.abort();
         };
-    }, [preloadingId, back, store]);
+    }, [preloadingId, back, store, voice]);
+
+    // Speak the on-air creative's voice-over once, as soon as it is on screen.
+    const onAir = frontCreative(state);
+    const onAirVoice = onAir.spec.voiceover_url;
+    useEffect(() => {
+        if (onAirVoice === null) {
+            voice.stop();
+            return;
+        }
+        voice.play(onAir.creativeId, onAirVoice);
+    }, [onAir.creativeId, onAirVoice, voice]);
 
     // Finish the crossfade on a timer (transitionend doesn't fire at 0 ms).
     const crossfadingId = state.phase.kind === "crossfading" ? state.phase.creativeId : null;

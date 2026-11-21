@@ -90,7 +90,7 @@ docs/
   agents/                      # config for the agent skills (issue tracker, labels, domain docs)
 .agents/skills/                # shared agent skills (.claude/skills symlinks here)
 Makefile                       # `make help`; `make check` = what CI runs
-docker-compose.yml             # local Postgres; db/migrations auto-apply on a fresh volume
+docker-compose.yml             # local Postgres; `make db-up` applies db/migrations via scripts/migrate.py
 .github/workflows/ci.yml       # lint + format + mypy + unit tests
 ```
 

@@ -1,0 +1,11 @@
+{
+  "name": "debounce-and-stale",
+  "beat": "Latency rules: debounce, drop stale facts",
+  "description": "Identical facts never re-auction; a stale or far-future measurement is ignored; a fresh change still lands.",
+  "steps": [
+    {"scene": "fitness", "hold": 5, "expect": {"brands": ["Voltio"]}},
+    {"scene": "coffee", "measured_offset_s": -11, "expect": {"no_change": true}, "note": "11 s old"},
+    {"scene": "coffee", "measured_offset_s": 11, "expect": {"no_change": true}, "note": "device clock 11 s ahead"},
+    {"scene": "coffee", "expect": {"brands": ["Café Patio"], "layout": "solo"}}
+  ]
+}

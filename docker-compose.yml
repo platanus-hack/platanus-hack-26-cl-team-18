@@ -1,5 +1,7 @@
-# Local Postgres. Migrations in db/migrations/ run once, on the first start of
-# an empty volume. To re-run them: make db-reset.
+# Local Postgres. `make db-up` starts it and applies db/migrations/ through
+# scripts/migrate.py, the same runner (and schema_migrations ledger) Render uses.
+# Don't mount the migrations into docker-entrypoint-initdb.d: that applies them
+# without a ledger row, and the next `make migrate` fails on existing tables.
 services:
   postgres:
     image: postgres:17
@@ -11,7 +13,6 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./db/migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U team18 -d team18"]
       interval: 2s

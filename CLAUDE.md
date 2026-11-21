@@ -20,7 +20,7 @@ beats a perfect layer you never finished.
 
 **Basket ads for physical screens.** A screen with a camera and mic sees the
 group in front of it (anonymously), tags the moment with IAB interest
-segments, runs a **bundle auction** in which 1 to 3 brands with
+segments, runs a **bundle auction** in which 1 or 2 brands (ADR 0008 D4) with
 *complementary* products (coffee + pastry, energy drink + burger) win the
 screen together, and shows a joint **basket offer sized to the group** ("Trío
 $X") within about 1.5 s. The ad **evolves while people stay** (teaser → offer
@@ -164,7 +164,8 @@ make venv          # uv venv + uv sync --extra dev
 make check         # lint + format-check + mypy + unit tests (what CI runs)
 make test ARGS="tests/unit/x.py::test_y"   # narrow while editing
 make test-arch     # architecture guardrails only
-make db-up         # local Postgres (docker compose); migrations auto-apply on a fresh volume
+make eval          # product evals on a live backend: demo beats, invariants, KPIs, latency (docs/evals.md)
+make db-up         # local Postgres (docker compose) + scripts/migrate.py, same runner as Render
 make help          # everything else
 ```
 
@@ -183,8 +184,9 @@ Never patch production code around a missing package.
 | `docs/stack.md` | **Binding stack** (ADR 0006): devices and their settings, every component, what we don't use, day-1 benchmark gate |
 | `docs/architecture.md` | Runtime topology, latency budget, stack rationale, contexts, auction, creative, message contract |
 | `docs/demo.md` | Demo script, console layout, demo insurance, pitch and judge Q&A |
+| `docs/evals.md` | **Product feedback loop**: live-loop scenario evals, gates vs ratchets, real-video perception, rehearsal scoring |
 | `CONTEXT.md` | Domain glossary (moment, segment, bundle, attention-second…) |
-| `docs/adr/` | Binding decisions (0001 latency paths, 0002 superseded, 0003 video cold loops + warm upgrades, 0004 YOLO perception agent, 0005 ElevenLabs speech + voice, 0006 committed stack, 0007 remote GPU perception) |
+| `docs/adr/` | Binding decisions (0001 latency paths, 0002 superseded, 0003 video cold loops + warm upgrades, 0004 YOLO perception agent, 0005 ElevenLabs speech + voice, 0006 committed stack, 0007 remote GPU perception, 0008 demo-critical decisions: vision first, prop markers, tunnel, max 2 brands, coverage headline, CLP/Spanish, two laptops) |
 | `docs/rules.md` | Architecture rules (§1–7, Security and Queue-consumer rules apply as written) |
 | `docs/common_patterns.md` | How to use the shared kernel: VOs, message bus, UoW, outbox |
 | `docs/folder_structure.md` | Layout of this repo and of a bounded context |
@@ -339,6 +341,12 @@ Agents must never:
   unit tests.
 - Run the affected test files during edits and the full unit suite before
   pushing. `tests/unit/common/**` must stay green.
+- A change to the loop (audience, auction, creative, delivery, demo wiring)
+  runs `make eval` before and after. A ratchet that improved is locked in with
+  `make eval-baseline` in the same PR; never lower the baseline without saying
+  why. A bug found in a rehearsal becomes a scenario in `evals/scenarios/`
+  first. A known gap becomes an `xfail(strict=True)` test citing its
+  requirement.
 
 ## Working style
 

@@ -1,0 +1,12 @@
+{
+  "name": "no-fill",
+  "beat": "5. Charged $0 · Invariant 5: never blank",
+  "description": "Weak signals fall below the reserve and nobody looking sells nothing; both show the house ad, never a blank screen.",
+  "steps": [
+    {"scene": "low-confidence", "expect": {"brands": [], "excluded": {"Voltio": "below_reserve", "Rayo": "below_reserve"}}},
+    {"scene": "co-brand", "expect": {"brands": ["Voltio", "Café Patio"]}},
+    {"scene": "passer-by", "expect": {"brands": []}, "note": "present but not looking"},
+    {"scene": "co-brand", "expect": {"brands": ["Voltio", "Café Patio"]}},
+    {"scene": "empty", "expect": {"brands": []}}
+  ]
+}

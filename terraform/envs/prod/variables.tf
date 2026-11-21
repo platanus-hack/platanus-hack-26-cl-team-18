@@ -77,3 +77,15 @@ variable "secret_names" {
   type        = list(string)
   default     = []
 }
+
+variable "node_version" {
+  description = "Node.js version Render uses to build web/ (package.json engines: >=24)."
+  type        = string
+  default     = "24"
+}
+
+variable "extra_cors_origins" {
+  description = "Origins allowed to call the backend besides the deployed web site (e.g. a laptop's Vite dev server)."
+  type        = list(string)
+  default     = []
+}

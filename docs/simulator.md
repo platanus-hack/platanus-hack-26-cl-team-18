@@ -26,7 +26,7 @@ from the repository root.
 
 | Command | Player and console |
 |---|---|
-| `uv run python -m scripts.replay_audience` | Voltio + Café Patio offer, 100% segment coverage, 20% more auction value than solo, and Rayo excluded as a competitor |
+| `uv run python -m scripts.replay_audience` | Voltio + Café Patio offer, 100% viewer coverage, basket value 8.6 vs solo 8 and revenue 6.95 vs 6.5 CLP/s, and Rayo excluded as a competitor |
 | `uv run python -m scripts.replay_audience --scene fitness` | Voltio solo |
 | `uv run python -m scripts.replay_audience --scene adult` | Malta Sur solo |
 | `uv run python -m scripts.replay_audience --scene minor-safe` | House ad, with Malta Sur blocked by minor safety |
@@ -50,11 +50,15 @@ production. Run it on loopback for these synthetic observations.
    [Fixture tagging](../app/modules/audience/application/fixture_tagging.py)
    maps structured video and sound observations into one estimate per matched
    segment. Fixture IDs use a `DEMO_` prefix.
-3. [Auction](../app/modules/auction/domain/bundle.py) receives an
-   `AdOpportunity` with the `AudienceMomentSnapshot`, campaign bids and
-   supported layouts. It filters age-restricted bids, checks category
-   compatibility and mutual opt-in, then selects a bundle and computes its
-   VCG-style prices and best solo counterfactual using Decimal and Money.
+3. The [auction desk](../app/modules/auction/application/desk.py) passes an
+   `AdOpportunity` (the moment, `Bidder`s, layouts, reserve, approved baskets)
+   to the [engine](../app/modules/auction/domain/clearing.py). The engine
+   records a reason for every losing bidder (safety, competitor, not a
+   partner, below reserve, …). It selects the best basket by slot efficiency
+   and prices it with core-adjusted VCG, per attention-second as `MoneyRate`.
+   It also computes the single-brand counterfactual (value and revenue). The
+   desk then applies minimum ad seconds: outside `app_env=test`, a new group
+   swaps after 1.5 s at the earliest, and safety or a stock-out swaps at once.
 4. [Creative composition](../app/modules/creative/application/template.py)
    builds a template from stock copy and fixture brand kits. The demo reuses
    the repository's project mark across the fictional brands. The player

@@ -1,0 +1,157 @@
+{
+  "_comment": "Freely licensed stock clips (Wikimedia Commons) used as real-video eval input. Videos are downloaded by evals/video/fetch.py into the gitignored evals/perception/videos/ and never committed. `expect` is a human judgement of which demo brands would make sense on a screen facing this scene.",
+  "clips": [
+    {
+      "id": "coffee-counter",
+      "title": "Starbucks en la aĉetcentro Kristall (Tjumeno).webm",
+      "page": "https://commons.wikimedia.org/wiki/File:Starbucks_en_la_a%C4%89etcentro_Kristall_(Tjumeno).webm",
+      "license": "CC BY-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+      "artist": "RG72",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/transcoded/3/39/Starbucks_en_la_a%C4%89etcentro_Kristall_%28Tjumeno%29.webm/Starbucks_en_la_a%C4%89etcentro_Kristall_%28Tjumeno%29.webm.480p.vp9.webm",
+      "start_s": 0,
+      "duration_s": 11,
+      "scene": "",
+      "expect": {
+        "sensible_brands": [],
+        "never_brands": [
+          "Malta Sur"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "id": "street-evening",
+      "title": "Vespero en Hong Kong Island (2014) 02.webm",
+      "page": "https://commons.wikimedia.org/wiki/File:Vespero_en_Hong_Kong_Island_(2014)_02.webm",
+      "license": "CC BY-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+      "artist": "RG72",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/transcoded/1/1d/Vespero_en_Hong_Kong_Island_%282014%29_02.webm/Vespero_en_Hong_Kong_Island_%282014%29_02.webm.480p.vp9.webm",
+      "start_s": 0,
+      "duration_s": 11,
+      "scene": "",
+      "expect": {
+        "sensible_brands": [],
+        "never_brands": [
+          "Malta Sur"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "id": "market-square",
+      "title": "Laukontori, Tampere, 2018.webm",
+      "page": "https://commons.wikimedia.org/wiki/File:Laukontori,_Tampere,_2018.webm",
+      "license": "CC BY 3.0",
+      "license_url": "https://creativecommons.org/licenses/by/3.0",
+      "artist": "Sound recorder, video recorder, photographer: Mikael Maffei",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/transcoded/3/38/Laukontori%2C_Tampere%2C_2018.webm/Laukontori%2C_Tampere%2C_2018.webm.480p.vp9.webm",
+      "start_s": 5,
+      "duration_s": 25,
+      "scene": "",
+      "expect": {
+        "sensible_brands": [],
+        "never_brands": [
+          "Malta Sur"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "id": "shopping-cart",
+      "title": "Disinfecting shopping cart.webm",
+      "page": "https://commons.wikimedia.org/wiki/File:Disinfecting_shopping_cart.webm",
+      "license": "CC BY-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-sa/4.0",
+      "artist": "Awkwafaba",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/transcoded/b/b0/Disinfecting_shopping_cart.webm/Disinfecting_shopping_cart.webm.480p.vp9.webm",
+      "start_s": 0,
+      "duration_s": 7,
+      "scene": "",
+      "expect": {
+        "sensible_brands": [],
+        "never_brands": [
+          "Malta Sur"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "id": "gym-floor",
+      "title": "Exposición en el Gimnasio de Banderilla, Veracruz.webm",
+      "page": "https://commons.wikimedia.org/wiki/File:Exposici%C3%B3n_en_el_Gimnasio_de_Banderilla,_Veracruz.webm",
+      "license": "CC0",
+      "license_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+      "artist": "Koffermejia",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/transcoded/a/a8/Exposici%C3%B3n_en_el_Gimnasio_de_Banderilla%2C_Veracruz.webm/Exposici%C3%B3n_en_el_Gimnasio_de_Banderilla%2C_Veracruz.webm.480p.vp9.webm",
+      "start_s": 0,
+      "duration_s": 11,
+      "scene": "",
+      "expect": {
+        "sensible_brands": [],
+        "never_brands": [
+          "Malta Sur"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "id": "crowd-flow",
+      "title": "Pyrkon 2026 - ambient flow of people 1.webm",
+      "page": "https://commons.wikimedia.org/wiki/File:Pyrkon_2026_-_ambient_flow_of_people_1.webm",
+      "license": "CC BY 4.0",
+      "license_url": "https://creativecommons.org/licenses/by/4.0",
+      "artist": "Rose Abrams",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/transcoded/2/21/Pyrkon_2026_-_ambient_flow_of_people_1.webm/Pyrkon_2026_-_ambient_flow_of_people_1.webm.480p.vp9.webm",
+      "start_s": 10,
+      "duration_s": 25,
+      "scene": "",
+      "expect": {
+        "sensible_brands": [],
+        "never_brands": [
+          "Malta Sur"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "id": "supermarket-aisle",
+      "title": "Tour of an American Supermarket in 2018.webm",
+      "page": "https://commons.wikimedia.org/wiki/File:Tour_of_an_American_Supermarket_in_2018.webm",
+      "license": "CC BY 3.0",
+      "license_url": "https://creativecommons.org/licenses/by/3.0",
+      "artist": "Riccardo and Coral",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/transcoded/4/46/Tour_of_an_American_Supermarket_in_2018.webm/Tour_of_an_American_Supermarket_in_2018.webm.480p.vp9.webm",
+      "start_s": 60,
+      "duration_s": 25,
+      "scene": "",
+      "expect": {
+        "sensible_brands": [],
+        "never_brands": [
+          "Malta Sur"
+        ],
+        "note": ""
+      }
+    },
+    {
+      "id": "outdoor-gym",
+      "title": "Video of a free open outdoor gym - Wadala Five Garden nearby Mumbai.webm",
+      "page": "https://commons.wikimedia.org/wiki/File:Video_of_a_free_open_outdoor_gym_-_Wadala_Five_Garden_nearby_Mumbai.webm",
+      "license": "CC BY 3.0",
+      "license_url": "https://creativecommons.org/licenses/by/3.0",
+      "artist": "Jay Palav",
+      "url": "https://upload.wikimedia.org/wikipedia/commons/transcoded/d/df/Video_of_a_free_open_outdoor_gym_-_Wadala_Five_Garden_nearby_Mumbai.webm/Video_of_a_free_open_outdoor_gym_-_Wadala_Five_Garden_nearby_Mumbai.webm.360p.mpeg4.mov",
+      "start_s": 20,
+      "duration_s": 25,
+      "scene": "",
+      "expect": {
+        "sensible_brands": [],
+        "never_brands": [
+          "Malta Sur"
+        ],
+        "note": ""
+      }
+    }
+  ]
+}

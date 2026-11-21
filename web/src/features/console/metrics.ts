@@ -10,19 +10,30 @@ export function percentile(samples: readonly number[], p: number): number | null
 
 const ms = (iso: string | null): number | null => (iso === null ? null : Date.parse(iso));
 
-/** Glass-to-glass requires the player's display timestamp. */
+/**
+ * The intentional minimum-ad-seconds hold (cleared → swap_not_before). It is a
+ * product choice, not latency, so the latency metrics exclude it.
+ */
+export function holdMs(trace: LatencyTrace): number {
+    const cleared = ms(trace.cleared_at);
+    const notBefore = ms(trace.swap_not_before);
+    if (cleared === null || notBefore === null || notBefore <= cleared) return 0;
+    return notBefore - cleared;
+}
+
+/** Glass-to-glass requires the player's display timestamp; the hold is excluded. */
 export function glassToGlassMs(trace: LatencyTrace): number | null {
     const start = ms(trace.measured_at);
     const end = ms(trace.displayed_at);
     if (start === null || end === null || end < start) return null;
-    return end - start;
+    return Math.max(0, end - start - holdMs(trace));
 }
 
 export function serverDecisionMs(trace: LatencyTrace): number | null {
     const start = ms(trace.received_at);
     const end = ms(trace.ready_at);
     if (start === null || end === null || end < start) return null;
-    return end - start;
+    return Math.max(0, end - start - holdMs(trace));
 }
 
 /** The trace as ordered steps with the delta from the previous step, for the latency bar. */

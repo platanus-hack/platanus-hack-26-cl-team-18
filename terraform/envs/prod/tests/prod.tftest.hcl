@@ -25,3 +25,17 @@ run "prod_environment_is_protected" {
     error_message = "The prod environment must stay protected."
   }
 }
+
+run "web_is_built_against_the_backend" {
+  command = plan
+
+  assert {
+    condition     = contains(keys(render_env_group.web_origin.env_vars), "CORS_ORIGINS")
+    error_message = "The backend must allow the deployed web origin (CORS_ORIGINS)."
+  }
+
+  assert {
+    condition     = contains(module.app.env_var_names, "ANTHROPIC_API_KEY")
+    error_message = "The Claude key must be a declared secret."
+  }
+}

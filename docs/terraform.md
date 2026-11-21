@@ -1,6 +1,7 @@
 # Terraform on Render: guidelines and runbook
 
-Render infrastructure (web service, Postgres, env groups, project) is managed
+Render infrastructure (backend web service, Postgres, the `web/` static site,
+env groups, project) is managed
 with Terraform through the official `render-oss/render` provider. The layout,
 scripts and rules are cut down to what a hackathon needs; each rule below
 prevents a concrete failure.
@@ -9,10 +10,12 @@ prevents a concrete failure.
 
 ```text
 terraform/
-  modules/render-app/        # one deployable env: web service + Postgres + secrets env group
+  modules/render-app/        # backend: web service + Postgres + secrets env group
     tests/*.tftest.hcl       #   module contract, mocked provider
+  modules/render-static-site/  # web/ player + console (Vite build, SPA rewrite, free plan)
+    tests/*.tftest.hcl
   envs/prod/                 # a root = one state = one environment
-    main.tf                  #   render_project + module "app"
+    main.tf                  #   render_project + module "app" + module "web" + CORS env group
     variables.tf             #   every input, with tracked defaults
     terraform.tfvars         #   TRACKED: project-specific, non-secret values
     .terraform.lock.hcl      #   TRACKED: exact provider build + checksums
@@ -54,14 +57,31 @@ for everything else.
    `RENDER_API_KEY` (Account settings → API keys) and `RENDER_OWNER_ID`
    (workspace id, `tea-…`/`usr-…`).
 3. **Config.** In `terraform/envs/prod/terraform.tfvars`, set `repo_url` to the
-   mirror and `start_command` to the real entrypoint. It must bind `0.0.0.0:$PORT`.
-   Add a `health_check_path` once the app has one.
+   mirror. `start_command` (uvicorn on `0.0.0.0:$PORT`) and `health_check_path`
+   (`/health`) are already set. Add every secret name to `secret_names` **now**
+   (see rule 1's caveat).
 4. `make tf-check && make tf-plan`. Read the plan. The first plan should only *create*.
 5. `make tf-apply`. Render then builds the service from the repo. Watch the
    build log in the dashboard; `apply` does not wait for the deploy.
 6. **Secrets.** In the dashboard, open the `<name>-secrets` env group and
    replace each `set-in-render-dashboard` placeholder with the real value.
-7. `make tf-output`. Put `service_url` in `platanus-hack-project.jsonc` → `deploy-url`.
+7. `make tf-output`. Put `web_url` in `platanus-hack-project.jsonc` → `deploy-url`.
+   The player is `<web_url>/screen?id=demo-01` and the console is `<web_url>/console`.
+   The backend is `service_url` (`/health` shows it's up).
+
+### How the two services find each other
+
+- The static site gets `VITE_BACKEND_URL = service_url` at **build time**
+  (Vite inlines it), so the browser connects straight to the backend for HTTP
+  and WS.
+- The backend allows the site's origin through `CORS_ORIGINS`, which lives in a
+  separate `<project>-<env>-web-origin` env group. It can't be a plain
+  `env_vars` entry, because the site needs the backend URL and the backend needs
+  the site URL. If the first backend deploy finished before the group was
+  linked, voice-overs fail on CORS: trigger **Manual Deploy** on the backend
+  once. Extra origins (a laptop's Vite) go in `extra_cors_origins`.
+- With `APP_ENV=prod` the backend disables `/dev`, `/docs` and the
+  `DEMO_SIMULATOR` fixtures. The public URL shows live screens only.
 
 After that, **app deploys are just `git push`** to the mirror's `main`.
 `auto_deploy` is on, and `scripts/migrate.py` runs as the pre-deploy command, so
@@ -122,7 +142,7 @@ Terraform is only for infrastructure changes.
 ## Cost
 
 Defaults: web service `starter` and Postgres `basic_256mb`, both paid plans
-billed against the credits. Check current prices at render.com/pricing. The
+billed against the credits. The static site is free. Check current prices at render.com/pricing. The
 `free` Postgres plan expires after a few weeks and the free web plan sleeps,
 so avoid both for the demo.
 

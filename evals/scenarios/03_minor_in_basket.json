@@ -1,0 +1,8 @@
+{
+  "name": "minor-in-basket",
+  "beat": "Invariant 2: minor_likely only blocks restricted categories",
+  "description": "A family with a kid still gets the non-restricted basket; minor_likely must not blank all advertising.",
+  "steps": [
+    {"scene": "co-brand-minor", "expect": {"brands": ["Voltio", "Café Patio"], "layout": "duo"}}
+  ]
+}

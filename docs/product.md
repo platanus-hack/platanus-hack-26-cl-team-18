@@ -104,10 +104,10 @@ competitor names, real logos only).
 
 | Feature | What it does | Notes |
 |---|---|---|
-| **Complete the basket** | Recognizes the product a person is *holding* (never the person) and offers its complement: holding a Grano Café cup → *"Your Grano needs a Miga. 2 min, $X."* "Frequently bought together", for the physical world | YOLO sees `cup`/`bottle`; the VLM reads the brand on it from the face-blurred keyframe and returns `held_products[]`. A held product boosts its approved partners |
+| **Complete the basket** | Recognizes the product a person is *holding* (never the person) and offers its complement: holding a Café Patio cup → *"Tu Café Patio pide una Miga. A 2 minutos, $1.990."* "Frequently bought together", for the physical world | Demo props carry ArUco markers read in the hot path in about 7 ms (ADR 0008 D2); the VLM reads labels on the face-blurred keyframe in parallel (`held_products[]`). A held product boosts its approved partners |
 | **Stock-aware baskets** | Only advertise what's in stock and on promo in *this* store. A stock-out makes a campaign ineligible instantly and the basket re-forms | A per-screen stock flag set from a clerk tablet (`/clerk`); in production, the store's inventory feed |
 | **Context-aware bids** | Time of day, weather and day of week multiply bids: morning → coffee + pastry, hot afternoon → cold drinks + ice cream, night → snacks | Pure policy: a context multiplier table per category |
-| **Queue mode** | Detects people lined up (aligned tracklets, low movement) and fits the message to the wait: *"Line's 2 min: grab a Grano Café, ready when you pay."* | Queue length is an aggregate signal in the moment |
+| **Queue mode** | Detects people lined up (aligned tracklets, low movement) and fits the message to the wait: *"Fila de 2 minutos: pide tu Café Patio, listo al pagar."* | Queue length is an aggregate signal in the moment |
 | **Retailer house bids** | The store's private label or high-margin items bid too | Guarantees fill and serves the retailer's own goals |
 | **Expiring offers** | The QR code is valid for 10 minutes | Urgency plus clean attribution: redemption follows the moment |
 | **Conquest offers** (optional) | A brand bids extra when a competitor's product is held ("switch" deal) | A real practice, but some audiences find it aggressive; off by default |
@@ -140,7 +140,7 @@ competitor names, real logos only).
 3. **Auction.** When the moment changes in a way that matters, the exchange
    runs a **bundle auction**. Each campaign bids per attention-second for the
    segments it wants, and the auction picks the **best compatible basket of 1
-   to 3 brands**, subject to:
+   or 2 brands** (trio layouts later, ADR 0008 D4), subject to:
    - **pre-approved partners only** (each brand's co-brand allow-list),
    - **competitor exclusion** (never two burger brands, never two colas),
    - **brand-safety policies** (no alcohol, gambling or junk food when a minor
@@ -150,8 +150,8 @@ competitor names, real logos only).
    true value is the best strategy.
 4. **Compose.** The winning basket becomes a **creative spec**: a layout, each
    brand's real logo and product assets, the bundle's pre-approved video loop,
-   the **basket offer** sized to the group ("Trío post-gym: Voltio + Brasa Burger,
-   $X"), copy for each **dwell stage**, a spoken voice-over, and a **QR / promo
+   the **basket offer** sized to the group ("Combo post-entreno · Voltio + Café Patio
+   por $3.490"), copy for each **dwell stage**, a spoken voice-over, and a **QR / promo
    code** unique to this basket. Fresh AI copy, voice or video can upgrade it
    seconds later. **Logos are never AI-generated.**
 5. **Play.** The screen preloads the next creative and swaps with a crossfade,
@@ -195,7 +195,7 @@ This is the first question every judge and buyer will ask. Answer it by design:
   identification. "Talk to the screen" (push-to-talk) is consent by action.
 - **Redemptions are anonymous.** A QR code identifies the basket and the
   moment, never the person.
-- **Objects, not people.** Product recognition ("holding a Grano Café cup")
+- **Objects, not people.** Product recognition ("holding a Café Patio cup")
   describes objects only. Vehicle detection is class only, and **license
   plates are never read**.
 - **Transparency mode.** An on-screen indicator, plus a "what this screen

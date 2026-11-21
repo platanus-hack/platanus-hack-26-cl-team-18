@@ -5,6 +5,16 @@ import { z } from "zod";
 
 export const CONTRACT_VERSION = 1 as const;
 
+// The bidding-war slider: bounded live multiplier, idempotent by (campaign_id, seq).
+export const AdvertiserBidMultiplierSchema = z.strictObject({
+  v: z.literal(1),
+  type: z.literal("advertiser.bid_multiplier"),
+  campaign_id: z.string().min(1).max(64),
+  multiplier: z.string().max(8).regex(/^\d+(\.\d{1,2})?$/),
+  seq: z.number().int().gte(0),
+});
+export type AdvertiserBidMultiplier = z.infer<typeof AdvertiserBidMultiplierSchema>;
+
 // Header for a face-blurred JPEG; the bytes follow as the next binary WS frame.
 export const AudienceKeyframeSchema = z.strictObject({
   v: z.literal(1),
@@ -88,10 +98,42 @@ export const BidLineSchema = z.strictObject({
   category: z.string().max(64),
   bid_per_as: MoneyDTOSchema,
   value: z.number().gte(0.0),
+  value_per_s: MoneyDTOSchema.nullable(),
+  multiplier: z.string().max(16).regex(/^\d+(\.\d+)?$/).nullable(),
 });
 export type BidLine = z.infer<typeof BidLineSchema>;
 
-export const ExclusionReasonSchema = z.enum(["competitor", "safety", "budget", "below_reserve", "no_layout"]);
+export const BookLineSchema = z.strictObject({
+  campaign_id: z.string().min(1).max(64),
+  brand_id: z.string().min(1).max(64),
+  brand_name: z.string().max(80),
+  category: z.string().max(64),
+  accent_color: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable(),
+  multiplier: z.string().max(8).regex(/^\d+(\.\d{1,2})?$/),
+  multiplier_seq: z.number().int().gte(0),
+  in_stock: z.boolean(),
+  on_air: z.boolean(),
+  budget: MoneyDTOSchema,
+  spent: MoneyDTOSchema,
+  reserved: MoneyDTOSchema,
+  remaining: MoneyDTOSchema,
+});
+export type BookLine = z.infer<typeof BookLineSchema>;
+
+export const ChargeReasonSchema = z.enum(["attention", "no_attention"]);
+export type ChargeReason = z.infer<typeof ChargeReasonSchema>;
+
+export const ChargeLineSchema = z.strictObject({
+  campaign_id: z.string().min(1).max(64),
+  brand_name: z.string().max(80),
+  attention_seconds: z.string().max(16).regex(/^\d+(\.\d+)?$/),
+  price_per_as: MoneyDTOSchema,
+  amount: MoneyDTOSchema,
+  reason: ChargeReasonSchema,
+});
+export type ChargeLine = z.infer<typeof ChargeLineSchema>;
+
+export const ExclusionReasonSchema = z.enum(["competitor", "safety", "budget", "below_reserve", "no_layout", "not_partner", "out_of_stock", "inactive", "no_basket_offer", "outbid", "invalid_bid"]);
 export type ExclusionReason = z.infer<typeof ExclusionReasonSchema>;
 
 export const ExclusionSchema = z.strictObject({
@@ -110,6 +152,7 @@ export const LatencyTraceSchema = z.strictObject({
   ready_at: z.iso.datetime({ offset: true }).nullable(),
   displayed_at: z.iso.datetime({ offset: true }).nullable(),
   upgraded_at: z.iso.datetime({ offset: true }).nullable(),
+  swap_not_before: z.iso.datetime({ offset: true }).nullable(),
 });
 export type LatencyTrace = z.infer<typeof LatencyTraceSchema>;
 
@@ -117,6 +160,7 @@ export const WinnerSchema = z.strictObject({
   campaign_id: z.string().min(1).max(64),
   brand_name: z.string().max(80),
   price_per_as: MoneyDTOSchema,
+  payment_per_s: MoneyDTOSchema.nullable(),
 });
 export type Winner = z.infer<typeof WinnerSchema>;
 
@@ -133,8 +177,22 @@ export const ConsoleAuctionSchema = z.strictObject({
   single_brand_value: MoneyDTOSchema,
   coverage: z.number().gte(0.0).lte(1.0),
   trace: LatencyTraceSchema,
+  bundle_revenue: MoneyDTOSchema.nullable(),
+  single_brand_revenue: MoneyDTOSchema.nullable(),
+  pricing: z.string().max(32).nullable(),
+  trigger: z.string().max(32).nullable(),
+  swap: z.string().max(32).nullable(),
 });
 export type ConsoleAuction = z.infer<typeof ConsoleAuctionSchema>;
+
+// The live campaign book for one screen: bids, stock and budgets (also GET /api/book).
+export const ConsoleBookSchema = z.strictObject({
+  v: z.literal(1),
+  type: z.literal("console.book"),
+  screen_id: z.string().min(1).max(64).regex(/^[A-Za-z0-9_.:-]+$/),
+  lines: z.array(BookLineSchema),
+});
+export type ConsoleBook = z.infer<typeof ConsoleBookSchema>;
 
 export const DegradationFlagSchema = z.enum(["agent_offline", "vlm_unavailable", "copy_fallback", "voice_fallback", "image_fallback", "house_ad"]);
 export type DegradationFlag = z.infer<typeof DegradationFlagSchema>;
@@ -179,6 +237,22 @@ export const ConsoleMomentSchema = z.strictObject({
   trace: LatencyTraceSchema,
 });
 export type ConsoleMoment = z.infer<typeof ConsoleMomentSchema>;
+
+// The moment receipt: who looked, for how long, and what each brand paid.
+export const ConsoleReceiptSchema = z.strictObject({
+  v: z.literal(1),
+  type: z.literal("console.receipt"),
+  screen_id: z.string().min(1).max(64).regex(/^[A-Za-z0-9_.:-]+$/),
+  creative_id: z.string().min(1).max(64),
+  auction_id: z.string().min(1).max(64),
+  people: z.number().int().gte(0),
+  looking: z.number().int().gte(0),
+  played_s: z.string().max(16).regex(/^\d+(\.\d+)?$/),
+  attention_seconds: z.string().max(16).regex(/^\d+(\.\d+)?$/),
+  charges: z.array(ChargeLineSchema),
+  total: MoneyDTOSchema,
+});
+export type ConsoleReceipt = z.infer<typeof ConsoleReceiptSchema>;
 
 export const CreativeSlotSchema = z.strictObject({
   brand_id: z.string().min(1).max(64),
@@ -326,6 +400,16 @@ export const RecognitionSnapshotSchema = z.strictObject({
 });
 export type RecognitionSnapshot = z.infer<typeof RecognitionSnapshotSchema>;
 
+// A clerk's stock toggle for one brand at one screen. A stock-out re-auctions.
+export const StockSetSchema = z.strictObject({
+  v: z.literal(1),
+  type: z.literal("stock.set"),
+  screen_id: z.string().min(1).max(64).regex(/^[A-Za-z0-9_.:-]+$/),
+  brand_id: z.string().min(1).max(64),
+  in_stock: z.boolean(),
+});
+export type StockSet = z.infer<typeof StockSetSchema>;
+
 export const AgentInboundSchema = z.discriminatedUnion("type", [AudienceSnapshotSchema, AudienceKeyframeSchema, AudienceUtteranceSchema, RecognitionSnapshotSchema]);
 export type AgentInbound = z.infer<typeof AgentInboundSchema>;
 
@@ -335,9 +419,9 @@ export type PlayerInbound = z.infer<typeof PlayerInboundSchema>;
 export const PlayerOutboundSchema = z.discriminatedUnion("type", [CreativeReadySchema, CreativeUpgradedSchema, ErrorMessageSchema]);
 export type PlayerOutbound = z.infer<typeof PlayerOutboundSchema>;
 
-export const ConsoleOutboundSchema = z.discriminatedUnion("type", [ConsoleMomentSchema, ConsoleAuctionSchema, ConsoleLatencySchema, ConsoleDegradationSchema, CreativeReadySchema, CreativeUpgradedSchema, ErrorMessageSchema]);
+export const ConsoleOutboundSchema = z.discriminatedUnion("type", [ConsoleMomentSchema, ConsoleAuctionSchema, ConsoleLatencySchema, ConsoleDegradationSchema, CreativeReadySchema, CreativeUpgradedSchema, ErrorMessageSchema, ConsoleBookSchema, ConsoleReceiptSchema]);
 export type ConsoleOutbound = z.infer<typeof ConsoleOutboundSchema>;
 
-export const MESSAGE_TYPES = ["audience.snapshot", "audience.keyframe", "audience.utterance", "creative.ready", "creative.upgraded", "playback.report", "console.moment", "console.auction", "console.latency", "console.degradation", "system.error", "recognition.snapshot"] as const;
+export const MESSAGE_TYPES = ["audience.snapshot", "audience.keyframe", "audience.utterance", "creative.ready", "creative.upgraded", "playback.report", "console.moment", "console.auction", "console.latency", "console.degradation", "system.error", "advertiser.bid_multiplier", "stock.set", "console.book", "console.receipt", "recognition.snapshot"] as const;
 
 export type MessageType = (typeof MESSAGE_TYPES)[number];

@@ -95,13 +95,13 @@ class AudienceState:
             or (old["strength"] == strength and old["observed_at"] > observed_at)
         ):
             return
-        person.attributes[name] = dict(
-            value=value,
-            observed_at=observed_at,
-            source=source,
-            evidence=evidence,
-            strength=strength,
-        )
+        person.attributes[name] = {
+            "value": value,
+            "observed_at": observed_at,
+            "source": source,
+            "evidence": evidence,
+            "strength": strength,
+        }
 
     def snapshot(self) -> dict[str, Any]:
         active, history = [], []

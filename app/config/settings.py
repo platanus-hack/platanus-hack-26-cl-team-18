@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,6 +16,17 @@ class AppSettings(BaseSettings):
     log_level: str = "INFO"
     demo_simulator: bool = False
     vlm_enabled: bool = False
+    # Minimum ad seconds (docs/auction-plan.md D5): hold a swap so ads aren't strobed.
+    # None = on, except app_env=test (fixed-clock tests get immediate swaps unless
+    # they opt in and inject a scheduler).
+    auction_swap_holds: bool | None = None
+
+    @property
+    def swap_holds_enabled(self) -> bool:
+        if self.auction_swap_holds is None:
+            return self.app_env != "test"
+        return self.auction_swap_holds
+
     # JSON list in the env, e.g. CORS_ORIGINS='["http://localhost:5173"]'
     cors_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173"]
@@ -30,3 +41,28 @@ class AppSettings(BaseSettings):
     warm_concurrency: dict[str, int] = Field(
         default_factory=lambda: {"claude": 4, "elevenlabs": 4, "fal": 2, "vlm": 2}
     )
+
+    # ------------------------------------------------------------ ElevenLabs (ADR 0005)
+    elevenlabs_api_key: SecretStr | None = None
+    elevenlabs_base_url: str = "https://api.elevenlabs.io"
+    # Flash v2.5: ~100 ms model latency, Spanish, 550k chars/month on Creator.
+    elevenlabs_tts_model: str = "eleven_flash_v2_5"
+    # mp3_44100_128 is the best MP3 below Creator's mp3_44100_192 (which costs more bytes).
+    elevenlabs_output_format: str = "mp3_44100_128"
+    elevenlabs_language: str = "es"
+    # Neutral "screen narrator" for co-brand lines (a brand voice would own the line).
+    # Pick one with `uv run python -m scripts.elevenlabs_voices`.
+    elevenlabs_narrator_voice_id: str | None = None
+    voiceovers_enabled: bool = True
+    # Speech topics from opted-in screens (ADR 0005: off by default, per screen).
+    speech_mode_screens: list[str] = Field(default_factory=list)
+    speech_topic_ttl_s: int = Field(default=60, gt=0, le=600)
+
+    @property
+    def voiceovers_configured(self) -> bool:
+        return bool(
+            self.voiceovers_enabled
+            and self.elevenlabs_api_key
+            and self.elevenlabs_api_key.get_secret_value()
+            and self.elevenlabs_narrator_voice_id
+        )

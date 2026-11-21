@@ -1,7 +1,14 @@
 import { ConsoleOutboundSchema } from "@/contract";
 import { describe, expect, it } from "vitest";
 import { consoleReducer, initialConsoleState } from "./console-state";
-import { coBrandLift, glassToGlassMs, percentile, serverDecisionMs, traceSteps } from "./metrics";
+import {
+    coBrandLift,
+    glassToGlassMs,
+    holdMs,
+    percentile,
+    serverDecisionMs,
+    traceSteps,
+} from "./metrics";
 
 const trace = {
     measured_at: "2026-11-21T15:00:00.000Z",
@@ -11,6 +18,7 @@ const trace = {
     ready_at: "2026-11-21T15:00:00.050Z",
     displayed_at: "2026-11-21T15:00:01.100Z",
     upgraded_at: null,
+    swap_not_before: null,
 };
 
 describe("metrics", () => {
@@ -26,6 +34,13 @@ describe("metrics", () => {
         expect(glassToGlassMs({ ...trace, displayed_at: null })).toBeNull();
         expect(serverDecisionMs({ ...trace, displayed_at: null })).toBe(46);
         expect(glassToGlassMs({ ...trace, measured_at: null })).toBeNull();
+    });
+
+    it("excludes the minimum-ad-seconds hold from latency", () => {
+        const held = { ...trace, swap_not_before: "2026-11-21T15:00:01.030Z" }; // 1 s hold
+        expect(holdMs(held)).toBe(1000);
+        expect(glassToGlassMs(held)).toBe(100);
+        expect(holdMs({ ...trace, swap_not_before: "2026-11-21T15:00:00.000Z" })).toBe(0);
     });
 
     it("trace steps carry deltas in loop order", () => {

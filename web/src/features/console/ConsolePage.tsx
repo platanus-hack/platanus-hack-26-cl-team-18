@@ -21,6 +21,12 @@ const EXCLUSION_LABEL: Record<ExclusionReason, string> = {
     budget: "Budget",
     below_reserve: "Below reserve",
     no_layout: "No layout",
+    not_partner: "Not a partner",
+    out_of_stock: "Out of stock",
+    inactive: "Inactive",
+    no_basket_offer: "No basket offer",
+    outbid: "Outbid",
+    invalid_bid: "Invalid bid",
 };
 
 const fmtMs = (value: number | null) =>
@@ -145,6 +151,12 @@ function MomentPanel({ screenId, view }: { screenId: string; view: ScreenView })
 function AuctionPanel({ view }: { view: ScreenView }) {
     const a = view.auction?.moment_id === view.moment?.moment_id ? view.auction : null;
     const lift = a ? coBrandLift(a.bundle_value.amount, a.single_brand_value.amount) : null;
+    // Like-for-like revenue lift (R-O3); shown only when it is real (D6).
+    const revenueLift =
+        a?.bundle_revenue && a.single_brand_revenue
+            ? coBrandLift(a.bundle_revenue.amount, a.single_brand_revenue.amount)
+            : null;
+    const holdUntil = a?.swap === "held" ? a.trace.swap_not_before : null;
     return (
         <Panel
             title="Bundle auction"
@@ -152,7 +164,7 @@ function AuctionPanel({ view }: { view: ScreenView }) {
                 a &&
                 Boolean(view.moment?.segments.length) && (
                     <span className="text-metadata text-muted tabular-nums">
-                        Segment coverage {Math.round(a.coverage * 100)}%
+                        Viewer coverage (est.) {Math.round(a.coverage * 100)}%
                     </span>
                 )
             }
@@ -161,6 +173,12 @@ function AuctionPanel({ view }: { view: ScreenView }) {
                 <Empty>No auction yet.</Empty>
             ) : (
                 <div className="flex flex-col gap-3">
+                    {holdUntil && (
+                        <StatusBadge
+                            tone="neutral"
+                            label={`Swapping at ${new Date(holdUntil).toLocaleTimeString()} (min ad time)`}
+                        />
+                    )}
                     {a.winners.length === 0 ? (
                         <StatusBadge tone="neutral" label="No fill: house ad" />
                     ) : (
@@ -181,7 +199,13 @@ function AuctionPanel({ view }: { view: ScreenView }) {
                         {a.winners.length > 1 && lift !== null && (
                             <StatusBadge
                                 tone="success"
-                                label={`+${(lift * 100).toFixed(0)}% vs. solo`}
+                                label={`+${(lift * 100).toFixed(0)}% value vs. solo`}
+                            />
+                        )}
+                        {a.winners.length > 1 && revenueLift !== null && revenueLift > 0 && (
+                            <StatusBadge
+                                tone="success"
+                                label={`+${(revenueLift * 100).toFixed(0)}% revenue vs. solo`}
                             />
                         )}
                     </div>
@@ -204,10 +228,12 @@ function AuctionPanel({ view }: { view: ScreenView }) {
                                             Bid {bid.bid_per_as.amount} {bid.bid_per_as.currency}/AS
                                         </span>
                                         {exclusion && (
-                                            <StatusBadge
-                                                tone="warning"
-                                                label={EXCLUSION_LABEL[exclusion.reason]}
-                                            />
+                                            <span title={exclusion.detail || undefined}>
+                                                <StatusBadge
+                                                    tone="warning"
+                                                    label={EXCLUSION_LABEL[exclusion.reason]}
+                                                />
+                                            </span>
                                         )}
                                     </li>
                                 );
