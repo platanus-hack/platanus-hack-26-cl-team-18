@@ -337,3 +337,58 @@ and stop/start/backoff races. Run `cd web && npm run check`. Verification also
 ran the production build, both TypeScript compilers, the backend unit suite,
 `make eval`, `make eval-creative`, and `make test-sandbox` (including provider
 quota failure). Product ratchets in the loop eval were unchanged.
+
+## 10. Preserve the basket and prioritize the current moment (2026-11-21)
+
+A live backend/player regression found that rebuilding a whole spec for an
+accepted AI copy upgrade dropped the QR, redemption code/URL and approved
+video loop that the hot path had attached. The player then removed the
+playing video, and the close stage lost its usable redemption. The existing
+scenario suite passed because it did not assert these fields after an upgrade.
+
+`render_copy_upgrade` now changes copy in the existing spec: stage text,
+slot copy and provenance. The approved offer, real brand assets, hero images,
+video, QR and redemption remain intact. Voice is resolved again against the
+current spoken line through the guarded cache. A cross-basket copy upgrade
+fails before it can change the screen.
+
+A second probe occupied a provider slot, queued co-brand → fitness → adult,
+and released it with 125 ms copy calls. The old code generated all three
+briefs even though only the last one could air. Live copy and voice jobs now
+check relevance **after acquiring the provider slot, before calling it**.
+Copy matches the current brief signature; voice matches the current line and
+voice profile. Returning to the same brief/line while queued still shares the
+original job. Calls already running finish normally and may warm the cache;
+they are not cancelled after a potentially billable request.
+
+| Single-slot queue probe, five trials | Before | After |
+|---|---:|---:|
+| Current audience's copy wait, median | 385.11 ms | 128.74 ms |
+| Provider calls per three-moment sequence | 3 | 1 |
+
+This is a controlled ASGI/provider-queue measurement, not a live-provider
+percentile. The deterministic regression checks call counts and ownership,
+not machine-dependent timing. It also checks a moment that returns while
+queued and a running call that completes after departure and warms a return.
+
+The investigation also found `ready_at` was captured before redemption
+issuance, QR encoding and loop lookup. It is now captured after those steps.
+A fake-clock test adds 40 ms inside QR composition and requires all 40 ms to
+appear in the trace. Reported decision p95 in the live scenario/200-step soak
+was 6.483 ms after the fix, under the 30 ms gate; the earlier 1.993 ms reading
+omitted this work. This timestamp correction is not a speed regression.
+
+Browser verification used real uvicorn/WebSockets, Chromium, an 800 ms local
+copy provider and a generated H.264 fixture loop. It verified that AI copy
+keeps the same playing video element with zero additional video requests,
+then advanced to the close stage and decoded the QR. Redeeming its unchanged
+code credited both brands; retrying did not create another redemption. There
+were no uncaught browser errors. These checks do not measure live model,
+remote-GPU or physical TV latency.
+
+Validation: backend lint/format/types and unit suite; 72 web tests plus build;
+scenario/soak eval; creative eval; pipeline journeys; and both process-level
+speech/voice sandbox scenarios. The pipeline run completed copy+voice at
+1055 ms p95 in generation mode and 13 ms p95 after warm-up (socket delivery,
+recorded copy timing and sandbox TTS). Product ratchets did not change, so the
+existing baselines remain valid.

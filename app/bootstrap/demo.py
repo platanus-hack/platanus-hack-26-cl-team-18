@@ -84,7 +84,7 @@ from app.modules.common.domain.value_objects.utc_timestamp import UtcTimestamp
 from app.modules.creative.application.briefing import CreativeCatalog, build_brief
 from app.modules.creative.application.loops import BundleLoopLibrary
 from app.modules.creative.application.ports.copywriter import CopyWriter
-from app.modules.creative.application.rendering import render_spec
+from app.modules.creative.application.rendering import render_copy_upgrade, render_spec
 from app.modules.creative.application.speech_text import offer_line, spoken_line_for
 from app.modules.creative.application.studio import CreativeStudio, StudioConfig
 from app.modules.creative.application.template import compose_template
@@ -590,10 +590,13 @@ def register_demo(
                 # moment): the house ad airs rather than an unsafe line.
                 brief = None
         current_brief = brief
-        ready_at = clock.now_utc()
         creative_id = str(ids.new_uuid7())
         if result.winners and spec is not house_spec:
-            spec = with_basket_extras(spec, result, decision.auction_id, creative_id, ready_at)
+            spec = with_basket_extras(
+                spec, result, decision.auction_id, creative_id, clock.now_utc()
+            )
+        # Includes redemption, QR encoding and loop lookup in the decision budget.
+        ready_at = clock.now_utc()
         trace = decision.trace.model_copy(update={"ready_at": ready_at})
         current_creative = CreativeReady(
             screen_id=DEMO_SCREEN,
@@ -947,6 +950,11 @@ def register_demo(
             return
 
         async def run() -> None:
+            # The worker admits this job only after acquiring the provider slot.
+            # Do not spend that slot or tokens on a moment that left while queued.
+            with lock:
+                if current_brief is None or current_brief.signature() != job.brief.signature():
+                    return
             draft = await studio.upgrade_copy(job.brief, value_per_s_clp=job.value_per_s_clp)
             if draft is not None:
                 upgrade_copy(job, draft)
@@ -974,8 +982,8 @@ def register_demo(
                 if composed.draft.source is CopySource.STOCK:
                     return
                 draft = composed.draft
-            # A fresh spec drops the old voice-over: it no longer matches the new line.
-            spec = with_cached_voice(render_spec(brief, draft, kits_by_id))
+            # Keep the basket's QR/redemption and media while replacing only copy.
+            spec = with_cached_voice(render_copy_upgrade(target.spec, brief, draft, kits_by_id))
             trace = target.trace.model_copy(update={"upgraded_at": clock.now_utc()})
             current_creative = target.model_copy(update={"spec": spec, "trace": trace})
             upgraded = CreativeUpgraded(
@@ -1037,6 +1045,14 @@ def register_demo(
 
         async def job() -> None:
             nonlocal voice_degraded
+            # A queued line may no longer belong to the current ad. Reuse by line
+            # and voice (not creative id) when the same offer returns before admission.
+            with lock:
+                if (
+                    spoken_copy(current_creative.spec) != line
+                    or voice_for(current_creative.spec) != voice
+                ):
+                    return
             characters = voiceovers.stats.characters
             url = await voiceovers.voiceover_url(line, voice)
             if (spent := voiceovers.stats.characters - characters) > 0:

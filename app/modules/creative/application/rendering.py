@@ -58,3 +58,32 @@ def render_spec(
         angle=brief.angle.angle.value,
         copy_source=CopySourceKind(draft.source.value),
     )
+
+
+def render_copy_upgrade(
+    previous: CreativeSpec,
+    brief: CreativeBrief,
+    draft: CopyDraft,
+    kits: Mapping[BrandId, BrandKit],
+) -> CreativeSpec:
+    """Replace copy only; the current basket owns its offer, redemption and media.
+
+    A copy upgrade must not remove a pre-approved loop, reissue the basket's
+    redemption code or reset any already-upgraded hero imagery. A changed
+    spoken line is resolved separately through the guarded voice cache.
+    """
+    rendered = render_spec(brief, draft, kits)
+    by_brand = {slot.brand_id: slot.copy_text for slot in rendered.slots}
+    if {slot.brand_id for slot in previous.slots} != set(by_brand):
+        raise ValueError("Copy upgrades must keep the basket's brands")
+    return previous.model_copy(
+        update={
+            "slots": [
+                slot.model_copy(update={"copy_text": by_brand[slot.brand_id]})
+                for slot in previous.slots
+            ],
+            "stages": rendered.stages,
+            "copy_source": rendered.copy_source,
+            "voiceover_url": None,
+        }
+    )
