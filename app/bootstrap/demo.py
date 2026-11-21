@@ -12,6 +12,7 @@ from uuid import UUID
 from app.bootstrap.demo_console import decision_messages
 from app.contract.messages import (
     AdvertiserBidMultiplier,
+    AudienceKeyframe,
     AudienceSnapshot,
     AudienceUtterance,
     BookLine,
@@ -31,20 +32,27 @@ from app.contract.messages import (
 )
 from app.modules.auction.application.desk import AuctionDesk
 from app.modules.auction.application.ports.auction_log import AuctionLog, AuctionRecord
-from app.modules.auction.domain.opportunity import AdOpportunity, Layout
+from app.modules.auction.domain.opportunity import (
+    AdOpportunity,
+    HeldProduct as BidHeldProduct,
+    Layout,
+)
 from app.modules.auction.domain.result import AuctionResult, NoFillReason
 from app.modules.auction.domain.swap import Trigger
 from app.modules.auction.infrastructure.auction_log import InMemoryAuctionLog
 from app.modules.auction.infrastructure.engines.in_process import InProcessBundleEngine
 from app.modules.audience import AudienceMomentSnapshot
-from app.modules.audience.application.fixture_tagging import classify_snapshot
+from app.modules.audience.application.classifier import AudienceClassifier, DegradedSignal
+from app.modules.audience.application.ports import AudienceTagger
+from app.modules.audience.domain.catalog import CueRule
 from app.modules.audience.domain.speech_evidence import (
     SpeechEvidence,
     merge_speech,
     topics_from_keyterms,
 )
 from app.modules.audience.domain.value_objects.ids import MomentId
-from app.modules.audience.domain.value_objects.segment import SegmentId
+from app.modules.audience.domain.value_objects.segment import SegmentId, SegmentSource
+from app.modules.audience.infrastructure.catalog.loader import load_catalog
 from app.modules.campaigns.application.live_book import (
     LiveCampaignBook,
     MultiplierOutcome,
@@ -63,6 +71,7 @@ from app.modules.common.application.clock import BaseClock
 from app.modules.common.application.id_generator import IdGenerator
 from app.modules.common.domain.value_objects.money import Money
 from app.modules.common.domain.value_objects.money_rate import MoneyRate
+from app.modules.common.domain.value_objects.percentage import Percentage
 from app.modules.common.domain.value_objects.rounding_policy import RoundingPolicy
 from app.modules.common.domain.value_objects.utc_timestamp import UtcTimestamp
 from app.modules.creative.application.briefing import CreativeCatalog, build_brief
@@ -123,6 +132,7 @@ def register_demo(
     speech_ttl: timedelta = timedelta(seconds=60),
     swap_holds: bool = False,
     scheduler: Scheduler = thread_timer,
+    tagger: AudienceTagger | None = None,
     auction_log: AuctionLog | None = None,
     ledger: ChargeLedger | None = None,
     copywriter: CopyWriter | None = None,
@@ -136,10 +146,11 @@ def register_demo(
     logo = Path(__file__).resolve().parents[2].joinpath("project-logo.png").read_bytes()
     logo_url = "data:image/png;base64," + b64encode(logo).decode("ascii")
 
-    fitness = SegmentId.create("DEMO_FITNESS")
-    coffee = SegmentId.create("DEMO_COFFEE")
-    beer = SegmentId.create("DEMO_BEER")
-    food = SegmentId.create("DEMO_FOOD")
+    # Real IAB Audience Taxonomy 1.1 IDs (source in the audience catalog JSON).
+    fitness = SegmentId.create("408")  # Interest | Healthy Living | Fitness and Exercise
+    coffee = SegmentId.create("977")  # Purchase Intent | CPG | Edible | Beverages | Coffee
+    beer = SegmentId.create("369")  # Interest | Food & Drink | Alcoholic Beverages
+    food = SegmentId.create("1404")  # Purchase Intent | Food and Beverage Services | Fast Food
     kits = tuple(
         BrandKit(
             brand_id=BrandId.create(ids.new_uuid7()),
@@ -156,6 +167,14 @@ def register_demo(
         )
     )
     kits_by_id = {kit.brand_id: kit for kit in kits}
+    # Stable slugs for prop markers and the VLM (edge/props/markers.json, ADR 0008 D2).
+    brand_by_slug = dict(
+        zip(
+            ("voltio", "cafe-patio", "malta-sur", "rayo"),
+            (kit.brand_id for kit in kits),
+            strict=True,
+        )
+    )
     voltio, patio, rayo = kits[0].brand_id, kits[1].brand_id, kits[3].brand_id
     # Every mutual-partner pair gets an approved basket (docs/demo.md), so Rayo competes
     # for the energy slot inside a basket and prices it. Offers are sized to the group
@@ -220,28 +239,34 @@ def register_demo(
     auctions = auction_log or InMemoryAuctionLog()
     delivery = DeliveryDesk(ledger=ledger or InMemoryChargeLedger(), ids=ids, budgets=book)
     campaign_of = {bidder.campaign_id: bidder for bidder in bidders}
-    vision_catalog = {
-        # Simulator fixture labels (scripts/replay_audience.py, evals/scenarios).
-        "sports ball": fitness,
-        "tap handle fixture": beer,
-        # Real COCO labels the perception agent emits (edge/agent/vision/snapshot.py).
-        # Without these a live camera never maps to a segment and only the house ad plays.
-        "bottle": fitness,  # the gym-bottle prop
-        "cup": coffee,
-        "wine glass": beer,
-        # Held demo props, read from their ArUco markers (edge/props/markers.json, ADR 0008 D2).
-        "product:voltio": fitness,
-        "product:rayo": fitness,
-        "product:cafe-patio": coffee,
-        "product:malta-sur": beer,
-    }
-    sound_catalog = {"coffee service fixture": coffee}
-    segment_labels = {
-        fitness: "Sports & fitness",
-        coffee: "Coffee",
-        beer: "Beer",
-        food: "Food & dining",
-    }
+    # Demo cues at full weight replace any real catalog cue with the same label, so
+    # scripted scenes and the physical props stay deterministic; every other real
+    # catalog cue still applies. Held props ("product:<slug>", ADR 0008 D2) are not
+    # cues: the classifier reads them as held products that boost their partners.
+    loaded = load_catalog()
+    fixture_cues = tuple(
+        CueRule(source=source, cue=cue, segment_id=segment, weight=Percentage.create(100))
+        for source, cue, segment in (
+            # Simulator fixture labels (scripts/replay_audience.py, evals/scenarios).
+            (SegmentSource.VISION, "sports ball", fitness),
+            (SegmentSource.VISION, "tap handle fixture", beer),
+            (SegmentSource.SOUND, "coffee service fixture", coffee),
+            # COCO labels the live agent emits for the demo props
+            # (edge/agent/vision/snapshot.py); at catalog weight a single cup or
+            # bottle stays below the enter threshold and only the house ad plays.
+            (SegmentSource.VISION, "bottle", fitness),  # the gym-bottle prop
+            (SegmentSource.VISION, "cup", coffee),
+            (SegmentSource.VISION, "wine glass", beer),
+        )
+    )
+    fixture_keys = {(rule.source, rule.cue) for rule in fixture_cues}
+    audience_catalog = loaded.catalog.with_cues(
+        (
+            *(rule for rule in loaded.catalog.cues if (rule.source, rule.cue) not in fixture_keys),
+            *fixture_cues,
+        )
+    )
+    segment_labels = {segment.segment_id: segment.label for segment in audience_catalog.segments}
     # Canonical keyterms the agent reports (edge/agent/speech/keyterms.py) -> segments.
     keyterm_catalog = {
         "gym": fitness,
@@ -296,6 +321,36 @@ def register_demo(
     speech = SpeechEvidence()
     last_snapshot: tuple[AudienceSnapshot, Received] | None = None
     voice_degraded = False
+    vlm_degraded = False
+
+    def vlm_findings_landed(wire_screen_id: str) -> None:
+        # Re-run the decision on the latest observation with the VLM findings merged in.
+        with lock:
+            latest = last_snapshot
+        if latest is not None and wire_screen_id == DEMO_SCREEN:
+            decide(latest[0], Received(received_at=clock.now_utc()), reconsider=True)
+
+    def vlm_degradation(wire_screen_id: str, signal: DegradedSignal, active: bool) -> None:
+        nonlocal vlm_degraded
+        with lock:
+            if vlm_degraded == active:
+                return
+            vlm_degraded = active
+        hub.broadcast_console_threadsafe(
+            ConsoleDegradation(
+                screen_id=wire_screen_id,
+                flags=[DegradationFlag.VLM_UNAVAILABLE] if active else [],
+            )
+        )
+
+    classifier = AudienceClassifier(
+        catalog=audience_catalog,
+        reliability=loaded.reliability,
+        tagger=tagger,
+        warm=warm,
+        on_findings=vlm_findings_landed,
+        on_degraded=vlm_degradation,
+    )
     # The on-air play's exposure lease: (creative_id, result, looking, leases held).
     lease: tuple[str, AuctionResult, int, int] | None = None
 
@@ -329,27 +384,27 @@ def register_demo(
                     measured_at.value,
                     (tracklet.id for tracklet in snapshot.tracklets if tracklet.looking),
                 )
+            classification = classifier.classify(snapshot, at=received.received_at)
             segments = merge_speech(
-                classify_snapshot(
-                    snapshot,
-                    vision_catalog=vision_catalog,
-                    sound_catalog=sound_catalog,
-                ),
+                classification.segments,
                 speech,
                 at=UtcTimestamp.create(received.received_at),
                 looking=snapshot.looking,
             )
-            minor_likely = snapshot.minor_likely.value
+            minor_likely = classification.minor_likely
+            held = classification.held_products
             if current_moment is not None and (
                 snapshot.people,
                 snapshot.looking,
                 segments,
                 minor_likely,
+                held,
             ) == (
                 current_moment.people,
                 current_moment.looking,
                 current_moment.segments,
                 current_moment.minor_likely,
+                current_moment.held_products,
             ):
                 if not reconsider:
                     latest_observed_at = observed_at
@@ -364,6 +419,7 @@ def register_demo(
                 looking=snapshot.looking,
                 segments=segments,
                 minor_likely=minor_likely,
+                held_products=held,
             )
             if not reconsider:
                 latest_observed_at = observed_at
@@ -399,6 +455,15 @@ def register_demo(
                 approved_baskets=offer_book.baskets(),
                 out_of_stock=stock.out_of_stock(DEMO_SCREEN),
                 max_play_seconds=Decimal(MAX_PLAY_SECONDS),
+                # Complete the basket (ADR 0008 D2): a held brand boosts its partners.
+                held_products=tuple(
+                    BidHeldProduct(
+                        brand_id=brand_by_slug[product.brand_ref],
+                        confidence=product.confidence,
+                    )
+                    for product in moment.held_products
+                    if product.brand_ref is not None and product.brand_ref in brand_by_slug
+                ),
             ),
             trigger,
             now=clock.now_utc(),
@@ -877,7 +942,15 @@ def register_demo(
             if latest_console:
                 hub.broadcast_console_threadsafe(*latest_console, book_view(), sink=sink)
 
+    def receive_keyframe(keyframe: AudienceKeyframe, received: Received) -> None:
+        # Face-blurred JPEG, in memory only (never stored or logged); tagged on the warm path.
+        if keyframe.screen_id == DEMO_SCREEN and received.payload is not None:
+            classifier.observe_keyframe(
+                keyframe, jpeg=received.payload, received_at=received.received_at
+            )
+
     router.on(AudienceSnapshot, receive_snapshot)
+    router.on(AudienceKeyframe, receive_keyframe)
     router.on(AudienceUtterance, receive_utterance)
     router.on(PlaybackReport, receive_playback)
     router.on_player_connected(player_connected)

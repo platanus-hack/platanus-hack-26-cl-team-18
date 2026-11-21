@@ -2,7 +2,7 @@
 
 The simulator uses fixture labels ("sports ball", "tap handle fixture"); a live
 camera sends COCO labels ("cup", "bottle") and held props as "product:<slug>"
-(edge/agent/vision). Regression: with only fixture labels, every live moment
+(edge/agent/vision); held props boost partners rather than adding a segment. Regression: with only fixture labels, every live moment
 had zero segments and the screen stayed on the house ad.
 """
 
@@ -46,7 +46,9 @@ def _agent_snapshot(seq: int, at: datetime, labels: dict[str, float]) -> Audienc
     ("labels", "expected"),
     [
         ({"cup": 0.81}, {"Café Patio"}),
-        ({"product:cafe-patio": 1.0}, {"Café Patio"}),
+        # A held prop boosts its basket partners, it never sells itself
+        # (docs/demo.md beat 3, ADR 0008 D2): alone, the house ad keeps playing.
+        ({"product:cafe-patio": 1.0}, set()),
         ({"bottle": 0.7, "cup": 0.8}, {"Voltio", "Café Patio"}),
         ({"laptop": 0.9}, set()),  # not an interest the seed sells: house ad
     ],

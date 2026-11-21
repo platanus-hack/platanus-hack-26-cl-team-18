@@ -19,8 +19,11 @@ from app.modules.ai.application.service.llm import AIService
 from app.modules.ai.infrastructure.adapters.llm.factory import LLMNotConfigured, build_llm_provider
 from app.modules.auction.application.ports.auction_log import AuctionLog
 from app.modules.auction.infrastructure.auction_log import InMemoryAuctionLog, PostgresAuctionLog
+from app.modules.audience.application.ports import AudienceTagger
+from app.modules.audience.infrastructure.catalog.loader import load_catalog
 from app.modules.audience.infrastructure.recognition_store import RecognitionStore
 from app.modules.audience.infrastructure.recognition_vlm import RecognitionVlm
+from app.modules.audience.infrastructure.tagging.claude import ClaudeAudienceTagger
 from app.modules.common.application.clock import BaseClock
 from app.modules.common.application.id_generator import IdGenerator
 from app.modules.common.infrastructure.clock.system_clock import SystemClock
@@ -54,6 +57,8 @@ class Container:
     recognition: RecognitionStore = field(default_factory=RecognitionStore)
     # Warm, opt-in VLM enrichment of recognition tracklets (never in prod).
     vlm: RecognitionVlm | None = None
+    # Claude vision behind AudienceTagger: keyframes -> IAB segments (warm path).
+    tagger: AudienceTagger | None = None
     demo: DemoControls | None = None
     auction_log: AuctionLog = field(default_factory=InMemoryAuctionLog)
     ledger: ChargeLedger = field(default_factory=InMemoryChargeLedger)
@@ -88,6 +93,7 @@ def build_container(
     build_voiceovers(container, voice_synthesizer)
     build_recognition_vlm(container)
     build_copywriter(container, copywriter)
+    build_audience_tagger(container)
     build_records(container)
     register_contexts(container)
     return container
@@ -111,6 +117,7 @@ def register_contexts(container: Container) -> None:
             speech_ttl=timedelta(seconds=container.settings.speech_topic_ttl_s),
             swap_holds=container.settings.swap_holds_enabled,
             scheduler=container.scheduler,
+            tagger=container.tagger,
             auction_log=container.auction_log,
             ledger=container.ledger,
             budget_clp=container.settings.demo_budget_clp,
@@ -153,6 +160,31 @@ def build_copywriter(container: Container, copywriter: CopyWriter | None = None)
     effort = env.get("ANTHROPIC_EFFORT", "").strip()
     profile = ModelProfile(model, parse_effort(effort) if effort else DEFAULT_EFFORT)
     container.copywriter = ClaudeCopywriter(provider, profile)
+
+
+def build_audience_tagger(container: Container) -> None:
+    """Claude vision behind AudienceTagger; without a key the VLM is off (console: degraded)."""
+    settings = container.settings
+    if settings.app_env in ("test", "prod") or not settings.demo_simulator:
+        return  # unit tests never call live providers; only the demo loop classifies
+    from dotenv import dotenv_values
+
+    # AppSettings reads `.env` into its own fields only; the LLM factory reads a
+    # mapping, so give it `.env` overlaid by the real environment.
+    env = {key: value for key, value in dotenv_values(".env").items() if value is not None}
+    try:
+        provider = build_llm_provider({**env, **os.environ})
+    except LLMNotConfigured:
+        logger.warning("ANTHROPIC_API_KEY unset: keyframe tagging (VLM) is off")
+        return
+    ai = AIService(provider)
+    container.closers.append(ai.aclose)
+    profile = getattr(provider, "profile", None)
+    container.tagger = ClaudeAudienceTagger(
+        ai=ai,
+        catalog=load_catalog().catalog,
+        model_version=profile.describe() if profile is not None else type(provider).__name__,
+    )
 
 
 def build_records(container: Container) -> None:
