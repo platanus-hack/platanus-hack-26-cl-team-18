@@ -2,6 +2,7 @@
 
 import logging
 from base64 import b64encode
+from collections import deque
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
@@ -11,7 +12,7 @@ from threading import Lock, RLock
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from app.bootstrap import demo_catalog
+from app.bootstrap import demo_catalog, dev_stream
 from app.bootstrap.demo_catalog import wordmark
 from app.bootstrap.demo_console import decision_messages
 from app.contract.messages import (
@@ -32,6 +33,10 @@ from app.contract.messages import (
     CreativeSpec,
     CreativeUpgraded,
     DegradationFlag,
+    DevCreative,
+    DevKeyframe,
+    DevPlayer,
+    DevSpeech,
     DistanceBand,
     FilteredAttention,
     LatencyTrace,
@@ -59,7 +64,11 @@ from app.modules.auction.domain.swap import Trigger
 from app.modules.auction.infrastructure.auction_log import InMemoryAuctionLog
 from app.modules.auction.infrastructure.engines.in_process import InProcessBundleEngine
 from app.modules.audience import AudienceMomentSnapshot
-from app.modules.audience.application.classifier import AudienceClassifier, DegradedSignal
+from app.modules.audience.application.classifier import (
+    AudienceClassifier,
+    DegradedSignal,
+    TagReport,
+)
 from app.modules.audience.application.playback_echo import PlaybackEcho
 from app.modules.audience.application.ports import AudienceTagger
 from app.modules.audience.application.ports.tagger import WarmScheduler
@@ -104,7 +113,7 @@ from app.modules.creative.application.loops import BundleLoopLibrary
 from app.modules.creative.application.ports.copywriter import CopyWriter
 from app.modules.creative.application.rendering import render_copy_upgrade, render_spec
 from app.modules.creative.application.speech_text import offer_line, spoken_line_for
-from app.modules.creative.application.studio import CreativeStudio, StudioConfig
+from app.modules.creative.application.studio import Composed, CreativeStudio, StudioConfig
 from app.modules.creative.application.template import compose_template
 from app.modules.creative.application.voiceover import InvalidSpokenLine, VoiceoverService
 from app.modules.creative.domain.angle import Angle
@@ -112,6 +121,7 @@ from app.modules.creative.domain.brief import CreativeBrief, daypart_for_hour
 from app.modules.creative.domain.cost import GenerationBudget, GenerationKind, UsdCost
 from app.modules.creative.domain.draft import CopyDraft, CopySource
 from app.modules.creative.domain.offer import BasketOffer, OfferBook
+from app.modules.creative.domain.party import GROUP_WINDOW, LookingSample, addressed_party
 from app.modules.creative.infrastructure.campaign_assets import (
     CAMPAIGN_ASSETS,
     load_campaign_media,
@@ -301,6 +311,7 @@ def register_demo(
     redemption_ledger: RedemptionLedger | None = None,
     public_base_url: str = "http://localhost:5173",
     media_dir: Path | None = None,
+    dev_keyframe_preview: bool = False,
 ) -> DemoControls:
     screen_id = ScreenId.create(ids.new_uuid7())
     market = market or seed_market(
@@ -456,6 +467,50 @@ def register_demo(
             )
         )
 
+    # ------------------------------------------------------------ /dev QA stream
+    # Debug views only (docs/dev-console-plan.md): every emitter is fire-and-forget
+    # and does nothing unless a `/dev` page is connected.
+
+    def dev_tags(report: TagReport) -> None:
+        if hub.dev_count():
+            hub.broadcast_dev_threadsafe(
+                dev_stream.vlm(report, finished_at=clock.now_utc(), labels=segment_labels)
+            )
+
+    def dev_creative(step: str, creative: CreativeReady, **fields: object) -> None:
+        if not hub.dev_count():
+            return
+        spec = creative.spec
+        hub.broadcast_dev_threadsafe(
+            DevCreative.model_validate(
+                {
+                    "screen_id": wire_screen_id,
+                    "at": clock.now_utc(),
+                    "step": step,
+                    "creative_id": creative.creative_id,
+                    "auction_id": creative.auction_id,
+                    "voiceover_url": spec.voiceover_url,
+                    "video_url": spec.video_url,
+                    "redemption_code": spec.redemption_code,
+                    **fields,
+                }
+            )
+        )
+
+    def dev_player(event: str, creative_id: str, at: datetime, **fields: object) -> None:
+        if hub.dev_count():
+            hub.broadcast_dev_threadsafe(
+                DevPlayer.model_validate(
+                    {
+                        "screen_id": wire_screen_id,
+                        "creative_id": creative_id,
+                        "event": event,
+                        "at": at,
+                        **fields,
+                    }
+                )
+            )
+
     classifier = AudienceClassifier(
         catalog=audience_catalog,
         reliability=loaded.reliability,
@@ -463,16 +518,20 @@ def register_demo(
         warm=warm,
         on_findings=vlm_findings_landed,
         on_degraded=vlm_degradation,
+        on_tags=dev_tags,
     )
     # The on-air play's exposure lease: (creative_id, result, looking, leases held).
     lease: tuple[str, AuctionResult, int, int] | None = None
+    # Recent looking counts: the offer addresses the group, not every glance (party.py).
+    looking_samples: deque[LookingSample] = deque()
+    briefed_party = 0  # the addressed party the current moment was briefed with
 
     def receive_snapshot(snapshot: AudienceSnapshot, received: Received) -> None:
         decide(snapshot, received, reconsider=False)
 
     def decide(snapshot: AudienceSnapshot, received: Received, *, reconsider: bool) -> None:
         nonlocal current_creative, current_moment, latest_observed_at, latest_console
-        nonlocal last_snapshot
+        nonlocal last_snapshot, briefed_party
         if snapshot.screen_id != wire_screen_id:
             return
         measured_at = UtcTimestamp.create(snapshot.measured_at.astimezone(UTC))
@@ -492,6 +551,13 @@ def register_demo(
             if not reconsider:
                 last_snapshot = (snapshot, received)
                 # Every fresh reading feeds attention, even when the moment is unchanged.
+                looking_samples.append(
+                    LookingSample(measured_at.value, snapshot.looking, snapshot.people)
+                )
+                while looking_samples and (
+                    measured_at.value - looking_samples[0].measured_at > GROUP_WINDOW
+                ):
+                    looking_samples.popleft()
                 delivery.attention.record(
                     wire_screen_id,
                     measured_at.value,
@@ -522,18 +588,23 @@ def register_demo(
             )
             minor_likely = classification.minor_likely
             held = classification.held_products
+            # The group the offer addresses moves only on confirmed counts (party.py), so
+            # the second sample of a new count re-briefs even when the facts repeat.
+            party_now = addressed_party(looking_samples, now=measured_at.value)
             if current_moment is not None and (
                 snapshot.people,
                 snapshot.looking,
                 segments,
                 minor_likely,
                 held,
+                party_now,
             ) == (
                 current_moment.people,
                 current_moment.looking,
                 current_moment.segments,
                 current_moment.minor_likely,
                 current_moment.held_products,
+                briefed_party,
             ):
                 if not reconsider:
                     latest_observed_at = observed_at
@@ -552,6 +623,7 @@ def register_demo(
             )
             if not reconsider:
                 latest_observed_at = observed_at
+            briefed_party = party_now
             needs_voice = run_auction(snapshot, moment, Trigger.MOMENT_CHANGED)
         # Outside the lock: a cache hit upgrades the creative, which takes the lock.
         if needs_voice is not None:
@@ -572,7 +644,11 @@ def register_demo(
             moment=moment,
             result=result,
             catalog=catalog,
-            context=MomentContext(held_brand_ids=held, daypart=daypart_for_hour(local_hour)),
+            context=MomentContext(
+                held_brand_ids=held,
+                daypart=daypart_for_hour(local_hour),
+                party=addressed_party(looking_samples, now=moment.measured_at.value),
+            ),
         )
 
     def run_auction(
@@ -739,6 +815,7 @@ def register_demo(
         result = decision.result
         spec = house_spec
         brief = brief_for(decision.moment, result)
+        composed: Composed | None = None
         variant = 0
         if brief is not None:
             variant = hook_lab.variant_for(brief.signature(), studio.hook_count(brief))
@@ -819,6 +896,23 @@ def register_demo(
         )
         hub.broadcast_console_threadsafe(*latest_console)
         hub.send_to_screen_threadsafe(current_creative)
+        if hub.dev_count():
+            note = None
+            if not result.winners:
+                note = f"no fill: {result.no_fill.value}" if result.no_fill else "no fill"
+            elif composed is not None and brief is None:
+                note = "even stock copy failed the guard: house ad"
+            dev_creative(
+                "composed" if brief is not None else "house",
+                current_creative,
+                moment_id=str(decision.moment.moment_id),
+                brief=dev_stream.brief(composed.brief) if composed is not None else None,
+                copy_draft=dev_stream.copy(composed.draft, composed.score)
+                if composed is not None
+                else None,
+                compose_ms=composed.compose_ms if composed is not None else None,
+                note=note,
+            )
         if brief is not None and studio.needs_upgrade(brief):
             request_copy(
                 _CopyJob(
@@ -1014,10 +1108,28 @@ def register_demo(
                         UtcTimestamp.create(received.received_at)
                     ).topics
                 )
+            asked_at = clock.now_utc()
             extraction = await topic_extractor.extract(
                 text, language=language, catalog=catalog_text, prior_topics=prior_topics
             )
+
+            def dev_extraction(found_topics: tuple[SpeechTopic, ...] = ()) -> None:
+                if hub.dev_count():
+                    hub.broadcast_dev_threadsafe(
+                        DevSpeech(
+                            screen_id=wire_screen_id,
+                            at=clock.now_utc(),
+                            stage="extraction",
+                            rejected=[key[:32] for key in extraction.rejected][:32],
+                            topics=dev_stream.speech_topics(found_topics, segment_labels),
+                            outcome=extraction.outcome.value,
+                            model_version=extraction.model_version[:128],
+                            latency_ms=max((clock.now_utc() - asked_at).total_seconds() * 1000, 0),
+                        )
+                    )
+
             if extraction.outcome is TopicOutcome.FAILED:
+                dev_extraction()
                 return
             found = tuple(t for t in extraction.topics if t.segment_key not in extraction.rejected)
             # A model cannot reintroduce a topic the shopper explicitly rejected.
@@ -1047,6 +1159,7 @@ def register_demo(
                 )
                 for topic in found
             )
+            dev_extraction(topics)
             with lock:
                 if revision != speech_revision or clock.now_utc() >= expires.value:
                     return
@@ -1162,12 +1275,19 @@ def register_demo(
         hub.broadcast_console_threadsafe(
             ConsoleLatency(screen_id=wire_screen_id, creative_id=report.creative_id, trace=trace)
         )
+        dev_player("displayed", report.creative_id, displayed_at)
 
     # ------------------------------------------------------------ delivery (billing)
 
     def receive_playback(report: PlaybackReport, received: Received) -> None:
         if report.screen_id != wire_screen_id:
             return
+        dev_player(
+            "playback",
+            report.creative_id,
+            report.ended_at,
+            played_s=(report.ended_at - report.started_at).total_seconds(),
+        )
         receipt = delivery.record_playback(
             screen_id=report.screen_id,
             creative_id=report.creative_id,
@@ -1234,6 +1354,10 @@ def register_demo(
 
     def receive_voice(report: PlayerVoice, received: Received) -> None:
         nonlocal voice_creative_id
+        if report.screen_id == wire_screen_id:
+            dev_player(
+                "voice", report.creative_id, received.received_at, voice_playing=report.playing
+            )
         with lock:
             if not report.playing and report.creative_id == voice_creative_id:
                 playback_echo.stop(received.received_at)
@@ -1257,6 +1381,15 @@ def register_demo(
             return  # speech mode is off for this screen: drop it, unread
         with lock:
             if playback_echo.matches(utterance.text, received.received_at):
+                if hub.dev_count():
+                    hub.broadcast_dev_threadsafe(
+                        DevSpeech(
+                            screen_id=wire_screen_id,
+                            at=received.received_at,
+                            stage="echo",
+                            is_final=utterance.is_final,
+                        )
+                    )
                 return
             speech_revision += 1
             revision = speech_revision
@@ -1297,6 +1430,19 @@ def register_demo(
                 # Known shopping need with no available campaign (e.g. water)
                 # supersedes the previous spoken need without inventing inventory.
                 speech = SpeechEvidence()
+        if hub.dev_count():
+            # Canonical keyterms and topics only: the utterance text never leaves here.
+            hub.broadcast_dev_threadsafe(
+                DevSpeech(
+                    screen_id=wire_screen_id,
+                    at=received.received_at,
+                    stage="keyterms",
+                    is_final=utterance.is_final,
+                    wanted=[term[:32] for term in wanted][:32],
+                    rejected=[term[:32] for term in meaning.rejected][:32],
+                    topics=dev_stream.speech_topics(topics, segment_labels),
+                )
+            )
         if snapshot is not None and (topics or meaning.rejected or wanted or correcting):
             decide(snapshot[0], Received(received_at=received.received_at), reconsider=True)
         # Refine the whole final request even when one known keyword matched.
@@ -1318,6 +1464,17 @@ def register_demo(
                 if current_brief is None or current_brief.signature() != job.brief.signature():
                     return
             draft = await studio.upgrade_copy(job.brief, value_per_s_clp=job.value_per_s_clp)
+            if hub.dev_count():
+                record = dev_stream.last_record(studio.stats.records, job.brief.signature())
+                with lock:
+                    on_air = current_creative
+                dev_creative(
+                    "copy_attempt",
+                    on_air,
+                    brief=dev_stream.brief(job.brief),
+                    copy_draft=dev_stream.copy(draft) if draft is not None else None,
+                    **(dev_stream.record_fields(record) if record is not None else {}),
+                )
             if draft is not None:
                 upgrade_copy(job, draft)
 
@@ -1357,8 +1514,10 @@ def register_demo(
                 trace=trace,
             )
             needs_voice = current_creative if brief.party > 0 else None
+            on_air = current_creative
         hub.send_to_screen_threadsafe(upgraded)
         hub.broadcast_console_threadsafe(upgraded)
+        dev_creative("copy_upgraded", on_air, copy_draft=dev_stream.copy(draft))
         if needs_voice is not None:
             request_voiceover(needs_voice)
 
@@ -1462,8 +1621,10 @@ def register_demo(
                 spec=spec,
                 trace=trace,
             )
+            on_air = current_creative
         hub.send_to_screen_threadsafe(upgraded)
         hub.broadcast_console_threadsafe(upgraded)
+        dev_creative("voice_upgraded", on_air, note="cached" if creative_id else "synthesized")
 
     def player_connected(connected_screen_id: str, sink: Sink) -> None:
         if connected_screen_id == wire_screen_id:
@@ -1487,6 +1648,15 @@ def register_demo(
             classifier.observe_keyframe(
                 keyframe, jpeg=received.payload, received_at=received.received_at
             )
+            if dev_keyframe_preview and hub.dev_count():
+                # Opt-in, local-only: the same face-blurred JPEG the VLM gets, in memory.
+                hub.broadcast_dev_threadsafe(
+                    DevKeyframe(
+                        screen_id=wire_screen_id,
+                        measured_at=keyframe.measured_at,
+                        jpeg_base64=b64encode(received.payload).decode("ascii"),
+                    )
+                )
 
     def reset_speech() -> tuple[AudienceSnapshot, Received] | None:
         """Forget every spoken topic; a later warm extraction for them is discarded."""

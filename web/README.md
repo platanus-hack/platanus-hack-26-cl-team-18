@@ -1,4 +1,4 @@
-# `web/`: player (`/screen`) and console (`/console`)
+# `web/`: player (`/screen`), console (`/console`) and QA console (`/dev`)
 
 Vite + React + TypeScript (`npm`), per `docs/stack.md` §6. Read this before
 changing anything under `web/`.
@@ -8,6 +8,7 @@ make dev           # backend on :8000 (from the repo root)
 make web-dev       # Vite on :5173, proxies /ws /health /media /dev to :8000
 open http://localhost:5173/screen?id=demo-01
 open http://localhost:5173/console
+open "http://localhost:5173/dev?screen=demo-01"   # QA: boxes, VLM, auction, build trace (docs/dev-console-plan.md)
 make web-check     # typecheck + lint + prettier + vitest + knip (what CI runs)
 ```
 

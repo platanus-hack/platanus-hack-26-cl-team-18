@@ -94,6 +94,7 @@ def register_live_market(container: Container) -> DemoControls:
                     topic_extractor=container.topic_extractor,
                     public_base_url=settings.public_base_url,
                     media_dir=settings.media_dir,
+                    dev_keyframe_preview=settings.dev_keyframe_preview_enabled,
                     copywriter=container.copywriter,
                     copy_timeout_s=settings.creative_copy_timeout_s,
                     hourly_budget_usd=settings.creative_hourly_budget_usd,

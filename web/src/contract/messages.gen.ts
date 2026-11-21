@@ -469,6 +469,232 @@ export const CreativeUpgradedSchema = z.strictObject({
 });
 export type CreativeUpgraded = z.infer<typeof CreativeUpgradedSchema>;
 
+// Normalized [0, 1] corners in the frame the detector saw.
+export const DevBoxSchema = z.strictObject({
+  x1: z.number().gte(0.0).lte(1.0),
+  y1: z.number().gte(0.0).lte(1.0),
+  x2: z.number().gte(0.0).lte(1.0),
+  y2: z.number().gte(0.0).lte(1.0),
+});
+export type DevBox = z.infer<typeof DevBoxSchema>;
+
+export const DevBriefSchema = z.strictObject({
+  brands: z.array(z.string().max(80)).max(3),
+  layout: z.string().max(32),
+  party: z.number().int().gte(0),
+  people: z.number().int().gte(0),
+  angle: z.string().max(32),
+  angle_reason: z.string().max(32),
+  offer_label: z.string().max(80).nullable(),
+  offer_price: MoneyDTOSchema.nullable(),
+  held_brand: z.string().max(80).nullable(),
+  daypart: z.string().max(16).nullable(),
+  minor_likely: z.boolean(),
+  signature: z.string().max(200),
+});
+export type DevBrief = z.infer<typeof DevBriefSchema>;
+
+export const DevViolationSchema = z.strictObject({
+  kind: z.string().max(32),
+  where: z.string().max(16),
+  detail: z.string().max(160),
+});
+export type DevViolation = z.infer<typeof DevViolationSchema>;
+
+export const DevCopySchema = z.strictObject({
+  source: CopySourceKindSchema,
+  teaser: z.string().max(280),
+  offer: z.string().max(280),
+  close: z.string().max(280),
+  voice_line: z.string().max(280),
+  score: z.string().max(16).nullable(),
+  passed: z.boolean(),
+  violations: z.array(DevViolationSchema).max(16),
+  model_version: z.string().max(128).nullable(),
+});
+export type DevCopy = z.infer<typeof DevCopySchema>;
+
+// One step of building the creative: compose, AI copy attempt, upgrades.
+export const DevCreativeSchema = z.strictObject({
+  v: z.literal(1),
+  type: z.literal("dev.creative"),
+  screen_id: z.string().min(1).max(64).regex(/^[A-Za-z0-9_.:-]+$/),
+  at: z.iso.datetime({ offset: true }),
+  step: z.enum(["composed", "house", "copy_attempt", "copy_upgraded", "voice_upgraded"]),
+  creative_id: z.string().min(1).max(64).nullable(),
+  auction_id: z.string().min(1).max(64).nullable(),
+  moment_id: z.string().min(1).max(64).nullable(),
+  brief: DevBriefSchema.nullable(),
+  copy_draft: DevCopySchema.nullable(),
+  outcome: z.string().max(32).nullable(),
+  ai_score: z.string().max(16).nullable(),
+  stock_score: z.string().max(16).nullable(),
+  violations: z.array(DevViolationSchema).max(16),
+  latency_ms: z.number().gte(0).nullable(),
+  compose_ms: z.number().gte(0).nullable(),
+  voiceover_url: z.string().max(500).nullable(),
+  video_url: z.string().max(500).nullable(),
+  redemption_code: z.string().max(12).nullable(),
+  note: z.string().max(200).nullable(),
+});
+export type DevCreative = z.infer<typeof DevCreativeSchema>;
+
+export const DevProviderLoadSchema = z.strictObject({
+  provider: z.string().min(1).max(32),
+  in_flight: z.number().int().gte(0),
+});
+export type DevProviderLoad = z.infer<typeof DevProviderLoadSchema>;
+
+// Warm-path job lifecycle (WarmWorker).
+export const DevJobSchema = z.strictObject({
+  v: z.literal(1),
+  type: z.literal("dev.job"),
+  screen_id: z.string().min(1).max(64).regex(/^[A-Za-z0-9_.:-]+$/).nullable(),
+  provider: z.string().min(1).max(32),
+  key: z.string().min(1).max(200),
+  kind: z.enum(["tag", "topics", "copy", "voice", "video", "other"]),
+  state: z.enum(["submitted", "deduped", "running", "done", "failed", "rejected"]),
+  at: z.iso.datetime({ offset: true }),
+  elapsed_ms: z.number().gte(0).nullable(),
+  error_type: z.string().max(64).nullable(),
+  load: z.array(DevProviderLoadSchema).max(16),
+});
+export type DevJob = z.infer<typeof DevJobSchema>;
+
+// Opt-in preview: the face-blurred keyframe the VLM gets. Never stored or logged.
+export const DevKeyframeSchema = z.strictObject({
+  v: z.literal(1),
+  type: z.literal("dev.keyframe"),
+  screen_id: z.string().min(1).max(64).regex(/^[A-Za-z0-9_.:-]+$/),
+  measured_at: z.iso.datetime({ offset: true }),
+  jpeg_base64: z.string().min(1).max(2700000),
+});
+export type DevKeyframe = z.infer<typeof DevKeyframeSchema>;
+
+export const DevMarkerSchema = z.strictObject({
+  marker_id: z.number().int().gte(0),
+  brand_ref: z.string().max(64).nullable(),
+  box: DevBoxSchema,
+});
+export type DevMarker = z.infer<typeof DevMarkerSchema>;
+
+export const DevObjectSchema = z.strictObject({
+  label: z.string().min(1).max(64),
+  confidence: z.number().gte(0.0).lte(1.0),
+  box: DevBoxSchema,
+  near_person: z.boolean(),
+});
+export type DevObject = z.infer<typeof DevObjectSchema>;
+
+export const DevPersonSchema = z.strictObject({
+  track_id: z.string().min(1).max(32),
+  box: DevBoxSchema,
+  confidence: z.number().gte(0.0).lte(1.0),
+  looking: z.boolean(),
+  distance_band: DistanceBandSchema,
+  dwell_s: z.number().gte(0.0),
+});
+export type DevPerson = z.infer<typeof DevPersonSchema>;
+
+// What YOLO saw on one frame, after tracking (agent -> backend -> dev, <= 5 Hz).
+export const DevPerceptionSchema = z.strictObject({
+  v: z.literal(1),
+  type: z.literal("dev.perception"),
+  screen_id: z.string().min(1).max(64).regex(/^[A-Za-z0-9_.:-]+$/),
+  seq: z.number().int().gte(0),
+  measured_at: z.iso.datetime({ offset: true }),
+  frame_w: z.number().int().gte(1),
+  frame_h: z.number().int().gte(1),
+  detector: z.string().min(1).max(64),
+  inference_ms: z.number().gte(0),
+  round_trip_ms: z.number().gte(0).nullable(),
+  raw_people: z.number().int().gte(0),
+  people: z.array(DevPersonSchema).max(64),
+  objects: z.array(DevObjectSchema).max(64),
+  markers: z.array(DevMarkerSchema).max(16),
+  held: z.array(z.string().max(64)).max(16),
+  frames: z.number().int().gte(0),
+  stale_frames: z.number().int().gte(0),
+});
+export type DevPerception = z.infer<typeof DevPerceptionSchema>;
+
+// What the physical screen reported back (displayed, played, voice).
+export const DevPlayerSchema = z.strictObject({
+  v: z.literal(1),
+  type: z.literal("dev.player"),
+  screen_id: z.string().min(1).max(64).regex(/^[A-Za-z0-9_.:-]+$/),
+  creative_id: z.string().min(1).max(64),
+  event: z.enum(["displayed", "playback", "voice"]),
+  at: z.iso.datetime({ offset: true }),
+  played_s: z.number().gte(0).nullable(),
+  voice_playing: z.boolean().nullable(),
+});
+export type DevPlayer = z.infer<typeof DevPlayerSchema>;
+
+export const DevSpeechTopicSchema = z.strictObject({
+  segment_id: z.string().min(1).max(32),
+  label: z.string().max(80),
+  confidence: z.number().gte(0.0).lte(1.0).nullable(),
+  expires_at: z.iso.datetime({ offset: true }).nullable(),
+});
+export type DevSpeechTopic = z.infer<typeof DevSpeechTopicSchema>;
+
+// Speech understanding without the words: keyterms, topics, outcome (ADR 0005).
+export const DevSpeechSchema = z.strictObject({
+  v: z.literal(1),
+  type: z.literal("dev.speech"),
+  screen_id: z.string().min(1).max(64).regex(/^[A-Za-z0-9_.:-]+$/),
+  at: z.iso.datetime({ offset: true }),
+  stage: z.enum(["keyterms", "extraction", "echo"]),
+  is_final: z.boolean(),
+  wanted: z.array(z.string().max(32)).max(32),
+  rejected: z.array(z.string().max(32)).max(32),
+  topics: z.array(DevSpeechTopicSchema).max(16),
+  outcome: z.string().max(32).nullable(),
+  model_version: z.string().max(128).nullable(),
+  latency_ms: z.number().gte(0).nullable(),
+});
+export type DevSpeech = z.infer<typeof DevSpeechSchema>;
+
+export const DevTaggedProductSchema = z.strictObject({
+  category: z.string().min(1).max(64),
+  brand_ref: z.string().max(64).nullable(),
+  confidence: z.number().gte(0.0).lte(1.0),
+  kept: z.boolean(),
+  drop_reason: z.string().max(32).nullable(),
+});
+export type DevTaggedProduct = z.infer<typeof DevTaggedProductSchema>;
+
+export const DevTaggedSegmentSchema = z.strictObject({
+  segment_id: z.string().min(1).max(32),
+  label: z.string().max(80),
+  confidence: z.number().gte(0.0).lte(1.0),
+  viewer_count: z.number().int().gte(0),
+  kept: z.boolean(),
+  drop_reason: z.string().max(32).nullable(),
+});
+export type DevTaggedSegment = z.infer<typeof DevTaggedSegmentSchema>;
+
+// One keyframe-tagging call: what the VLM returned and what the ACL kept.
+export const DevVlmSchema = z.strictObject({
+  v: z.literal(1),
+  type: z.literal("dev.vlm"),
+  screen_id: z.string().min(1).max(64).regex(/^[A-Za-z0-9_.:-]+$/),
+  submitted_at: z.iso.datetime({ offset: true }),
+  finished_at: z.iso.datetime({ offset: true }),
+  latency_ms: z.number().gte(0),
+  outcome: z.enum(["ok", "failed", "stale"]),
+  model_version: z.string().max(128),
+  segments: z.array(DevTaggedSegmentSchema).max(32),
+  held_products: z.array(DevTaggedProductSchema).max(16),
+  minor_likely: z.boolean(),
+  minor_likely_confidence: z.number().gte(0.0).lte(1.0),
+  reasoning: z.string().max(500),
+  error_type: z.string().max(64).nullable(),
+  expires_at: z.iso.datetime({ offset: true }).nullable(),
+});
+export type DevVlm = z.infer<typeof DevVlmSchema>;
+
 // Sent back on the same socket when an inbound message is rejected.
 export const ErrorMessageSchema = z.strictObject({
   v: z.literal(1),
@@ -653,7 +879,7 @@ export const StockSetSchema = z.strictObject({
 });
 export type StockSet = z.infer<typeof StockSetSchema>;
 
-export const AgentInboundSchema = z.discriminatedUnion("type", [AudienceSnapshotSchema, AudienceKeyframeSchema, AudienceUtteranceSchema, RecognitionSnapshotSchema, AgentHelloSchema]);
+export const AgentInboundSchema = z.discriminatedUnion("type", [AudienceSnapshotSchema, AudienceKeyframeSchema, AudienceUtteranceSchema, RecognitionSnapshotSchema, AgentHelloSchema, DevPerceptionSchema]);
 export type AgentInbound = z.infer<typeof AgentInboundSchema>;
 
 export const AgentOutboundSchema = z.discriminatedUnion("type", [LiveStatusSchema, ErrorMessageSchema]);
@@ -668,6 +894,9 @@ export type PlayerOutbound = z.infer<typeof PlayerOutboundSchema>;
 export const ConsoleOutboundSchema = z.discriminatedUnion("type", [ConsoleMomentSchema, ConsoleAuctionSchema, ConsoleLatencySchema, ConsoleDegradationSchema, CreativeReadySchema, CreativeUpgradedSchema, ErrorMessageSchema, ConsoleBookSchema, ConsoleReceiptSchema, ConsoleRedemptionSchema, LiveStatusSchema]);
 export type ConsoleOutbound = z.infer<typeof ConsoleOutboundSchema>;
 
-export const MESSAGE_TYPES = ["audience.snapshot", "audience.keyframe", "audience.utterance", "creative.ready", "creative.upgraded", "playback.report", "console.moment", "console.auction", "console.latency", "console.degradation", "system.error", "advertiser.bid_multiplier", "stock.set", "console.book", "console.receipt", "recognition.snapshot", "player.displayed", "player.voice", "screen.attention", "console.redemption", "agent.hello", "live.set", "live.status", "advertiser.autobid", "campaign.catalog", "campaign.generate", "campaign.generated"] as const;
+export const DevOutboundSchema = z.discriminatedUnion("type", [ConsoleMomentSchema, ConsoleAuctionSchema, ConsoleLatencySchema, ConsoleDegradationSchema, CreativeReadySchema, CreativeUpgradedSchema, ErrorMessageSchema, ConsoleBookSchema, ConsoleReceiptSchema, ConsoleRedemptionSchema, LiveStatusSchema, DevPerceptionSchema, DevVlmSchema, DevSpeechSchema, DevJobSchema, DevCreativeSchema, DevPlayerSchema, DevKeyframeSchema]);
+export type DevOutbound = z.infer<typeof DevOutboundSchema>;
+
+export const MESSAGE_TYPES = ["audience.snapshot", "audience.keyframe", "audience.utterance", "creative.ready", "creative.upgraded", "playback.report", "console.moment", "console.auction", "console.latency", "console.degradation", "system.error", "advertiser.bid_multiplier", "stock.set", "console.book", "console.receipt", "recognition.snapshot", "player.displayed", "player.voice", "screen.attention", "console.redemption", "agent.hello", "live.set", "live.status", "advertiser.autobid", "dev.perception", "dev.vlm", "dev.speech", "dev.job", "dev.creative", "dev.player", "dev.keyframe", "campaign.catalog", "campaign.generate", "campaign.generated"] as const;
 
 export type MessageType = (typeof MESSAGE_TYPES)[number];

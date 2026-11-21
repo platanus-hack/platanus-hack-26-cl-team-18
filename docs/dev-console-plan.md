@@ -1,6 +1,26 @@
 # Plan: `/dev`, the QA and developer console
 
-Status: proposed · Owner: unassigned · Related: `docs/demo.md` §2, `docs/architecture.md` §10, `web/README.md`
+Status: implemented (phases 0–2 and the keyframe flag; `dev.auction_candidates` skipped) · Owner: unassigned · Related: `docs/demo.md` §2, `docs/architecture.md` §10, `web/README.md`
+
+## How to use it
+
+```bash
+make dev                                   # backend on :8000 (DEV_CONSOLE=true by default, never in prod)
+make web-dev                               # Vite on :5173
+open "http://localhost:5173/dev?screen=demo-01"
+# YOLO boxes: start the agent with --dev-stream (or EDGE_DEV_STREAM=1)
+cd edge && uv run python -m agent.vision --screen demo-01 --dev-stream
+# Optional: show the face-blurred VLM keyframe under the boxes (local only)
+DEV_KEYFRAME_PREVIEW=true make dev
+```
+
+Where things live: `app/contract/messages.py` (`Dev*`, `DevOutbound`),
+`app/api/ws.py` (`/ws/dev`, `dev.perception` relay), `app/realtime/hub.py`
+(dev sinks), `app/realtime/warm_worker.py` (`WarmEvent` observer),
+`app/modules/audience/application/classifier.py` (`TagReport`),
+`app/bootstrap/dev_stream.py` (translators) and the emitters in
+`app/bootstrap/demo.py`, `edge/agent/vision/dev_view.py`, and
+`web/src/features/dev/`.
 
 ## 1. Goal
 

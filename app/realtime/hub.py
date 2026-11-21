@@ -32,6 +32,7 @@ from app.contract.messages import (
     ConsoleRedemption,
     CreativeReady,
     CreativeUpgraded,
+    DevMessage,
     ErrorMessage,
     LiveStatus,
     ScreenAttention,
@@ -88,6 +89,8 @@ class ConnectionHub:
         # so consumers reading the creative stream in order are unaffected.
         self._attention: set[Sink] = set()
         self._consoles: set[Sink] = set()
+        # Dev/QA consoles (`/ws/dev`): every console message plus `dev.*` debug views.
+        self._devs: set[Sink] = set()
         # Players and consoles that asked for `live.status` (?live=1), like attention.
         self._live: set[Sink] = set()
         # Perception agents that said `agent.hello`: screen -> {sink: role}.
@@ -130,6 +133,18 @@ class ConnectionHub:
         self._consoles.discard(sink)
         self._live.discard(sink)
         self._retire_if_unused(sink)
+
+    def add_dev(self, sink: Sink) -> None:
+        self._send_states.setdefault(sink, _SendState())
+        self._devs.add(sink)
+
+    def remove_dev(self, sink: Sink) -> None:
+        self._devs.discard(sink)
+        self._retire_if_unused(sink)
+
+    def dev_count(self) -> int:
+        """Emitters check this first: dev messages cost nothing when nobody watches."""
+        return len(self._devs)
 
     def add_agent(self, screen_id: str, role: AgentRole, sink: Sink) -> None:
         self._send_states.setdefault(sink, _SendState())
@@ -177,12 +192,19 @@ class ConnectionHub:
     async def broadcast_console(self, *messages: ConsoleMessage, sink: Sink | None = None) -> None:
         # Serialize once and preserve the whole decision's order per connection.
         # A slow console must never hold a global lock over healthy clients.
-        recipients = self._consoles if sink is None else self._consoles & {sink}
+        audience = self._consoles | self._devs
+        recipients = audience if sink is None else audience & {sink}
+        await self._fan_out(recipients, tuple(message.model_dump_json() for message in messages))
+
+    async def broadcast_dev(self, *messages: DevMessage, sink: Sink | None = None) -> None:
+        recipients = self._devs if sink is None else self._devs & {sink}
+        if not recipients:
+            return
         await self._fan_out(recipients, tuple(message.model_dump_json() for message in messages))
 
     async def broadcast_live(self, *statuses: LiveStatus, sink: Sink | None = None) -> None:
         """`live.status` to the consoles that subscribed with ?live=1."""
-        live_consoles = self._consoles & self._live
+        live_consoles = (self._consoles & self._live) | self._devs
         recipients = live_consoles if sink is None else live_consoles & {sink}
         await self._fan_out(recipients, tuple(status.model_dump_json() for status in statuses))
 
@@ -209,6 +231,11 @@ class ConnectionHub:
     ) -> None:
         self._schedule(self.broadcast_console(*messages, sink=sink))
 
+    def broadcast_dev_threadsafe(self, *messages: DevMessage, sink: Sink | None = None) -> None:
+        if not self._devs:
+            return
+        self._schedule(self.broadcast_dev(*messages, sink=sink))
+
     def _schedule(self, coro: object) -> None:
         if self._loop is None or self._loop.is_closed():
             self.stats.dropped_no_loop += 1
@@ -223,6 +250,7 @@ class ConnectionHub:
     def _retire_if_unused(self, sink: Sink) -> None:
         if (
             sink in self._consoles
+            or sink in self._devs
             or any(sink in group for group in self._players.values())
             or any(sink in group for group in self._agents.values())
         ):
@@ -238,6 +266,7 @@ class ConnectionHub:
             return
         self.stats.dropped_sinks += 1
         self._consoles.discard(sink)
+        self._devs.discard(sink)
         for screen_id in list(self._players):
             self.remove_player(screen_id, sink)
         for group in self._agents.values():

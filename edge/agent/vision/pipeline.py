@@ -24,6 +24,7 @@ from agent.contract import AudienceKeyframe, AudienceSnapshot, PerceptionTiming
 from agent.live import LiveGate
 from agent.sound.sources import SoundSceneSource
 from agent.vision.detector import Detector, Frame
+from agent.vision.dev_view import DevViewBuilder
 from agent.vision.geometry import head_box
 from agent.vision.held import HeldProductTracker
 from agent.vision.minor import ChildPropVote, MinorVote, strongest
@@ -83,9 +84,11 @@ class VisionPipeline:
         child_props: ChildPropVote | None = None,
         sound: SoundSceneSource | None = None,
         live: LiveGate | None = None,
+        dev_view: DevViewBuilder | None = None,
     ) -> None:
         self._screen_id = screen_id
         self._live = live
+        self._dev_view = dev_view
         self._paused = False
         self._source = source
         self._detector = detector
@@ -148,6 +151,17 @@ class VisionPipeline:
             )
             self._link.send(snapshot)
             self.stats.snapshots += 1
+        if self._dev_view is not None:
+            # Debug geometry for `/dev`: latest-wins in the link, never recorded.
+            view = self._dev_view.build(
+                detections,
+                tracks,
+                held,
+                frames=self.stats.frames,
+                stale_frames=self.stats.stale_frames,
+            )
+            if view is not None:
+                self._link.send(view)
         if self._keyframes is not None and tracked and self._keyframe_due(detections.measured_at):
             self._schedule_keyframe(frame, detections)
         return snapshot
@@ -196,6 +210,8 @@ class VisionPipeline:
             if self._held is not None:
                 self._held.reset()
             self._snapshots.reset()
+            if self._dev_view is not None:
+                self._dev_view.reset()
             self._last_keyframe_at = None
             logger.info("vision paused by the live switch")
         item = self._source.latest(self._serial)

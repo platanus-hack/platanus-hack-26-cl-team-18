@@ -705,10 +705,236 @@ class LiveStatus(_Message):
     changed_at: AwareDatetime
 
 
+# ---------------------------------------------------------------- dev / QA (`/ws/dev`)
+#
+# Debug views of the loop for `/dev` (docs/dev-console-plan.md). Never sent in prod,
+# never stored. No pixels, audio, transcripts or identity: boxes are normalized
+# geometry of anonymous, session-local tracks. `dev.keyframe` is the one exception:
+# the same face-blurred JPEG the VLM gets, opt-in (DEV_KEYFRAME_PREVIEW) and local-only.
+
+DevKind = Literal["tag", "topics", "copy", "voice", "video", "other"]
+
+
+class DevBox(_Model):
+    """Normalized [0, 1] corners in the frame the detector saw."""
+
+    x1: Score
+    y1: Score
+    x2: Score
+    y2: Score
+
+
+class DevPerson(_Model):
+    track_id: Annotated[str, Field(min_length=1, max_length=32)]
+    box: DevBox
+    confidence: Score
+    looking: bool
+    distance_band: DistanceBand
+    dwell_s: Annotated[float, Field(ge=0.0)]
+
+
+class DevObject(_Model):
+    label: Annotated[str, Field(min_length=1, max_length=64)]
+    confidence: Score
+    box: DevBox
+    near_person: bool  # within a tracked person's reach (counts as held/carried)
+
+
+class DevMarker(_Model):
+    marker_id: Annotated[int, Field(ge=0)]
+    brand_ref: Annotated[str, Field(max_length=64)] | None = None
+    box: DevBox
+
+
+class DevPerception(_Message):
+    """What YOLO saw on one frame, after tracking (agent -> backend -> dev, <= 5 Hz)."""
+
+    type: Literal["dev.perception"] = "dev.perception"
+    screen_id: ScreenId
+    seq: Seq
+    measured_at: AwareDatetime
+    frame_w: Annotated[int, Field(ge=1)]
+    frame_h: Annotated[int, Field(ge=1)]
+    detector: Annotated[str, Field(min_length=1, max_length=64)]
+    inference_ms: Annotated[FiniteFloat, Field(ge=0)]
+    round_trip_ms: Annotated[FiniteFloat, Field(ge=0)] | None = None
+    raw_people: Annotated[int, Field(ge=0)]  # detections before the near/track filter
+    people: list[DevPerson] = Field(default_factory=list, max_length=64)
+    objects: list[DevObject] = Field(default_factory=list, max_length=64)
+    markers: list[DevMarker] = Field(default_factory=list, max_length=16)
+    held: list[Annotated[str, Field(max_length=64)]] = Field(default_factory=list, max_length=16)
+    frames: Annotated[int, Field(ge=0)] = 0
+    stale_frames: Annotated[int, Field(ge=0)] = 0
+
+
+class DevTaggedSegment(_Model):
+    segment_id: Annotated[str, Field(min_length=1, max_length=32)]
+    label: Annotated[str, Field(max_length=80)]
+    confidence: Score
+    viewer_count: Annotated[int, Field(ge=0)]
+    kept: bool
+    drop_reason: Annotated[str, Field(max_length=32)] | None = None
+
+
+class DevTaggedProduct(_Model):
+    category: Annotated[str, Field(min_length=1, max_length=64)]
+    brand_ref: Annotated[str, Field(max_length=64)] | None = None
+    confidence: Score
+    kept: bool
+    drop_reason: Annotated[str, Field(max_length=32)] | None = None
+
+
+class DevVlm(_Message):
+    """One keyframe-tagging call: what the VLM returned and what the ACL kept."""
+
+    type: Literal["dev.vlm"] = "dev.vlm"
+    screen_id: ScreenId
+    submitted_at: AwareDatetime
+    finished_at: AwareDatetime
+    latency_ms: Annotated[FiniteFloat, Field(ge=0)]
+    outcome: Literal["ok", "failed", "stale"]
+    model_version: Annotated[str, Field(max_length=128)] = ""
+    segments: list[DevTaggedSegment] = Field(default_factory=list, max_length=32)
+    held_products: list[DevTaggedProduct] = Field(default_factory=list, max_length=16)
+    minor_likely: bool = False
+    minor_likely_confidence: Score = 0.0
+    reasoning: Annotated[str, Field(max_length=500)] = ""  # objects and context only
+    error_type: Annotated[str, Field(max_length=64)] | None = None
+    expires_at: AwareDatetime | None = None
+
+
+class DevSpeechTopic(_Model):
+    segment_id: Annotated[str, Field(min_length=1, max_length=32)]
+    label: Annotated[str, Field(max_length=80)]
+    confidence: Score | None = None
+    expires_at: AwareDatetime | None = None
+
+
+class DevSpeech(_Message):
+    """Speech understanding without the words: keyterms, topics, outcome (ADR 0005)."""
+
+    type: Literal["dev.speech"] = "dev.speech"
+    screen_id: ScreenId
+    at: AwareDatetime
+    stage: Literal["keyterms", "extraction", "echo"]
+    is_final: bool = True
+    wanted: list[Annotated[str, Field(max_length=32)]] = Field(default_factory=list, max_length=32)
+    rejected: list[Annotated[str, Field(max_length=32)]] = Field(
+        default_factory=list, max_length=32
+    )
+    topics: list[DevSpeechTopic] = Field(default_factory=list, max_length=16)
+    outcome: Annotated[str, Field(max_length=32)] | None = None
+    model_version: Annotated[str, Field(max_length=128)] | None = None
+    latency_ms: Annotated[FiniteFloat, Field(ge=0)] | None = None
+
+
+class DevProviderLoad(_Model):
+    provider: Annotated[str, Field(min_length=1, max_length=32)]
+    in_flight: Annotated[int, Field(ge=0)]
+
+
+class DevJob(_Message):
+    """Warm-path job lifecycle (WarmWorker)."""
+
+    type: Literal["dev.job"] = "dev.job"
+    screen_id: ScreenId | None = None
+    provider: Annotated[str, Field(min_length=1, max_length=32)]
+    key: Annotated[str, Field(min_length=1, max_length=200)]
+    kind: DevKind
+    state: Literal["submitted", "deduped", "running", "done", "failed", "rejected"]
+    at: AwareDatetime
+    elapsed_ms: Annotated[FiniteFloat, Field(ge=0)] | None = None
+    error_type: Annotated[str, Field(max_length=64)] | None = None
+    load: list[DevProviderLoad] = Field(default_factory=list, max_length=16)
+
+
+class DevViolation(_Model):
+    kind: Annotated[str, Field(max_length=32)]
+    where: Annotated[str, Field(max_length=16)]
+    detail: Annotated[str, Field(max_length=160)] = ""
+
+
+class DevCopy(_Model):
+    source: CopySourceKind
+    teaser: Annotated[str, Field(max_length=280)]
+    offer: Annotated[str, Field(max_length=280)]
+    close: Annotated[str, Field(max_length=280)]
+    voice_line: Annotated[str, Field(max_length=280)]
+    score: Annotated[str, Field(max_length=16)] | None = None
+    passed: bool = True
+    violations: list[DevViolation] = Field(default_factory=list, max_length=16)
+    model_version: Annotated[str, Field(max_length=128)] | None = None
+
+
+class DevBrief(_Model):
+    brands: list[Annotated[str, Field(max_length=80)]] = Field(max_length=3)
+    layout: Annotated[str, Field(max_length=32)]
+    party: Annotated[int, Field(ge=0)]
+    people: Annotated[int, Field(ge=0)]
+    angle: Annotated[str, Field(max_length=32)]
+    angle_reason: Annotated[str, Field(max_length=32)]
+    offer_label: Annotated[str, Field(max_length=80)] | None = None
+    offer_price: MoneyDTO | None = None
+    held_brand: Annotated[str, Field(max_length=80)] | None = None
+    daypart: Annotated[str, Field(max_length=16)] | None = None
+    minor_likely: bool = False
+    signature: Annotated[str, Field(max_length=200)]
+
+
+class DevCreative(_Message):
+    """One step of building the creative: compose, AI copy attempt, upgrades."""
+
+    type: Literal["dev.creative"] = "dev.creative"
+    screen_id: ScreenId
+    at: AwareDatetime
+    step: Literal["composed", "house", "copy_attempt", "copy_upgraded", "voice_upgraded"]
+    creative_id: EntityId | None = None
+    auction_id: EntityId | None = None
+    moment_id: EntityId | None = None
+    brief: DevBrief | None = None
+    copy_draft: DevCopy | None = None
+    outcome: Annotated[str, Field(max_length=32)] | None = None  # studio outcome
+    ai_score: Annotated[str, Field(max_length=16)] | None = None
+    stock_score: Annotated[str, Field(max_length=16)] | None = None
+    violations: list[DevViolation] = Field(default_factory=list, max_length=16)
+    latency_ms: Annotated[FiniteFloat, Field(ge=0)] | None = None
+    compose_ms: Annotated[FiniteFloat, Field(ge=0)] | None = None
+    voiceover_url: Annotated[str, Field(max_length=500)] | None = None
+    video_url: Annotated[str, Field(max_length=500)] | None = None
+    redemption_code: Annotated[str, Field(max_length=12)] | None = None
+    note: Annotated[str, Field(max_length=200)] | None = None
+
+
+class DevPlayer(_Message):
+    """What the physical screen reported back (displayed, played, voice)."""
+
+    type: Literal["dev.player"] = "dev.player"
+    screen_id: ScreenId
+    creative_id: EntityId
+    event: Literal["displayed", "playback", "voice"]
+    at: AwareDatetime
+    played_s: Annotated[FiniteFloat, Field(ge=0)] | None = None
+    voice_playing: bool | None = None
+
+
+class DevKeyframe(_Message):
+    """Opt-in preview: the face-blurred keyframe the VLM gets. Never stored or logged."""
+
+    type: Literal["dev.keyframe"] = "dev.keyframe"
+    screen_id: ScreenId
+    measured_at: AwareDatetime
+    jpeg_base64: Annotated[str, Field(min_length=1, max_length=2_700_000)]
+
+
 # ---------------------------------------------------------------- unions per socket
 
 AgentInbound = Annotated[
-    AudienceSnapshot | AudienceKeyframe | AudienceUtterance | RecognitionSnapshot | AgentHello,
+    AudienceSnapshot
+    | AudienceKeyframe
+    | AudienceUtterance
+    | RecognitionSnapshot
+    | AgentHello
+    | DevPerception,
     Field(discriminator="type"),
 ]
 AgentOutbound = Annotated[LiveStatus | ErrorMessage, Field(discriminator="type")]
@@ -733,9 +959,36 @@ ConsoleOutbound = Annotated[
     | LiveStatus,
     Field(discriminator="type"),
 ]
+DevMessage = DevPerception | DevVlm | DevSpeech | DevJob | DevCreative | DevPlayer | DevKeyframe
+DevOutbound = Annotated[
+    ConsoleMoment
+    | ConsoleAuction
+    | ConsoleLatency
+    | ConsoleDegradation
+    | CreativeReady
+    | CreativeUpgraded
+    | ErrorMessage
+    | ConsoleBook
+    | ConsoleReceipt
+    | ConsoleRedemption
+    | LiveStatus
+    | DevPerception
+    | DevVlm
+    | DevSpeech
+    | DevJob
+    | DevCreative
+    | DevPlayer
+    | DevKeyframe,
+    Field(discriminator="type"),
+]
 
 AGENT_INBOUND: TypeAdapter[
-    AudienceSnapshot | AudienceKeyframe | AudienceUtterance | RecognitionSnapshot | AgentHello
+    AudienceSnapshot
+    | AudienceKeyframe
+    | AudienceUtterance
+    | RecognitionSnapshot
+    | AgentHello
+    | DevPerception
 ] = TypeAdapter(AgentInbound)
 AGENT_OUTBOUND: TypeAdapter[LiveStatus | ErrorMessage] = TypeAdapter(AgentOutbound)
 PLAYER_INBOUND: TypeAdapter[PlaybackReport | PlayerDisplayed | PlayerVoice] = TypeAdapter(
@@ -783,6 +1036,13 @@ AnyMessage = (
     | LiveSet
     | LiveStatus
     | AdvertiserAutoBid
+    | DevPerception
+    | DevVlm
+    | DevSpeech
+    | DevJob
+    | DevCreative
+    | DevPlayer
+    | DevKeyframe
 )
 
 # Order is the generated TS order; append new messages at the end.
@@ -811,6 +1071,13 @@ ALL_MESSAGES: tuple[type[_Message], ...] = (
     LiveSet,
     LiveStatus,
     AdvertiserAutoBid,
+    DevPerception,
+    DevVlm,
+    DevSpeech,
+    DevJob,
+    DevCreative,
+    DevPlayer,
+    DevKeyframe,
 )
 
 
@@ -871,6 +1138,7 @@ SOCKET_UNIONS: dict[str, tuple[type[_Message], ...]] = {
         AudienceUtterance,
         RecognitionSnapshot,
         AgentHello,
+        DevPerception,
     ),
     "AgentOutbound": (LiveStatus, ErrorMessage),
     "PlayerInbound": (PlaybackReport, PlayerDisplayed, PlayerVoice),
@@ -887,5 +1155,25 @@ SOCKET_UNIONS: dict[str, tuple[type[_Message], ...]] = {
         ConsoleReceipt,
         ConsoleRedemption,
         LiveStatus,
+    ),
+    "DevOutbound": (
+        ConsoleMoment,
+        ConsoleAuction,
+        ConsoleLatency,
+        ConsoleDegradation,
+        CreativeReady,
+        CreativeUpgraded,
+        ErrorMessage,
+        ConsoleBook,
+        ConsoleReceipt,
+        ConsoleRedemption,
+        LiveStatus,
+        DevPerception,
+        DevVlm,
+        DevSpeech,
+        DevJob,
+        DevCreative,
+        DevPlayer,
+        DevKeyframe,
     ),
 }

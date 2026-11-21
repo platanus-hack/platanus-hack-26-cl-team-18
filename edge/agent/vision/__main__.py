@@ -37,6 +37,7 @@ from agent.vision.detector import (
     FailoverDetector,
     Frame,
 )
+from agent.vision.dev_view import DevViewBuilder
 from agent.vision.held import HeldProductTracker, MarkerCatalog
 from agent.vision.pipeline import JsonlRecorder, Link, VisionPipeline, blur_encoder
 from agent.vision.remote import RemoteGpuDetector
@@ -172,6 +173,9 @@ async def run(args: argparse.Namespace) -> int:
         ),
         keyframes=None if (args.no_keyframes or args.record) else blur_encoder(),
         live=live,
+        dev_view=DevViewBuilder(args.screen, brand_for=catalog.brand_for if catalog else None)
+        if dev_stream_on(args)
+        else None,
     )
     link_task = asyncio.create_task(backend.run()) if backend else None
     try:
@@ -219,6 +223,13 @@ def _positive_milliseconds(value: str) -> float:
     return number
 
 
+def dev_stream_on(args: argparse.Namespace) -> bool:
+    """`/dev` boxes go to a live backend only: never into recordings or offline runs."""
+    if args.offline or args.record:
+        return False
+    return bool(args.dev_stream) or os.environ.get("EDGE_DEV_STREAM", "") in {"1", "true"}
+
+
 def argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="agent.vision")
     parser.add_argument("--screen", required=True)
@@ -262,6 +273,11 @@ def argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--device", default=None, help="e.g. 0, cpu, mps")
     parser.add_argument("--markers", help="JSON {marker_id: brand_slug} for the demo props")
     parser.add_argument("--no-keyframes", action="store_true")
+    parser.add_argument(
+        "--dev-stream",
+        action="store_true",
+        help="send dev.perception boxes for the /dev QA console (default: env EDGE_DEV_STREAM)",
+    )
     parser.add_argument("--gpu-url", help="remote GPU service, e.g. wss://host/infer (ADR 0007)")
     parser.add_argument("--gpu-token", default=None, help="bearer token (default: env GPU_TOKEN)")
     parser.add_argument(

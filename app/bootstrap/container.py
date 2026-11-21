@@ -43,7 +43,7 @@ from app.realtime.input_activity import InputActivity
 from app.realtime.live_switch import LiveSwitchboard
 from app.realtime.router import InboundRouter
 from app.realtime.scheduler import Scheduler, thread_timer
-from app.realtime.warm_worker import WarmWorker
+from app.realtime.warm_worker import WarmEvent, WarmWorker
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +131,7 @@ def build_container(
 def register_contexts(container: Container) -> None:
     """Wire bounded contexts (screens, audience, campaigns, auction, creative, delivery)."""
 
+    register_dev_stream(container)
     if container.vlm is not None:
         container.router.on(AudienceKeyframe, container.vlm.accept)
     register_live_switch(container)
@@ -289,6 +290,21 @@ def build_recognition_vlm(container: Container) -> None:
         container.recognition,
         container.router,
     )
+
+
+def register_dev_stream(container: Container) -> None:
+    """Warm-job lifecycle to `/dev` (docs/dev-console-plan.md); never in prod."""
+    if not container.settings.dev_console_enabled:
+        return
+    from app.bootstrap import dev_stream  # composition-root helper, imported lazily
+
+    hub, clock = container.hub, container.clock
+
+    def observe(event: WarmEvent) -> None:
+        if hub.dev_count():
+            hub.broadcast_dev_threadsafe(dev_stream.job(event, at=clock.now_utc()))
+
+    container.warm.observe(observe)
 
 
 def register_live_switch(container: Container) -> None:

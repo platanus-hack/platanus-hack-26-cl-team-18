@@ -28,6 +28,8 @@ interface Options<In> {
     readonly schema: z.ZodType<In>;
     readonly onMessage: (message: In) => void;
     readonly onStateChange?: (state: ConnectionState) => void;
+    /** The server's close code (e.g. 4404: endpoint disabled), before any reconnect. */
+    readonly onClose?: (code: number) => void;
     readonly maxFrameBytes?: number;
     readonly backoff?: { readonly baseMs: number; readonly maxMs: number };
     /** Injected for tests. */
@@ -105,9 +107,10 @@ export class TypedSocket<In, Out = never> {
             if (this.stopped || this.socket !== socket) return;
             this.handleFrame(event.data);
         };
-        socket.onclose = () => {
+        socket.onclose = (event?: CloseEvent) => {
             if (this.stopped || this.socket !== socket) return;
             this.socket = null;
+            this.options.onClose?.(event?.code ?? 1006);
             this.scheduleReconnect();
         };
         socket.onerror = () => {

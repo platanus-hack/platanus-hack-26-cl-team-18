@@ -2,7 +2,7 @@ import { ErrorBoundary } from "@/shared/ui/ErrorBoundary";
 import { Button } from "@/shared/ui/button";
 import { Card } from "@/shared/ui/card";
 import { AppShell, PageHeader } from "@/shared/ui/page";
-import { Activity, ChevronRight, Monitor, SlidersHorizontal, Store } from "lucide-react";
+import { Activity, Bug, ChevronRight, Monitor, SlidersHorizontal, Store } from "lucide-react";
 import { lazy, Suspense } from "react";
 
 // Each route is its own chunk: the kiosk player never downloads console code.
@@ -14,6 +14,7 @@ const AdvertiserPage = lazy(() =>
     import("@/features/advertiser").then((m) => ({ default: m.AdvertiserPage })),
 );
 const ClerkPage = lazy(() => import("@/features/clerk").then((m) => ({ default: m.ClerkPage })));
+const DevPage = lazy(() => import("@/features/dev").then((m) => ({ default: m.DevPage })));
 const CampaignsPage = lazy(() =>
     import("@/features/campaigns").then((m) => ({ default: m.CampaignsPage })),
 );
@@ -24,6 +25,7 @@ const ROUTES: Record<string, () => React.JSX.Element> = {
     "/advertiser": () => <AdvertiserPage />,
     "/clerk": () => <ClerkPage />,
     "/campaigns": () => <CampaignsPage />,
+    "/dev": () => <DevPage />,
 };
 
 const TOOLS = [
@@ -50,6 +52,12 @@ const TOOLS = [
         icon: Store,
         title: "Stock",
         description: "Marca un producto sin stock y sale de la oferta.",
+    },
+    {
+        href: "/dev?screen=demo-01",
+        icon: Bug,
+        title: "Dev / QA",
+        description: "YOLO, VLM, voz, subasta y creatividad en vivo, con el aviso al aire.",
     },
 ];
 

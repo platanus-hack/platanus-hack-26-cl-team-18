@@ -97,7 +97,8 @@ class BackendLink:
         kind = getattr(message, "type", "")
         key = (
             (kind, str(getattr(message, "screen_id", "")))
-            if kind in {"audience.snapshot", "audience.keyframe", "recognition.snapshot"}
+            if kind
+            in {"audience.snapshot", "audience.keyframe", "recognition.snapshot", "dev.perception"}
             else None
         )
         if key is not None:

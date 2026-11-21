@@ -39,6 +39,21 @@ class AppSettings(BaseSettings):
     # they opt in and inject a scheduler).
     auction_swap_holds: bool | None = None
 
+    # `/dev` QA console (docs/dev-console-plan.md): `/ws/dev` and its `dev.*` stream.
+    # Never in prod, whatever this says: the stream has no auth.
+    dev_console: bool = True
+    # Opt-in: relay the face-blurred keyframe the VLM gets to `/dev` (in memory, never
+    # stored). Off by default; refused in prod.
+    dev_keyframe_preview: bool = False
+
+    @property
+    def dev_console_enabled(self) -> bool:
+        return self.dev_console and self.app_env != "prod"
+
+    @property
+    def dev_keyframe_preview_enabled(self) -> bool:
+        return self.dev_keyframe_preview and self.dev_console_enabled
+
     @property
     def swap_holds_enabled(self) -> bool:
         if self.auction_swap_holds is None:

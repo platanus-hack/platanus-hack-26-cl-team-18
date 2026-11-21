@@ -4,6 +4,7 @@
                          `live.status` out after the agent's `agent.hello`)
 - `/ws/screen/{screen_id}` player <-> backend (creatives out, playback reports in)
 - `/ws/console`          backend -> operator console
+- `/ws/dev`              backend -> `/dev` QA console: console messages + `dev.*` (never prod)
 
 An invalid frame is answered with `system.error` on the same socket; the
 socket stays open (a bad frame must not take the screen down).
@@ -28,6 +29,7 @@ from app.contract.messages import (
     AudienceKeyframe,
     AudienceSnapshot,
     AudienceUtterance,
+    DevPerception,
     ErrorMessage,
     PlaybackReport,
     RecognitionSnapshot,
@@ -41,8 +43,14 @@ router = APIRouter()
 
 _SCREEN_ID = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
 AgentMessage = (
-    AudienceSnapshot | AudienceKeyframe | AudienceUtterance | RecognitionSnapshot | AgentHello
+    AudienceSnapshot
+    | AudienceKeyframe
+    | AudienceUtterance
+    | RecognitionSnapshot
+    | AgentHello
+    | DevPerception
 )
+DEV_DISABLED = 4404  # close code: the dev console is off in this environment
 
 
 def _admitted_live(c: Container, message: AgentMessage) -> bool:
@@ -150,6 +158,11 @@ async def agent_socket(ws: WebSocket) -> None:
                 if isinstance(message, AudienceKeyframe):
                     pending_keyframe = message  # bytes follow; the gate applies to them
                     continue
+                if isinstance(message, DevPerception):
+                    # Debug geometry for `/dev` only: relayed as is, never routed or stored.
+                    if c.settings.dev_console_enabled and c.live.sensing(message.screen_id):
+                        await c.hub.broadcast_dev(message)
+                    continue
                 if not _admitted_live(c, message):
                     c.live.dropped += 1
                     continue
@@ -253,3 +266,26 @@ async def console_socket(ws: WebSocket) -> None:
         pass
     finally:
         c.hub.remove_console(ws)
+
+
+# ------------------------------------------------------------------ dev / QA
+
+
+@router.websocket("/ws/dev")
+async def dev_socket(ws: WebSocket) -> None:
+    c = _container(ws)
+    await ws.accept()
+    if not c.settings.dev_console_enabled:
+        await ws.close(code=DEV_DISABLED, reason="dev console disabled")
+        return
+    c.hub.add_dev(ws)
+    try:
+        # Same catch-up as a console: the latest decision, book and live status.
+        await c.router.console_connected(ws)
+        while (frame := await _next_frame(ws)) is not None:
+            if frame.get("text") is not None:
+                await _send_error(ws, "dev.read_only", "the dev socket is push-only")
+    except WebSocketDisconnect:
+        pass
+    finally:
+        c.hub.remove_dev(ws)

@@ -8,13 +8,16 @@ class FakeSocket {
     sent: string[] = [];
     onopen: (() => void) | null = null;
     onmessage: ((e: { data: unknown }) => void) | null = null;
-    onclose: (() => void) | null = null;
+    onclose: ((e?: { code: number }) => void) | null = null;
     onerror: (() => void) | null = null;
     send(data: string) {
         this.sent.push(data);
     }
     close() {
         this.onclose?.();
+    }
+    closeWith(code: number) {
+        this.onclose?.({ code });
     }
     open() {
         this.readyState = 1;
@@ -136,6 +139,37 @@ describe("socket lifecycle races", () => {
             vi.runOnlyPendingTimers();
             expect(sockets).toHaveLength(2);
             socket.stop();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it("reports the close code and stays closed when the handler stops it", () => {
+        vi.useFakeTimers();
+        try {
+            vi.stubGlobal("WebSocket", { OPEN: 1 });
+            const sockets: FakeSocket[] = [];
+            const codes: number[] = [];
+            const socket: TypedSocket<{ type: "ping"; n: number }> = new TypedSocket({
+                url: "ws://test",
+                schema: Schema,
+                onMessage: () => undefined,
+                onClose: (code) => {
+                    codes.push(code);
+                    if (code === 4404) socket.stop();
+                },
+                createSocket: () => {
+                    const s = new FakeSocket();
+                    sockets.push(s);
+                    return s as unknown as WebSocket;
+                },
+            });
+            socket.start();
+            sockets[0]!.closeWith(4404);
+            vi.runOnlyPendingTimers();
+            expect(codes).toEqual([4404]);
+            expect(sockets).toHaveLength(1);
+            expect(socket.state.status).toBe("closed");
         } finally {
             vi.useRealTimers();
         }
