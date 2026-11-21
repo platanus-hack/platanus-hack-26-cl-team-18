@@ -1,0 +1,21 @@
+[project]
+name = "on-sight-edge"
+version = "0.1.0"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "opencv-python>=4.10",
+    "ultralytics>=8.4,<9",
+    "lap>=0.5.12",
+    "torch==2.6.0; sys_platform == 'win32'",
+    "torchvision==0.21.0; sys_platform == 'win32'",
+]
+
+[project.scripts]
+on-sight = "agent.vision.replay:main"
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["agent*"]
