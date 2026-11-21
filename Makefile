@@ -6,14 +6,14 @@ TF  := scripts/tf.sh $(ENV)
 TF_ROOTS := terraform/modules/render-app terraform/modules/render-static-site terraform/envs/prod
 LOCAL_DATABASE_URL := postgresql://team18:team18@localhost:5432/team18
 
-.PHONY: help help-all station demo-live install edge-install edge-check eval-speech-robustness edge-yoloe edge-probe-objects test-live test-sandbox dev web-install web-dev web-check contract contract-check lint format typecheck test check migrate migrate-status db-up db-down db-reset \
+.PHONY: help help-all up station demo-live install edge-install edge-check eval-speech-robustness edge-yoloe edge-probe-objects test-live test-sandbox dev web-install web-dev web-check contract contract-check lint format typecheck test check migrate migrate-status db-up db-down db-reset \
         live-preflight bundle-loops bundle-loops-local \
         eval eval-baseline eval-creative eval-creative-baseline eval-campaigns eval-replay eval-perception eval-record eval-rehearsal eval-beats eval-video-fetch eval-video eval-pipeline eval-demo-video demo-warmup eval-browser \
         tf-init tf-fmt tf-fmt-check tf-validate tf-test tf-check tf-plan tf-apply tf-output tf-lock
 
 # `make help` lists only what runs the real station; `make help-all` lists every tool
 # (evals, demo, benches, Terraform). Demo pages live behind DEMO_KEY: /demo/<key>.
-STATION_TARGETS := install edge-install web-install edge-yoloe db-up migrate live-preflight station dev web-dev check
+STATION_TARGETS := up install edge-install web-install edge-yoloe db-up migrate live-preflight station dev web-dev check
 
 help: ## The real station: install, preflight, run (make help-all for every tool)
 	@awk -v keep=" $(STATION_TARGETS) help-all " 'BEGIN { FS = ":.*## " } /^[a-zA-Z0-9_-]+:.*## / && index(keep, " " $$1 " ") { printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
@@ -29,8 +29,8 @@ install: ## Create .venv with locked dev dependencies
 dev: ## Run the backend with reload on :8000 (HTTP + WebSockets)
 	uv run uvicorn app.main:app --reload --port 8000
 
-edge-install: ## Install the perception agent (edge/, Python 3.12) with dev tools
-	cd edge && env -u VIRTUAL_ENV uv sync --extra dev
+edge-install: ## Install the perception agent (edge/, Python 3.12): camera, audio and dev tools
+	cd edge && env -u VIRTUAL_ENV uv sync --extra dev --extra vision --extra audio
 
 edge-check: ## edge/: ruff + format + mypy + tests (what CI runs)
 	cd edge && env -u VIRTUAL_ENV uv run ruff check . && env -u VIRTUAL_ENV uv run ruff format --check . \
@@ -75,6 +75,9 @@ eval-speech-robustness: ## Real speech x venue noise through VAD/mic path; ARGS=
 
 eval-demo-video: ## The demo video (docs/demo.md §3) beat by beat: complete ads, redeem, receipt, $0
 	uv run python -m evals demo-video
+
+up: ## One command: set up whatever is missing (.env, deps, models, DB), then run the station (ARGS as station)
+	env -u VIRTUAL_ENV uv run python -m scripts.up $(ARGS)
 
 station: ## Run the station: camera + backend + player/console on :5188, in standby (paid AI off unless ARGS="--paid-providers")
 	uv run python -m scripts.station $(ARGS)

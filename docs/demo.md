@@ -35,6 +35,13 @@
 
 ### Station and demo surface
 
+One command deploys the station locally: `make up` (paid AI: `make up
+ARGS="--paid-providers"`). It creates `.env` if missing (records in memory),
+generates `DEMO_KEY`, syncs backend, agent and web dependencies, bakes the
+object vocabulary, starts and migrates Postgres only if `DATABASE_URL` is set,
+runs the preflight, then starts the station (about 3 s once set up).
+
+
 The station is two pages: `/screen` (the TV) and `/console` (with the "En vivo"
 switch), plus `/r/{code}` for the QR. Everything built to *show* the product
 (bidding war, clerk stock, campaign drafts, `/dev` QA) lives on a hidden hub,

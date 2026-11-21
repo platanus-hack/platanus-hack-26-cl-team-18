@@ -163,6 +163,7 @@ doesn't make a demo moment land better is backlog.
   as Render's pre-deploy command. `make help` lists every target.
 
 ```bash
+make up            # ONE command: set up what's missing (.env, deps, models, DB) + run the station
 make venv          # uv venv + uv sync --extra dev
 make check         # lint + format-check + mypy + unit tests (what CI runs)
 make test ARGS="tests/unit/x.py::test_y"   # narrow while editing
