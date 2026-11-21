@@ -58,6 +58,9 @@ Contexts: [`docs/architecture.md` §5](docs/architecture.md#5-bounded-contexts).
 | **Voice-over** | A short spoken line for a creative (ElevenLabs TTS), cached by (copy hash, voice id, model). Brand voice for solo creatives, neutral narrator for co-brand. | "Talk to the screen" replies. |
 | **Media asset** | A cached generated file (voice-over, video loop, hero image) with provenance (`model_version`, prompt hash). | Brand-kit asset (human-approved). |
 | **Creative upgrade** | Replacing a playing template creative in place with AI copy/hero image once ready (progressive enhancement). | A new auction. |
+| **Creative brief** | Everything a copy generator may know about one moment: basket brands, angle, the offer for the party size, names to avoid, stage limits. No personal data, no utterance text. | The creative spec (the brief is input, the spec is output). |
+| **Angle** | The need the copy answers: hunger, energy, coffee break, post-workout, social, queue, complete-the-basket, generic. Decided by a pure policy before any model runs. | Segment (an audience fact; the angle is a creative choice). |
+| **Copy guard** | The pure rules a draft must pass to air: approved price only, no competitor names, every basket brand named, party size matches, no restricted words with minors, no claims or inferences. | Prompt instructions (advisory; the guard is enforced). |
 | **House ad** | The non-paid fallback creative. The screen is never blank. | n/a |
 | **Playback** | Proof of play for one creative on one screen: start/end and measured AS per slot. | Impression. |
 | **Charge** | Append-only ledger row: brand, auction, AS, clearing price, amount (`Money`). Zero AS yields an explicit zero charge with reason `no_attention`. | Invoice. |

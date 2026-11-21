@@ -10,8 +10,10 @@ from app.contract.messages import (
     AudienceSnapshot,
     CreativeReady,
     DetectedObject,
+    DistanceBand,
     MinorLikely,
     SoundScene,
+    Tracklet,
 )
 
 SCENES: dict[str, tuple[str, ...]] = {
@@ -37,6 +39,11 @@ def snapshot_for(scene: str, seq: int, measured_at: datetime) -> AudienceSnapsho
         measured_at=measured_at,
         people=count,
         looking=count,
+        # Anonymous, session-local ids: delivery measures attention from these.
+        tracklets=[
+            Tracklet(id=f"t{index}", dwell_s=1.0, looking=True, distance_band=DistanceBand.NEAR)
+            for index in range(1, count + 1)
+        ],
         objects=objects,
         sound_scene=(
             [SoundScene(label="coffee service fixture", score=1)] if scene == "co-brand" else []

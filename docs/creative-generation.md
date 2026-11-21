@@ -1,6 +1,6 @@
 # Creative generation: targeted co-brand ads in real time
 
-> **Doc status: LIVE.** Design, metrics plan and runbook for the `creative`
+> **Doc status: LIVE (implemented).** Design, metrics plan and runbook for the `creative`
 > context's generation engine. Binding rules come from
 > [`product.md`](product.md) (invariants 1, 2, 4, 5), [`architecture.md`](architecture.md)
 > §3/§6.1/§7.3/§8 and ADR 0001 (three paths) / ADR 0003 (video). The code is in
@@ -48,8 +48,11 @@ price, never a competitor name, never a blank screen, never an uncapped bill.
    A rejected AI draft falls back to stock copy; the guard's verdict is stored.
 4. **Best-of selection with a quality score.** The same deterministic
    `score_draft` that the eval uses runs at runtime: an AI draft replaces the
-   stock draft only if it passes the guard **and** scores at least as high.
-   Quality can't regress on air because of a bad sample.
+   stock draft only if it passes the guard, is **not worse on any targeting
+   part** (angle, party, brands, price, held product) and its total is within
+   `ai_tolerance` (0.05) of stock's. The rubric measures targeting and
+   safety, not wit, so a fresher line may trail by a hair but never miss the
+   moment. Quality can't regress on air because of a bad sample.
 5. **Progressive upgrade in place (three paths).** Hot: cache or stock →
    `creative.ready`. Warm: Claude Haiku 5.5 copy (structured output, frozen
    cached system prompt) → guard → score → `creative.upgraded` (kind `copy`),
@@ -93,6 +96,10 @@ CreativeBrief ──► angle policy · offer for party size · competitors to a
                      ─► creative.upgraded(copy) ─► voice-over of the new line
               cost:  GenerationLedger.record(kind, estimate)  (hourly budget)
 ```
+
+Groups larger than 6 are addressed as "todo el grupo", never with a wrong
+count. Composition is memoized per brief (about 2 µs on a repeat, about 1 ms
+for a never-seen brief), and the memo is dropped when new AI copy is cached.
 
 Layering: `domain/` is pure (brief, angle, offer, guard, score, cost,
 budget). `application/` holds the hot composer, the studio orchestration,
@@ -167,7 +174,45 @@ when code or fixtures move. `--writer claude` runs the same suite live
 - `tests/unit/creative/test_creative_eval.py` runs the offline eval and
   asserts every gate, so a regression fails `make check`.
 
-## 6. Runbook
+## 6. Implementation map
+
+| Piece | File |
+|---|---|
+| Angle policy (speech > held > queue > segment > category) | `app/modules/creative/domain/angle.py` |
+| Group-sized offers, CLP price text | `domain/offer.py` |
+| `CreativeBrief`, signature, stage limits | `domain/brief.py` |
+| `CopyDraft`, stages, provenance | `domain/draft.py` |
+| Copy guard (`CopyGuard` spec, `check_copy`) and word lists | `domain/guard.py`, `domain/lexicon.py` |
+| Quality rubric `score_draft` | `domain/scoring.py` |
+| `UsdCost` (micro-dollars), `CostModel`, ledger, `plan_upgrades` | `domain/cost.py` |
+| Brief from a cleared auction (`build_brief`, `assemble_brief`) | `application/briefing.py` |
+| Targeted stock templates | `application/stock_copy.py` |
+| Studio: hot compose, warm upgrade, prewarm, records | `application/studio.py` |
+| Copy cache, spec rendering | `application/copy_cache.py`, `application/rendering.py` |
+| Ports `CopyWriter`, `QualityJudge` | `application/ports/copywriter.py` |
+| Claude Haiku 5.5 adapter (frozen prompt, typed failures) | `infrastructure/claude_copywriter.py` |
+| Recorded replay adapter | `infrastructure/recorded_copywriter.py` |
+| Demo wiring (seed offers, warm `creative.upgraded(copy)`) | `app/bootstrap/demo.py`, `app/bootstrap/container.py` |
+| Player: stages + offer badge | `web/src/features/screen/CreativeView.tsx`, `stages.ts` |
+| Eval suite, fixtures, runner, baseline | `evals/creative/` |
+
+Wire contract (additive, optional): `CreativeSpec.stages[]`, `offer {label,
+text, price, party_size}`, `angle`, `copy_source` (`stock|ai|cache`).
+
+### Baseline (2026-11-21)
+
+| Mode | Angle | Offer | Aired violations | Adversarial rejected | Quality mean / min | Hot p95 | Warm p95 | Cost / creative |
+|---|---|---|---|---|---|---|---|---|
+| stock | 21/21 | 21/21 | 0 | 15/15 | 0.982 / 0.964 | < 2 ms | n/a | $0 |
+| recorded | 21/21 | 21/21 | 0 | 15/15 | 0.978 / 0.948 | < 2 ms | 1100 ms | $0.00017 |
+
+In recorded mode, 16 of 20 AI attempts air; the changed-price draft is
+rejected, the bland one loses on score, and two provider failures (invalid
+output, timeout) fall back to stock. The recorded responses are hand-written
+stand-ins in Claude's output shape. Replace them with real ones via
+`--writer claude --record` before quoting AI numbers in the pitch.
+
+## 7. Runbook
 
 ```sh
 make eval-creative                       # offline: stock + recorded writer, scorecard

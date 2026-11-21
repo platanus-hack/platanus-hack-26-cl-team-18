@@ -27,7 +27,12 @@ from agent.speech.vad import FRAME_BYTES, EnergyVad, SpeechGate
 
 pytestmark = [pytest.mark.live, pytest.mark.anyio]
 
-LINE = "Uf, qué hambre. Vamos por un café después del gimnasio."
+# Short on purpose: the account has ~10k credits. The synthesized audio is cached
+# in tests/fixtures, so only the first run spends TTS characters (~34).
+LINE = "Uf, qué hambre. Vamos por un café."
+FIXTURE = Path(__file__).resolve().parent / "fixtures" / "live_line_pcm16k.raw"
+# Premade voice reachable with a TTS-only key (no voices_read permission needed).
+PREMADE_VOICE = "JBFqnCBsd6RMkjVDRZzb"
 
 
 def _env(name: str) -> str | None:
@@ -67,19 +72,19 @@ def _request(path: str, *, body: dict[str, object] | None = None) -> bytes:
 
 
 def _voice_id() -> str:
-    if configured := _env("ELEVENLABS_NARRATOR_VOICE_ID"):
-        return configured
-    voices = json.loads(
-        _request("/v2/voices?category=premade&page_size=10&include_total_count=false")
-    )
-    return str(voices["voices"][0]["voice_id"])
+    return _env("ELEVENLABS_NARRATOR_VOICE_ID") or PREMADE_VOICE
 
 
 def _spoken_pcm16k() -> bytes:
-    return _request(
+    if FIXTURE.exists():
+        return FIXTURE.read_bytes()  # free: no TTS characters spent
+    pcm = _request(
         f"/v1/text-to-speech/{_voice_id()}?output_format=pcm_16000",
         body={"text": LINE, "model_id": "eleven_flash_v2_5", "language_code": "es"},
     )
+    FIXTURE.parent.mkdir(parents=True, exist_ok=True)
+    FIXTURE.write_bytes(pcm)
+    return pcm
 
 
 async def test_tts_audio_round_trips_through_our_transcription_pipeline() -> None:
@@ -99,7 +104,9 @@ async def test_tts_audio_round_trips_through_our_transcription_pipeline() -> Non
             pipeline.on_event(event)  # type: ignore[arg-type]
 
     scribe = ScribeRealtime(
-        ScribeConfig(api_key=API_KEY or "", keyterms=DEFAULT_KEYTERMS.prompt_terms()), on_event
+        ScribeConfig(api_key=API_KEY or "", keyterms=DEFAULT_KEYTERMS.prompt_terms()),
+        on_event,
+        idle_close_s=None,
     )
     pipeline = SpeechPipeline(
         screen_id="demo-01",
@@ -118,8 +125,9 @@ async def test_tts_audio_round_trips_through_our_transcription_pipeline() -> Non
         frames += [bytes(FRAME_BYTES)] * 40  # 1.3 s of silence: the gate closes and commits
         for frame in frames:  # real time, like the mic
             pipeline.on_frame(frame)
+            if scribe.stats.commits and "commit_sent" not in stamps:
+                stamps["commit_sent"] = time.perf_counter()  # our VAD closed the segment
             await asyncio.sleep(0.032)
-        stamps["speech_end"] = time.perf_counter()
         async with asyncio.timeout(15):
             while "committed" not in stamps:
                 await asyncio.sleep(0.05)
@@ -130,6 +138,6 @@ async def test_tts_audio_round_trips_through_our_transcription_pipeline() -> Non
     assert {"hambre", "café"} <= hits, f"keyterms heard: {hits}"
     assert sent[0].keyterms_hit, "the first utterance should be the early keyterm signal"
     print(
-        f"\nscribe: speech_end -> committed {1000 * (stamps['committed'] - stamps['speech_end']):.0f} ms; "
+        f"\nscribe: commit -> committed transcript {1000 * (stamps['committed'] - stamps['commit_sent']):.0f} ms; "
         f"utterances {len(sent)}, keyterms {sorted(hits)}, sessions {scribe.stats.sessions}"
     )

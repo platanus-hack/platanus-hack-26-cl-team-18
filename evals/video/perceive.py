@@ -32,6 +32,7 @@ import argparse
 import json
 import statistics
 import time
+from collections import deque
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -91,19 +92,73 @@ def overlaps(a: np.ndarray, b: np.ndarray, pad: float) -> bool:
     return not (a[2] < bx1 - px or a[0] > bx2 + px or a[3] < by1 - py or a[1] > by2 + py)
 
 
+def keyframes_for(args: argparse.Namespace) -> None:
+    """Blurred review frames at each change of the recording's published facts."""
+    pose_model, _ = load_model(args.pose_model.split(","))
+    times, last = [], None
+    for line in args.keyframes_for.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        body = json.loads(line)
+        snap = body["snapshot"]
+        facts = (
+            snap["people"],
+            snap["looking"],
+            tuple(sorted(o["label"] for o in snap["objects"])),
+        )
+        if facts != last:
+            times.append(float(body["t_s"]))
+            last = facts
+    capture = cv2.VideoCapture(str(args.video))
+    args.keyframes.mkdir(parents=True, exist_ok=True)
+    for t in times:
+        capture.set(cv2.CAP_PROP_POS_MSEC, (args.start + t) * 1000)
+        ok, frame = capture.read()
+        if not ok:
+            continue
+        pose = pose_model(frame, classes=[0], conf=args.conf, verbose=False)[0]
+        heads = []
+        if pose.boxes is not None and pose.keypoints is not None:
+            kconf = pose.keypoints.conf
+            for i, box in enumerate(pose.boxes.xyxy.cpu().numpy()):
+                c = kconf[i].cpu().numpy() if kconf is not None else np.zeros(17)
+                heads.append(head_box(box, pose.keypoints.xy[i].cpu().numpy(), c))
+        small = blur_heads(frame, heads)
+        scale = 480 / small.shape[1]
+        small = cv2.resize(small, None, fx=scale, fy=scale)
+        cv2.imwrite(str(args.keyframes / f"{t:07.2f}.jpg"), small, [cv2.IMWRITE_JPEG_QUALITY, 80])
+    print(json.dumps({"keyframes": len(times)}))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("video", type=Path)
-    parser.add_argument("--out", type=Path, required=True, help="recording JSONL")
+    parser.add_argument("--out", type=Path, help="recording JSONL (stand-in perception)")
+    parser.add_argument(
+        "--keyframes-for",
+        type=Path,
+        help="only write blurred keyframes where this recording's facts change "
+        "(review frames for a recording made by the real agent)",
+    )
     parser.add_argument("--keyframes", type=Path, help="directory for blurred keyframes")
     parser.add_argument("--start", type=float, default=0.0)
     parser.add_argument("--duration", type=float, default=20.0)
     parser.add_argument("--fps", type=float, default=5.0)
     parser.add_argument("--debounce-ms", type=float, default=500.0)
+    parser.add_argument(
+        "--window-s", type=float, default=1.0, help="majority-vote smoothing window"
+    )
     parser.add_argument("--conf", type=float, default=0.35)
     parser.add_argument("--pose-model", default="yolo26n-pose.pt,yolo11n-pose.pt")
     parser.add_argument("--det-model", default="yolo26s.pt,yolo11s.pt")
     args = parser.parse_args()
+    if args.keyframes_for:
+        if not args.keyframes:
+            raise SystemExit("--keyframes-for needs --keyframes")
+        keyframes_for(args)
+        return
+    if not args.out:
+        raise SystemExit("--out is required")
 
     pose_model, pose_name = load_model(args.pose_model.split(","))
     det_model, det_name = load_model(args.det_model.split(","))
@@ -126,6 +181,9 @@ def main() -> None:
     infer_ms: list[float] = []
     raw_changes = published_changes = 0
     previous_raw: tuple | None = None
+    window: deque[tuple[int, int, dict[str, float]]] = deque(
+        maxlen=max(1, round(args.window_s * args.fps))
+    )
     with args.out.open("w", encoding="utf-8") as sink:
         while True:
             ok, frame = capture.read()
@@ -173,20 +231,40 @@ def main() -> None:
             raw = (len(near), looking, tuple(sorted(objects)))
             raw_changes += int(previous_raw is not None and raw != previous_raw)
             previous_raw = raw
-            # Agent-side debounce: a new fact set must hold for debounce_ms first.
-            if raw != candidate:
-                candidate, candidate_since = raw, t
+            # 1) Smooth: majority vote over the last window (YOLO jitters per frame).
+            window.append((len(near), looking, objects))
+            votes: dict[str, list[float]] = {}
+            for _, _, seen in window:
+                for label, score in seen.items():
+                    votes.setdefault(label, []).append(score)
+            stable_objects = {
+                label: round(max(scores), 2)
+                for label, scores in votes.items()
+                if len(scores) * 2 >= len(window)
+            }
+            smoothed = (
+                round(statistics.median(p for p, _, _ in window)),
+                round(statistics.median(lk for _, lk, _ in window)),
+                tuple(sorted(stable_objects)),
+            )
+            # 2) Debounce: a smoothed fact set must hold for debounce_ms first.
+            if smoothed != candidate:
+                candidate, candidate_since = smoothed, t
             if published is None or (
                 candidate != published and (t - candidate_since) * 1000 >= args.debounce_ms
             ):
                 published_changes += int(published is not None)
                 published = candidate
-                published_objects = dict(objects)
+                published_objects = dict(stable_objects)
                 if args.keyframes:
                     small = blur_heads(frame, heads)
                     scale = 480 / small.shape[1]
                     small = cv2.resize(small, None, fx=scale, fy=scale)
-                    cv2.imwrite(str(args.keyframes / f"{t:07.2f}.jpg"), small, [cv2.IMWRITE_JPEG_QUALITY, 80])
+                    cv2.imwrite(
+                        str(args.keyframes / f"{t:07.2f}.jpg"),
+                        small,
+                        [cv2.IMWRITE_JPEG_QUALITY, 80],
+                    )
             people, look, _ = published
             seq += 1
             snapshot = {
@@ -204,7 +282,9 @@ def main() -> None:
                 "minor_likely": {"value": False, "confidence": 0.0},
             }
             raw_facts = {"people": raw[0], "looking": raw[1], "objects": objects}
-            sink.write(json.dumps({"t_s": round(t, 3), "snapshot": snapshot, "raw": raw_facts}) + "\n")
+            sink.write(
+                json.dumps({"t_s": round(t, 3), "snapshot": snapshot, "raw": raw_facts}) + "\n"
+            )
 
     meta = {
         "video": args.video.name,
@@ -218,7 +298,9 @@ def main() -> None:
         "raw_fact_changes": raw_changes,
         "published_changes": published_changes,
     }
-    args.out.with_suffix(".meta.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+    args.out.with_suffix(".meta.json").write_text(
+        json.dumps(meta, indent=2) + "\n", encoding="utf-8"
+    )
     print(json.dumps(meta))
 
 

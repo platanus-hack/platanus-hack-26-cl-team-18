@@ -30,5 +30,9 @@ export const HOUSE_AD: Playable = {
         video_url: null,
         voiceover_url: null,
         qr_url: null,
+        stages: [],
+        offer: null,
+        angle: null,
+        copy_source: null,
     },
 };

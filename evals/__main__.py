@@ -6,6 +6,7 @@ python -m evals replay REC.jsonl     real-video perception recording → live ba
 python -m evals perception LABELS REC.jsonl   score the agent against hand labels
 python -m evals record --out FILE    record a live rehearsal from a running backend
 python -m evals rehearsal FILE       score a recorded rehearsal
+python -m evals creative [--writer stock|recorded|claude]   creative generation eval
 """
 
 from __future__ import annotations
@@ -65,6 +66,13 @@ def main(argv: list[str] | None = None) -> int:
     rehearsal = sub.add_parser("rehearsal", help="score a recorded rehearsal")
     rehearsal.add_argument("recording", type=Path)
 
+    creative = sub.add_parser(
+        "creative", help="creative generation eval (docs/creative-generation.md)"
+    )
+    creative.add_argument("--writer", choices=["stock", "recorded", "claude"], default="recorded")
+    creative.add_argument("--record", action="store_true", help="live: overwrite recordings.json")
+    creative.add_argument("--update-baseline", dest="creative_baseline", action="store_true")
+
     args = parser.parse_args(argv)
     command = args.command or "suite"
     if command == "suite":
@@ -73,6 +81,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run_replay(args)
     if command == "perception":
         return _run_perception(args)
+    if command == "creative":
+        return _run_creative(args)
     if command == "record":
         count = record(args.server, args.record_out, duration_s=args.duration)
         print(f"recorded {count} messages to {args.record_out}")
@@ -219,6 +229,32 @@ def _section(run: RunRecord, beat: str) -> dict[str, Any]:
 
 def _ratio(numerator: int, denominator: int) -> float | None:
     return numerator / denominator if denominator else None
+
+
+def _run_creative(args: argparse.Namespace) -> int:
+    import anyio
+
+    from evals.creative import runner
+
+    report = anyio.run(lambda: runner.run(args.writer))
+    rows = runner.judge(report.metrics, runner.load_baseline(report.writer))
+    latest = runner.write_results(report, runner.render(report, rows), args.out)
+    print(latest.read_text(encoding="utf-8"))
+    if args.record and report.writer == "claude":
+        runner.save_recordings(report)
+        print(f"recorded {len(report.recorded)} responses to {runner.RECORDINGS_FILE}")
+    bad = runner.failed(rows)
+    if args.creative_baseline:
+        if any(r["status"] == "FAIL" for r in rows):
+            print("refusing to update the baseline: a gate failed")
+            return 1
+        runner.save_baseline(report)
+        print(f"baseline updated for `{report.writer}` in {runner.BASELINE_FILE}")
+        return 0
+    if bad:
+        print("FAILED: " + ", ".join(bad))
+        return 1
+    return 0
 
 
 if __name__ == "__main__":

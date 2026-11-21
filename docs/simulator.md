@@ -89,3 +89,24 @@ template playback and the console. Live recognition, IAB catalog resolution,
 time-based debouncing, warm media upgrades, QR redemption and billing remain
 integration work. The simulator stores its current state in memory and
 uses the existing WebSocket schema.
+
+## Drive the market: bidding war, stock, billing
+
+With the backend and `npm run dev` running, open these pages:
+
+- [/advertiser?brand=Rayo](http://127.0.0.1:5173/advertiser?brand=Rayo): one
+  brand's bid slider (×0.2–5.0). Leave out `brand` to get a picker.
+- [/clerk?id=demo-01](http://127.0.0.1:5173/clerk?id=demo-01): stock toggles.
+
+Each change re-auctions the moment on screen:
+- A bid flip waits for the current teaser (3 s) and needs a 2 % margin.
+- A stock-out of a brand on screen swaps at once.
+
+The console's **Market** panel shows bids, stock, spend and holds. Its
+**Moment receipt** panel shows each billed play, for example
+"2 looked · 4.000 AS · Voltio $9". When a play gets no qualifying looks, it
+shows "Charged $0: nobody looked" instead.
+
+The replay scenes carry anonymous tracklets, so plays are billed. Set
+`DATABASE_URL` (after `make db-up`) to also record auctions and charges in
+Postgres.

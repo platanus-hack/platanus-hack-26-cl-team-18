@@ -21,6 +21,7 @@ class ChargeId(TypedId):
 class ChargeReason(StrEnum):
     ATTENTION = "attention"
     NO_ATTENTION = "no_attention"  # zero attention is recorded explicitly as a $0 charge
+    BUDGET_CAP = "budget_cap"  # the charge was capped at the campaign's budget left
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

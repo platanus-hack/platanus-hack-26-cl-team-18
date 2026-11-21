@@ -112,3 +112,40 @@ The options are:
    "talk to the screen".
 
 TTS of ad copy carries no personal data and is unaffected.
+
+## Amendment (2026-11-21): credit discipline and first live run
+
+The account has about 10,000 credits, so every path that can spend them is capped.
+
+**Spending controls in the code**
+- **TTS has a persistent budget.** `ELEVENLABS_CHAR_BUDGET` defaults to 2000
+  characters, and the ledger is `var/elevenlabs-budget.json`. It lives outside
+  `/media` on purpose, because that directory is publicly served. A new line
+  that doesn't fit is refused before any call; cache hits stay free. A corrupt
+  ledger fails closed, and the console raises `voice_fallback`.
+- **Cached voice-overs still play once calls stop.** After auth, quota or
+  budget errors, voice-overs already in the cache keep playing.
+- **STT sessions open lazily.** No Scribe session exists until there is
+  speech, and the session closes after 60 s without speech (`idle_close_s`).
+  An empty venue bills nothing. The cost is one connection setup on the first
+  utterance after a quiet minute.
+- **Live tests are cheap to rerun.** The edge round trip caches its TTS audio
+  in `edge/tests/fixtures/`, and the backend test caches its voice-over in
+  `var/live-cache/`. Reruns cost 0 TTS characters.
+
+**The API key is scoped**
+- It has: TTS, and speech-to-text including realtime tokens.
+- It lacks: `voices_read` and `user_read`, so voices can't be listed and the
+  balance can't be read through the API.
+- Consequences: spend is tracked from the `character-cost` response header,
+  and the narrator voice id must be pasted from the dashboard.
+- The tests use the premade voice `JBFqnCBsd6RMkjVDRZzb`, which is English;
+  pick a Spanish one for the demo.
+
+**First live run, from Santiago**
+- **TTS:** Flash v2.5 in Spanish returned an MP3 in 491 ms. ElevenLabs charged
+  18 credits for 35 characters, about half a credit per character on Flash.
+- **STT:** Scribe v2 Realtime returned the committed transcript 206 ms after
+  our commit. The early keyterm utterance (`hambre`, `café`) fired from the
+  partial transcript.
+- **Total spent:** about 36 credits and about 10 s of realtime STT.

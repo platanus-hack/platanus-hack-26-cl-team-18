@@ -142,6 +142,32 @@ class CreativeSlot(_Model):
     hero_image_url: str | None = None
 
 
+class CreativeStageName(StrEnum):
+    TEASER = "teaser"  # 0-3 s: big visuals, logos
+    OFFER = "offer"  # 3-8 s: the basket offer sized to the group
+    CLOSE = "close"  # 8 s+: QR + "valid 10 min"
+
+
+class CreativeStage(_Model):
+    name: CreativeStageName
+    copy_text: Annotated[str, Field(min_length=1, max_length=280)]
+
+
+class CreativeOffer(_Model):
+    """The approved basket offer the creative is sized to (price never AI-written)."""
+
+    label: Annotated[str, Field(min_length=1, max_length=80)]
+    text: Annotated[str, Field(min_length=1, max_length=160)]
+    price: MoneyDTO
+    party_size: Annotated[int, Field(ge=1, le=12)]
+
+
+class CopySourceKind(StrEnum):
+    STOCK = "stock"
+    AI = "ai"
+    CACHE = "cache"
+
+
 class CreativeSpec(_Model):
     layout_id: EntityId
     slots: Annotated[list[CreativeSlot], Field(min_length=1, max_length=3)]
@@ -149,6 +175,12 @@ class CreativeSpec(_Model):
     video_url: str | None = None
     voiceover_url: str | None = None
     qr_url: str | None = None
+    # Dwell-stage copy (architecture §6.1); empty = render the slots' copy only.
+    stages: Annotated[list[CreativeStage], Field(max_length=3)] = Field(default_factory=list)
+    offer: CreativeOffer | None = None
+    # Why this ad: the angle the copy answers (hunger, queue, ...) and who wrote it.
+    angle: Annotated[str, Field(max_length=32)] | None = None
+    copy_source: CopySourceKind | None = None
 
 
 # ---------------------------------------------------------------- agent -> backend
@@ -173,6 +205,78 @@ class AudienceSnapshot(_Message):
         return self
 
 
+class RecognitionAttribute(_Model):
+    name: Annotated[str, Field(min_length=1, max_length=64)]
+    value: Annotated[str, Field(max_length=256)]
+    source: Literal["vlm", "visual", "audio"]
+    observed_at_s: Annotated[float, Field(ge=0)]
+    evidence: Annotated[str, Field(max_length=500)]
+    uncertainty: Literal["low", "medium", "high", "unknown"] = "unknown"
+    model: Annotated[str, Field(max_length=128)] = ""
+    associated_item: Annotated[str, Field(max_length=128)] = ""
+    crop_ref: Annotated[str, Field(max_length=128)] = ""
+
+
+class RecognitionPerson(_Model):
+    track_id: Annotated[str, Field(min_length=1, max_length=32)]
+    first_seen_s: Annotated[float, Field(ge=0)]
+    last_seen_s: Annotated[float, Field(ge=0)]
+    box: list[float] = Field(min_length=4, max_length=4)
+    confidence: Score
+    direction: Literal["left", "right", "stationary", "unknown"]
+    currently_visible: bool
+    attributes: list[RecognitionAttribute] = Field(default_factory=list, max_length=64)
+
+
+class RecognitionObject(_Model):
+    label: Annotated[str, Field(min_length=1, max_length=64)]
+    count: Annotated[int, Field(ge=1)]
+    last_seen_s: Annotated[float, Field(ge=0)]
+    currently_visible: bool
+
+
+class RecognitionDetection(_Model):
+    label: Annotated[str, Field(min_length=1, max_length=64)]
+    confidence: Score
+    box: list[float] = Field(min_length=4, max_length=4)
+    track_id: Annotated[str, Field(min_length=1, max_length=32)] | None = None
+    observed_at_s: Annotated[float, Field(ge=0)]
+
+
+class RecognitionAudioEvent(_Model):
+    label: Annotated[str, Field(min_length=1, max_length=64)]
+    observed_at_s: Annotated[float, Field(ge=0)]
+    confidence: Score
+    source: Annotated[str, Field(min_length=1, max_length=64)]
+
+
+class RecognitionLatency(_Model):
+    decode_ms: Annotated[float, Field(ge=0)]
+    detection_tracking_ms: Annotated[float, Field(ge=0)]
+    publication_delay_ms: Annotated[float, Field(ge=0)]
+    first_observation_ms: Annotated[float, Field(ge=0)] | None = None
+
+
+class RecognitionSnapshot(_Message):
+    """Anonymous, ephemeral recognition facts; not a classified audience moment."""
+
+    type: Literal["recognition.snapshot"] = "recognition.snapshot"
+    screen_id: ScreenId
+    session_id: EntityId
+    session_started_at: AwareDatetime
+    seq: Seq
+    revision: Seq = 0  # increases when warm observations enrich this session
+    measured_at: AwareDatetime
+    video_time_s: Annotated[float, Field(ge=0)]
+    finished: bool = False
+    people: list[RecognitionPerson] = Field(default_factory=list, max_length=128)
+    history: list[RecognitionPerson] = Field(default_factory=list, max_length=256)
+    detections: list[RecognitionDetection] = Field(default_factory=list, max_length=256)
+    objects: list[RecognitionObject] = Field(default_factory=list, max_length=128)
+    audio_events: list[RecognitionAudioEvent] = Field(default_factory=list, max_length=32)
+    latency: RecognitionLatency
+
+
 class AudienceKeyframe(_Message):
     """Header for a face-blurred JPEG; the bytes follow as the next binary WS frame."""
 
@@ -182,6 +286,9 @@ class AudienceKeyframe(_Message):
     measured_at: AwareDatetime
     content_type: Literal["image/jpeg"] = "image/jpeg"
     byte_length: Annotated[int, Field(gt=0, le=2_000_000)]
+    session_id: EntityId | None = None
+    track_id: Annotated[str, Field(min_length=1, max_length=32)] | None = None
+    video_time_s: Annotated[float, Field(ge=0)] | None = None
 
 
 class AudienceUtterance(_Message):
@@ -374,6 +481,7 @@ class ConsoleBook(_Message):
 class ChargeReason(StrEnum):
     ATTENTION = "attention"
     NO_ATTENTION = "no_attention"
+    BUDGET_CAP = "budget_cap"
 
 
 class ChargeLine(_Model):
@@ -415,7 +523,8 @@ class ErrorMessage(_Message):
 # ---------------------------------------------------------------- unions per socket
 
 AgentInbound = Annotated[
-    AudienceSnapshot | AudienceKeyframe | AudienceUtterance, Field(discriminator="type")
+    AudienceSnapshot | AudienceKeyframe | AudienceUtterance | RecognitionSnapshot,
+    Field(discriminator="type"),
 ]
 PlayerInbound = Annotated[PlaybackReport, Field(discriminator="type")]
 PlayerOutbound = Annotated[
@@ -434,9 +543,9 @@ ConsoleOutbound = Annotated[
     Field(discriminator="type"),
 ]
 
-AGENT_INBOUND: TypeAdapter[AudienceSnapshot | AudienceKeyframe | AudienceUtterance] = TypeAdapter(
-    AgentInbound
-)
+AGENT_INBOUND: TypeAdapter[
+    AudienceSnapshot | AudienceKeyframe | AudienceUtterance | RecognitionSnapshot
+] = TypeAdapter(AgentInbound)
 PLAYER_INBOUND: TypeAdapter[PlaybackReport] = TypeAdapter(PlayerInbound)
 PLAYER_OUTBOUND: TypeAdapter[CreativeReady | CreativeUpgraded | ErrorMessage] = TypeAdapter(
     PlayerOutbound
@@ -469,6 +578,7 @@ AnyMessage = (
     | StockSet
     | ConsoleBook
     | ConsoleReceipt
+    | RecognitionSnapshot
 )
 
 # Order is the generated TS order; append new messages at the end.
@@ -488,11 +598,12 @@ ALL_MESSAGES: tuple[type[_Message], ...] = (
     StockSet,
     ConsoleBook,
     ConsoleReceipt,
+    RecognitionSnapshot,
 )
 
 # Socket unions exported to TS, by name.
 SOCKET_UNIONS: dict[str, tuple[type[_Message], ...]] = {
-    "AgentInbound": (AudienceSnapshot, AudienceKeyframe, AudienceUtterance),
+    "AgentInbound": (AudienceSnapshot, AudienceKeyframe, AudienceUtterance, RecognitionSnapshot),
     "PlayerInbound": (PlaybackReport,),
     "PlayerOutbound": (CreativeReady, CreativeUpgraded, ErrorMessage),
     "ConsoleOutbound": (

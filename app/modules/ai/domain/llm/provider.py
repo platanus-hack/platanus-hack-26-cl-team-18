@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal, Self
 
 from app.modules.ai.domain.errors import (
@@ -14,6 +14,7 @@ from app.modules.common.domain.primitives.value_object import ValueObject
 
 ImageMediaType = Literal["image/jpeg", "image/png", "image/webp", "image/gif"]
 _IMAGE_MEDIA_TYPES = frozenset({"image/jpeg", "image/png", "image/webp", "image/gif"})
+MAX_IMAGE_BYTES = 2_000_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,7 +33,7 @@ class ImageContent(ValueObject):
     def _enforce_types(self) -> None:
         if self.media_type not in _IMAGE_MEDIA_TYPES:
             raise InvalidProviderMessageContent()
-        if not isinstance(self.data, bytes) or not self.data:
+        if not isinstance(self.data, bytes) or not 0 < len(self.data) <= MAX_IMAGE_BYTES:
             raise InvalidProviderMessageContent()
 
     def __repr__(self) -> str:  # keep image bytes out of logs and tracebacks
@@ -43,7 +44,8 @@ class ImageContent(ValueObject):
 class ProviderMessage(ValueObject):
     role: ProviderRole
     content: str
-    images: tuple[ImageContent, ...] = ()
+    # Out of repr: even the image metadata stays out of logs and tracebacks.
+    images: tuple[ImageContent, ...] = field(default=(), repr=False)
 
     @classmethod
     def create(
@@ -51,12 +53,19 @@ class ProviderMessage(ValueObject):
         role: ProviderRole | str,
         content: str,
         images: tuple[ImageContent, ...] = (),
+        *,
+        image_jpeg: bytes | None = None,
     ) -> Self:
+        """`image_jpeg` is shorthand for one JPEG appended to `images`."""
         try:
             normalized_role = ProviderRole(role)
         except Exception as exc:
             raise InvalidProviderMessageRole(role=role) from exc
 
+        if image_jpeg is not None:
+            if not isinstance(images, tuple):
+                raise InvalidProviderMessageContent()
+            images = (*images, ImageContent.create(media_type="image/jpeg", data=image_jpeg))
         msg = cls(role=normalized_role, content=content, images=images)
         msg._enforce_types()
         return msg

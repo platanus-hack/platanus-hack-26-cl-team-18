@@ -31,9 +31,7 @@ class CopyDraft:
     reasoning: str = ""
 
     def line(self, stage: Stage) -> str:
-        return {Stage.TEASER: self.teaser, Stage.OFFER: self.offer, Stage.CLOSE: self.close}[
-            stage
-        ]
+        return {Stage.TEASER: self.teaser, Stage.OFFER: self.offer, Stage.CLOSE: self.close}[stage]
 
     def stages(self) -> tuple[tuple[Stage, str], ...]:
         return tuple((stage, self.line(stage)) for stage in Stage)

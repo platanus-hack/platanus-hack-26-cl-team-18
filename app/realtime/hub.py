@@ -22,9 +22,11 @@ from typing import Protocol
 
 from app.contract.messages import (
     ConsoleAuction,
+    ConsoleBook,
     ConsoleDegradation,
     ConsoleLatency,
     ConsoleMoment,
+    ConsoleReceipt,
     CreativeReady,
     CreativeUpgraded,
     ErrorMessage,
@@ -41,6 +43,8 @@ ConsoleMessage = (
     | CreativeReady
     | CreativeUpgraded
     | ErrorMessage
+    | ConsoleBook
+    | ConsoleReceipt
 )
 
 SEND_TIMEOUT_S = 1.0

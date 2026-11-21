@@ -123,6 +123,16 @@ The agent filters, in this order, matching the stand-in already validated in
 4. **Fact debounce (500 ms):** people, looking, objects and held products are
    published only once they have held for 500 ms. Counts in a snapshot are
    these published facts; tracklets stay live for attention measurement.
+5. **No freezing in a crowd:** if the facts never hold still (a busy counter),
+   the most frequent facts of the last second are published every 1.5 s. Found
+   on a real café clip, where the count otherwise froze at 3 for 9 s while
+   5–8 people came and went.
+
+Verified on real video: YOLO26 (n-pose + s objects, CPU) on the
+`coffee-counter` stock clip from `evals/video/clips.json`. About 115 ms per
+frame on CPU, a stable count that follows the crowd (3 → 5 → 7 → 5 → 4),
+and cup/laptop detected near people. The recording loads in
+`evals/perception.py`.
 
 ### D11. The agent records the eval replay contract
 
@@ -133,6 +143,33 @@ inference p50/max. `make eval-perception` and `make eval-replay` now score the
 real agent. **Hand-off (evals owner):** `evals/video/perceive.py` was a
 stand-in "until edge/agent/vision lands"; it can be retired once the golden
 clips have been re-recorded with the agent.
+
+### D12. One canonical vision path; `on-sight` stays a debug tool
+
+The merge of `0a69119` brought a second, standalone vision slice
+(`edge/agent/vision/replay.py` + `state.py`, the `on-sight` script). Decision:
+
+- **Canonical live path: `python -m agent.vision`.** It is the only one that
+  speaks the contract (`audience.snapshot`, `audience.keyframe`), uses pose for
+  *looking*, reads prop markers, debounces, fails over (ADR 0007) and records
+  the eval replay contract (D11). The backend only consumes this path.
+- **`on-sight` (`replay.py`/`state.py`) stays as a local debug tool.** It
+  uses a detection-only model and doesn't feed the auction. Don't build demo
+  features on it. Since PR #1 it can publish a separate, ephemeral
+  `recognition.snapshot` feed (ByteTrack tracks, direction, departed people,
+  late VLM attributes on head-redacted crops) into an in-memory
+  `RecognitionStore` (64 screens, 30 s TTL). Nothing subscribes to it in the
+  loop; `GET /recognition/{screen}` and the VLM (`VLM_ENABLED`) are off in
+  prod. It is the workbench where the ideas below are proven before they
+  move into `agent.vision`.
+- **Port these ideas from it into the canonical path, by demo value:**
+  1. **Movement direction** (left/right/stationary per track), so a passer-by
+     who walks through doesn't count like someone who stops.
+  2. **`enrich()`**: merge a late warm-path (VLM) result only into the track it
+     was observed on, keeping the stronger evidence. That is how VLM tags and
+     `minor_likely` should attach to tracks.
+  3. **ByteTrack** behind the tracker interface if the IoU tracker shows ID
+     switches in crowds (measure with `make eval-perception` first).
 
 ## Consequences
 

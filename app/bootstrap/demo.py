@@ -1,32 +1,45 @@
 """Compose the local simulator's snapshot-to-creative flow."""
 
 from base64 import b64encode
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
+from decimal import ROUND_CEILING, Decimal
 from pathlib import Path
 from threading import Lock
+from uuid import UUID
 
 from app.bootstrap.demo_console import decision_messages
 from app.contract.messages import (
+    AdvertiserBidMultiplier,
     AudienceKeyframe,
     AudienceSnapshot,
     AudienceUtterance,
+    BookLine,
+    ChargeLine,
+    ConsoleBook,
     ConsoleDegradation,
+    ConsoleReceipt,
     CreativeReady,
     CreativeSpec,
     CreativeUpgraded,
     DegradationFlag,
     LatencyTrace,
+    MoneyDTO,
+    PlaybackReport,
+    StockSet,
     UpgradeKind,
 )
 from app.modules.auction.application.desk import AuctionDesk
+from app.modules.auction.application.ports.auction_log import AuctionLog, AuctionRecord
 from app.modules.auction.domain.opportunity import (
     AdOpportunity,
     HeldProduct as BidHeldProduct,
     Layout,
 )
-from app.modules.auction.domain.result import AuctionResult
+from app.modules.auction.domain.result import AuctionResult, NoFillReason
 from app.modules.auction.domain.swap import Trigger
+from app.modules.auction.infrastructure.auction_log import InMemoryAuctionLog
 from app.modules.auction.infrastructure.engines.in_process import InProcessBundleEngine
 from app.modules.audience import AudienceMomentSnapshot
 from app.modules.audience.application.classifier import AudienceClassifier, DegradedSignal
@@ -40,8 +53,15 @@ from app.modules.audience.domain.speech_evidence import (
 from app.modules.audience.domain.value_objects.ids import MomentId
 from app.modules.audience.domain.value_objects.segment import SegmentId, SegmentSource
 from app.modules.audience.infrastructure.catalog.loader import load_catalog
+from app.modules.campaigns.application.live_book import (
+    LiveCampaignBook,
+    MultiplierOutcome,
+    UnknownCampaign,
+)
+from app.modules.campaigns.application.stock import StockBoard
 from app.modules.campaigns.domain.book import (
     Bidder,
+    BidMultiplier,
     BrandId,
     BrandKit,
     CampaignId,
@@ -52,9 +72,23 @@ from app.modules.common.application.id_generator import IdGenerator
 from app.modules.common.domain.value_objects.money import Money
 from app.modules.common.domain.value_objects.money_rate import MoneyRate
 from app.modules.common.domain.value_objects.percentage import Percentage
+from app.modules.common.domain.value_objects.rounding_policy import RoundingPolicy
 from app.modules.common.domain.value_objects.utc_timestamp import UtcTimestamp
+from app.modules.creative.application.briefing import CreativeCatalog, build_brief
+from app.modules.creative.application.ports.copywriter import CopyWriter
+from app.modules.creative.application.rendering import render_spec
+from app.modules.creative.application.studio import CreativeStudio, StudioConfig
 from app.modules.creative.application.template import compose_template
 from app.modules.creative.application.voiceover import InvalidSpokenLine, VoiceoverService
+from app.modules.creative.domain.angle import Angle
+from app.modules.creative.domain.brief import CreativeBrief
+from app.modules.creative.domain.cost import GenerationBudget, GenerationKind, UsdCost
+from app.modules.creative.domain.draft import CopyDraft
+from app.modules.creative.domain.offer import BasketOffer, OfferBook
+from app.modules.delivery.application.billing import DeliveryDesk, PlayRecord, Receipt
+from app.modules.delivery.application.ports.ledger import ChargeLedger
+from app.modules.delivery.domain.charge import BilledSlot
+from app.modules.delivery.infrastructure.ledger import InMemoryChargeLedger
 from app.modules.screens.domain.value_objects.ids import ScreenId
 from app.realtime.hub import ConnectionHub, ConsoleMessage, Sink
 from app.realtime.router import InboundRouter, Received
@@ -63,6 +97,21 @@ from app.realtime.warm_worker import WarmWorker
 
 DEMO_SCREEN = "demo-01"
 MAX_MEASUREMENT_SKEW = timedelta(seconds=10)
+# Worst-case play length held against a winner's budget while it is on air (R-B6/R-B7).
+MAX_PLAY_SECONDS = 15
+
+
+class UnknownBrand(Exception):
+    """A stock toggle named a brand that isn't in the demo book."""
+
+
+@dataclass(frozen=True, slots=True)
+class DemoControls:
+    """What `/advertiser` and `/clerk` may do (thin HTTP routes call these)."""
+
+    book_view: Callable[[], ConsoleBook]
+    set_multiplier: Callable[[AdvertiserBidMultiplier], MultiplierOutcome]
+    set_stock: Callable[[StockSet], bool]
 
 
 def _clp_per_as(amount: str) -> MoneyRate:
@@ -83,7 +132,13 @@ def register_demo(
     swap_holds: bool = False,
     scheduler: Scheduler = thread_timer,
     tagger: AudienceTagger | None = None,
-) -> None:
+    auction_log: AuctionLog | None = None,
+    ledger: ChargeLedger | None = None,
+    copywriter: CopyWriter | None = None,
+    copy_timeout_s: float = 2.5,
+    hourly_budget_usd: str = "2",
+    budget_clp: int = 50_000,
+) -> DemoControls:
     screen_id = ScreenId.create(ids.new_uuid7())
     # Reuse the existing project mark for these fictional fixture brands.
     logo = Path(__file__).resolve().parents[2].joinpath("project-logo.png").read_bytes()
@@ -93,6 +148,7 @@ def register_demo(
     fitness = SegmentId.create("408")  # Interest | Healthy Living | Fitness and Exercise
     coffee = SegmentId.create("977")  # Purchase Intent | CPG | Edible | Beverages | Coffee
     beer = SegmentId.create("369")  # Interest | Food & Drink | Alcoholic Beverages
+    food = SegmentId.create("1404")  # Purchase Intent | Food and Beverage Services | Fast Food
     kits = tuple(
         BrandKit(
             brand_id=BrandId.create(ids.new_uuid7()),
@@ -117,14 +173,29 @@ def register_demo(
             strict=True,
         )
     )
-    approved_offers = {
-        frozenset(
-            {kits[0].brand_id, kits[1].brand_id}
-        ): "Combo post-entreno · Voltio + Café Patio por $3.490",
-        # Every mutual-partner pair gets an approved basket (docs/demo.md), so Rayo
-        # competes for the energy slot inside a basket and prices it.
-        frozenset({kits[3].brand_id, kits[1].brand_id}): "Combo · Rayo + Café Patio por $3.290",
-    }
+    voltio, patio, rayo = kits[0].brand_id, kits[1].brand_id, kits[3].brand_id
+    # Every mutual-partner pair gets an approved basket (docs/demo.md), so Rayo competes
+    # for the energy slot inside a basket and prices it. Offers are sized to the group
+    # looking (architecture §6.1); the price is the brands', never the copywriter's.
+    offer_book = OfferBook.of(
+        [
+            *_tiers(
+                frozenset({voltio, patio}),
+                "Voltio + Café Patio",
+                (
+                    (1, "Combo post-entreno", "", 3490),
+                    (2, "Dúo post-entreno", " x2", 5990),
+                    (3, "Trío post-entreno", " x3", 8490),
+                    (4, "Pack x4 post-entreno", " x4", 10990),
+                ),
+            ),
+            *_tiers(
+                frozenset({rayo, patio}),
+                "Rayo + Café Patio",
+                ((1, "Combo", "", 3290), (2, "Dúo", " x2", 5790), (3, "Trío", " x3", 7990)),
+            ),
+        ]
+    )
     co_brand_partners: tuple[frozenset[BrandId], ...] = (
         frozenset({kits[1].brand_id}),
         frozenset({kits[0].brand_id, kits[3].brand_id}),
@@ -139,17 +210,20 @@ def register_demo(
             brand_id=kit.brand_id,
             category=category,
             age_restricted=age_restricted,
-            segment_bids=(SegmentBid(segment_id=segment, rate=_clp_per_as(rate)),),
+            segment_bids=tuple(
+                SegmentBid(segment_id=segment, rate=_clp_per_as(rate)) for segment in segments
+            ),
             partners=partners,
-            budget_remaining=Money.create(currency="CLP", amount=50_000),
+            budget_remaining=Money.create(currency="CLP", amount=budget_clp),
         )
-        for kit, (category, age_restricted, segment, rate), partners in zip(
+        for kit, (category, age_restricted, segments, rate), partners in zip(
             kits,
             (
-                ("sports_goods", False, fitness, "8"),
-                ("coffee", False, coffee, "5"),
-                ("alcohol", True, beer, "12"),
-                ("sports_goods", False, fitness, "6.5"),
+                ("sports_goods", False, (fitness,), "8"),
+                # Café Patio also sells something to eat: "qué hambre" reaches it.
+                ("coffee", False, (coffee, food), "5"),
+                ("alcohol", True, (beer,), "12"),
+                ("sports_goods", False, (fitness,), "6.5"),
             ),
             co_brand_partners,
             strict=True,
@@ -158,6 +232,11 @@ def register_demo(
     layouts = (Layout.solo(), Layout.duo())
     reserve = _clp_per_as("1.5")
     desk = AuctionDesk(InProcessBundleEngine(), holds_enabled=swap_holds)
+    book = LiveCampaignBook(bidders)
+    stock = StockBoard()
+    auctions = auction_log or InMemoryAuctionLog()
+    delivery = DeliveryDesk(ledger=ledger or InMemoryChargeLedger(), ids=ids, budgets=book)
+    campaign_of = {bidder.campaign_id: bidder for bidder in bidders}
     # The replay fixtures' cues at full weight replace any real cue with the same label,
     # so scripted scenes stay deterministic; every other real catalog cue still applies.
     loaded = load_catalog()
@@ -170,22 +249,40 @@ def register_demo(
         )
     )
     fixture_keys = {(rule.source, rule.cue) for rule in fixture_cues}
-    catalog = loaded.catalog.with_cues(
+    audience_catalog = loaded.catalog.with_cues(
         (
             *(rule for rule in loaded.catalog.cues if (rule.source, rule.cue) not in fixture_keys),
             *fixture_cues,
         )
     )
-    segment_labels = {segment.segment_id: segment.label for segment in catalog.segments}
+    segment_labels = {segment.segment_id: segment.label for segment in audience_catalog.segments}
     # Canonical keyterms the agent reports (edge/agent/speech/keyterms.py) -> segments.
     keyterm_catalog = {
         "gym": fitness,
         "energía": fitness,
         "café": coffee,
-        "hambre": coffee,
-        "comida": coffee,
+        "hambre": food,
+        "comida": food,
         "cerveza": beer,
     }
+    # Creative generation (docs/creative-generation.md): targeted stock copy on the hot
+    # path, guarded AI copy as a warm upgrade when a copywriter is configured.
+    catalog = CreativeCatalog(
+        kits=kits_by_id,
+        offers=offer_book,
+        segment_angles={
+            fitness: Angle.POST_WORKOUT,
+            coffee: Angle.COFFEE_BREAK,
+            beer: Angle.SOCIAL,
+            food: Angle.HUNGER,
+        },
+    )
+    studio = CreativeStudio(
+        clock=clock,
+        writer=copywriter,
+        budget=GenerationBudget(hourly_cap=UsdCost.create(hourly_budget_usd)),
+        config=StudioConfig(copy_timeout_s=copy_timeout_s),
+    )
     house_spec = compose_template(
         "solo",
         (
@@ -206,6 +303,7 @@ def register_demo(
     )
     lock = Lock()
     current_moment: AudienceMomentSnapshot | None = None
+    current_brief: CreativeBrief | None = None
     latest_observed_at: UtcTimestamp | None = None
     latest_console: tuple[ConsoleMessage, ...] = ()
     # Classified speech topics only; utterance text is never kept (ADR 0005).
@@ -235,13 +333,15 @@ def register_demo(
         )
 
     classifier = AudienceClassifier(
-        catalog=catalog,
+        catalog=audience_catalog,
         reliability=loaded.reliability,
         tagger=tagger,
         warm=warm,
         on_findings=vlm_findings_landed,
         on_degraded=vlm_degradation,
     )
+    # The on-air play's exposure lease: (creative_id, result, looking, leases held).
+    lease: tuple[str, AuctionResult, int, int] | None = None
 
     def receive_snapshot(snapshot: AudienceSnapshot, received: Received) -> None:
         decide(snapshot, received, reconsider=False)
@@ -267,6 +367,12 @@ def register_demo(
                 return
             if not reconsider:
                 last_snapshot = (snapshot, received)
+                # Every fresh reading feeds attention, even when the moment is unchanged.
+                delivery.attention.record(
+                    DEMO_SCREEN,
+                    measured_at.value,
+                    (tracklet.id for tracklet in snapshot.tracklets if tracklet.looking),
+                )
             classification = classifier.classify(snapshot, at=received.received_at)
             segments = merge_speech(
                 classification.segments,
@@ -304,59 +410,108 @@ def register_demo(
                 minor_likely=minor_likely,
                 held_products=held,
             )
-            outcome = desk.run(
-                AdOpportunity(
-                    moment=moment,
-                    bidders=bidders,
-                    layouts=layouts,
-                    reserve=reserve,
-                    approved_baskets=frozenset(approved_offers),
-                    # Complete the basket (ADR 0008 D2): a held brand boosts its partners.
-                    held_products=tuple(
-                        BidHeldProduct(
-                            brand_id=brand_by_slug[product.brand_ref],
-                            confidence=product.confidence,
-                        )
-                        for product in held
-                        if product.brand_ref in brand_by_slug
-                    ),
-                ),
-                Trigger.MOMENT_CHANGED,
-                now=clock.now_utc(),
-            )
-            cleared_at = clock.now_utc()
             if not reconsider:
                 latest_observed_at = observed_at
-            if outcome.result is None:
-                # Engine failed: the last good creative keeps playing, and the moment
-                # stays unrecorded so the next identical snapshot re-auctions it.
-                return
-            current_moment = moment
-            auction_id = str(ids.new_uuid7())
-            trace = LatencyTrace(
-                measured_at=moment.measured_at.value,
-                received_at=moment.received_at.value,
-                moment_changed_at=moment.moment_changed_at.value,
-                cleared_at=cleared_at,
-                swap_not_before=outcome.not_before,
-            )
-            decision = _Decision(
-                snapshot=snapshot,
-                moment=moment,
-                result=outcome.result,
-                auction_id=auction_id,
-                trace=trace,
-            )
-            needs_voice = None
-            if outcome.swap_now:
-                needs_voice = publish(decision, swap="swap")
-            else:
-                swap = "held" if outcome.hold_token is not None else outcome.action.value
-                latest_console = console_for(decision, creative_id=None, swap=swap)
-                hub.broadcast_console_threadsafe(*latest_console)
-                if outcome.hold_token is not None and outcome.not_before is not None:
-                    schedule_release(outcome.hold_token, decision, outcome.not_before)
+            needs_voice = run_auction(snapshot, moment, Trigger.MOMENT_CHANGED)
         # Outside the lock: a cache hit upgrades the creative, which takes the lock.
+        if needs_voice is not None:
+            request_voiceover(needs_voice)
+
+    def run_auction(
+        snapshot: AudienceSnapshot,
+        moment: AudienceMomentSnapshot,
+        trigger: Trigger,
+        *,
+        out_of_budget: frozenset[CampaignId] = frozenset(),
+    ) -> CreativeReady | None:
+        """Clear `moment` against the live book and stock. Caller holds the lock."""
+        nonlocal current_moment, latest_console
+        # The on-air play's own hold doesn't count against a re-auction it is part of.
+        bidders = book.snapshot(excluding_hold=current_creative.creative_id)
+        if out_of_budget:
+            bidders = tuple(
+                replace(b, budget_remaining=Money.zero(currency="CLP"))
+                if b.campaign_id in out_of_budget
+                else b
+                for b in bidders
+            )
+        outcome = desk.run(
+            AdOpportunity(
+                moment=moment,
+                bidders=bidders,
+                layouts=layouts,
+                reserve=reserve,
+                approved_baskets=offer_book.baskets(),
+                out_of_stock=stock.out_of_stock(DEMO_SCREEN),
+                max_play_seconds=Decimal(MAX_PLAY_SECONDS),
+                # Complete the basket (ADR 0008 D2): a held brand boosts its partners.
+                held_products=tuple(
+                    BidHeldProduct(
+                        brand_id=brand_by_slug[product.brand_ref],
+                        confidence=product.confidence,
+                    )
+                    for product in moment.held_products
+                    if product.brand_ref is not None and product.brand_ref in brand_by_slug
+                ),
+            ),
+            trigger,
+            now=clock.now_utc(),
+        )
+        cleared_at = clock.now_utc()
+        if outcome.result is None:
+            # Engine failed: the last good creative keeps playing, and the moment
+            # stays unrecorded so the next identical snapshot re-auctions it.
+            return None
+        if outcome.result.no_fill is not NoFillReason.ENGINE_ERROR:
+            current_moment = moment  # an engine-error fallback retries the same audience
+        auction_id = str(ids.new_uuid7())
+        auctions.append(
+            AuctionRecord(
+                auction_id=auction_id,
+                screen_id=DEMO_SCREEN,
+                moment=moment,
+                trigger=trigger,
+                result=outcome.result,
+                cleared_at=cleared_at,
+            )
+        )
+        trace = LatencyTrace(
+            measured_at=moment.measured_at.value,
+            received_at=moment.received_at.value,
+            moment_changed_at=moment.moment_changed_at.value,
+            cleared_at=cleared_at,
+            swap_not_before=outcome.not_before,
+        )
+        decision = _Decision(
+            snapshot=snapshot,
+            moment=moment,
+            result=outcome.result,
+            auction_id=auction_id,
+            trace=trace,
+            trigger=trigger,
+        )
+        if outcome.swap_now:
+            return publish(decision, swap="swap")
+        swap = "held" if outcome.hold_token is not None else outcome.action.value
+        # Arm the release before anyone hears "held" (the lock keeps it from firing early).
+        if outcome.hold_token is not None and outcome.not_before is not None:
+            schedule_release(outcome.hold_token, decision, outcome.not_before)
+        latest_console = console_for(decision, creative_id=None, swap=swap)
+        hub.broadcast_console_threadsafe(*latest_console)
+        return None
+
+    def reauction(trigger: Trigger, *, out_of_budget: frozenset[CampaignId] = frozenset()) -> None:
+        """Re-clear the moment on screen after a bid, stock or budget change (same audience)."""
+        with lock:
+            snapshot = last_snapshot
+            moment = current_moment
+            needs_voice = (
+                run_auction(snapshot[0], moment, trigger, out_of_budget=out_of_budget)
+                if snapshot is not None and moment is not None
+                else None
+            )
+            view = book_view()
+        hub.broadcast_console_threadsafe(view)
         if needs_voice is not None:
             request_voiceover(needs_voice)
 
@@ -366,29 +521,30 @@ def register_demo(
         return decision_messages(
             snapshot=decision.snapshot,
             moment=decision.moment,
-            bidders=bidders,
+            bidders=book.snapshot(),
             result=decision.result,
             kits=kits_by_id,
             segment_labels=segment_labels,
             auction_id=decision.auction_id,
             trace=decision.trace,
             creative_id=creative_id,
-            trigger=Trigger.MOMENT_CHANGED.value,
+            trigger=decision.trigger.value,
             swap=swap,
         )
 
     def publish(decision: _Decision, *, swap: str) -> CreativeReady | None:
-        """Compose and push the decision's creative. Caller holds the lock."""
-        nonlocal current_creative, latest_console
+        """Compose and push the decision's creative. Caller holds the lock.
+
+        Hot path: brief → cached AI or targeted stock copy, no network. A warm AI-copy
+        upgrade is queued (non-blocking) when this brief has none cached yet.
+        """
+        nonlocal current_creative, latest_console, current_brief
         result = decision.result
         spec = house_spec
-        if result.layout is not None:
-            winning_kits = tuple(kits_by_id[winner.bidder.brand_id] for winner in result.winners)
-            spec = compose_template(
-                result.layout.name,
-                winning_kits,
-                approved_offer=approved_offers.get(frozenset(kit.brand_id for kit in winning_kits)),
-            )
+        brief = build_brief(moment=decision.moment, result=result, catalog=catalog)
+        if brief is not None:
+            spec = render_spec(brief, studio.compose(brief).draft, kits_by_id)
+        current_brief = brief
         ready_at = clock.now_utc()
         trace = decision.trace.model_copy(update={"ready_at": ready_at})
         current_creative = CreativeReady(
@@ -400,6 +556,42 @@ def register_demo(
         )
         # The player shows it after preload; ready_at is our best server-side stand-in.
         desk.aired(result, displayed_at=ready_at)
+        if result.winners:
+            # Bill what this creative's own auction cleared, and hold its worst case.
+            delivery.aired(
+                PlayRecord(
+                    creative_id=current_creative.creative_id,
+                    auction_id=decision.auction_id,
+                    screen_id=DEMO_SCREEN,
+                    people=decision.moment.people,
+                    looking=decision.moment.looking,
+                    aired_at=ready_at,
+                    slots=tuple(
+                        BilledSlot(
+                            campaign_id=winner.campaign_id,
+                            brand_id=winner.bidder.brand_id,
+                            price_per_as=winner.price_per_as,
+                        )
+                        for winner in result.winners
+                    ),
+                )
+            )
+            worst_case = Decimal(decision.moment.looking * MAX_PLAY_SECONDS)
+            book.reserve(
+                current_creative.creative_id,
+                {
+                    winner.campaign_id: Money.create(
+                        currency=winner.price_per_as.currency,
+                        amount=winner.price_per_as.amount * worst_case,
+                        rounded=True,
+                        rounding_policy=_CEILING,
+                    )
+                    for winner in result.winners
+                },
+                at=ready_at,
+            )
+            set_lease(current_creative.creative_id, result, decision.moment.looking, 1)
+            schedule_lease(current_creative.creative_id, result, decision.moment.looking, 1)
         latest_console = console_for(
             _Decision(
                 snapshot=decision.snapshot,
@@ -407,13 +599,61 @@ def register_demo(
                 result=result,
                 auction_id=decision.auction_id,
                 trace=trace,
+                trigger=decision.trigger,
             ),
             creative_id=current_creative.creative_id,
             swap=swap,
         )
         hub.broadcast_console_threadsafe(*latest_console)
         hub.send_to_screen_threadsafe(current_creative)
+        if brief is not None and studio.needs_upgrade(brief):
+            request_copy(
+                _CopyJob(
+                    creative_id=current_creative.creative_id,
+                    brief=brief,
+                    value_per_s_clp=result.bundle_value.amount,
+                )
+            )
         return current_creative if result.winners and decision.moment.looking > 0 else None
+
+    def set_lease(creative_id: str, result: AuctionResult, looking: int, n: int) -> None:
+        nonlocal lease
+        lease = (creative_id, result, looking, n)
+
+    def lease_holds(result: AuctionResult, looking: int, leases: int) -> dict[CampaignId, Money]:
+        exposure = Decimal(looking * MAX_PLAY_SECONDS * leases)
+        return {
+            winner.campaign_id: Money.create(
+                currency=winner.price_per_as.currency,
+                amount=winner.price_per_as.amount * exposure,
+                rounded=True,
+                rounding_policy=_CEILING,
+            )
+            for winner in result.winners
+        }
+
+    def schedule_lease(creative_id: str, result: AuctionResult, looking: int, lease: int) -> None:
+        """Every MAX_PLAY_SECONDS on air, the hold must grow to cover the next stretch.
+
+        The player reports a play only when it ends, so this is how a long play stays
+        within budget in real time: a brand that can't cover the next lease comes
+        down at once (budget is an on-air-unsafe reason), and its charge is capped.
+        """
+
+        def renew() -> None:
+            with lock:
+                if current_creative.creative_id != creative_id:
+                    return  # replaced: its charge settles the hold
+                short = book.extend_hold(
+                    creative_id, lease_holds(result, looking, lease + 1), at=clock.now_utc()
+                )
+                if not short:
+                    set_lease(creative_id, result, looking, lease + 1)
+                    schedule_lease(creative_id, result, looking, lease + 1)
+            if short:
+                reauction(Trigger.BUDGET_CHANGED, out_of_budget=short)
+
+        scheduler(float(MAX_PLAY_SECONDS), renew)
 
     def schedule_release(token: int, decision: _Decision, not_before: datetime) -> None:
         delay = max(0.0, (not_before - clock.now_utc()).total_seconds())
@@ -427,6 +667,112 @@ def register_demo(
                 request_voiceover(needs_voice)
 
         scheduler(delay, release)
+
+    # ------------------------------------------------------------ book, bidding war, stock
+
+    def book_view() -> ConsoleBook:
+        on_air = desk.on_air.campaign_ids if desk.on_air is not None else frozenset()
+        out = stock.out_of_stock(DEMO_SCREEN)
+        lines = []
+        for entry in book.entries():
+            bidder, account = entry.bidder, entry.account
+            kit = kits_by_id[bidder.brand_id]
+            zero = Money.zero(currency="CLP")
+            lines.append(
+                BookLine(
+                    campaign_id=str(bidder.campaign_id),
+                    brand_id=str(bidder.brand_id),
+                    brand_name=kit.name,
+                    category=bidder.category,
+                    accent_color=kit.accent_color,
+                    multiplier=format(bidder.live_multiplier.value.normalize(), "f"),
+                    multiplier_seq=entry.multiplier_seq,
+                    in_stock=bidder.brand_id not in out,
+                    on_air=bidder.campaign_id in on_air,
+                    budget=_money(account.budget if account else zero),
+                    spent=_money(account.spent if account else zero),
+                    reserved=_money(account.reserved if account else zero),
+                    remaining=_money(account.remaining if account else zero),
+                )
+            )
+        return ConsoleBook(screen_id=DEMO_SCREEN, lines=lines)
+
+    def set_multiplier(message: AdvertiserBidMultiplier) -> MultiplierOutcome:
+        campaign_id = _campaign_id(message.campaign_id)
+        if campaign_id not in campaign_of:
+            raise UnknownCampaign()
+        outcome = book.set_live_multiplier(
+            campaign_id, BidMultiplier.create(message.multiplier), message.seq
+        )
+        if outcome is MultiplierOutcome.APPLIED:
+            reauction(Trigger.BID_CHANGED)
+        return outcome
+
+    def set_stock(message: StockSet) -> bool:
+        if message.screen_id != DEMO_SCREEN:
+            raise UnknownBrand()
+        brand_id = _brand_id(message.brand_id)
+        if brand_id not in kits_by_id:
+            raise UnknownBrand()
+        changed = stock.set(DEMO_SCREEN, brand_id, in_stock=message.in_stock)
+        if changed:
+            reauction(Trigger.STOCK_CHANGED)
+        return changed
+
+    # ------------------------------------------------------------ delivery (billing)
+
+    def receive_playback(report: PlaybackReport, received: Received) -> None:
+        if report.screen_id != DEMO_SCREEN:
+            return
+        receipt = delivery.record_playback(
+            screen_id=report.screen_id,
+            creative_id=report.creative_id,
+            seq=report.seq,
+            started_at=report.started_at.astimezone(UTC),
+            ended_at=report.ended_at.astimezone(UTC),
+            recorded_at=received.received_at,
+        )
+        if receipt is None:
+            return  # house ad, unknown creative or a retry already billed
+        # The charge was booked (and capped) against budgets inside billing.
+        hub.broadcast_console_threadsafe(receipt_message(receipt), book_view())
+        # That spend may leave the brand on air unable to cover its current lease.
+        with lock:
+            short = (
+                book.extend_hold(
+                    lease[0], lease_holds(lease[1], lease[2], lease[3]), at=clock.now_utc()
+                )
+                if lease is not None and lease[0] == current_creative.creative_id
+                else frozenset()
+            )
+        if short:
+            reauction(Trigger.BUDGET_CHANGED, out_of_budget=short)
+
+    def receipt_message(receipt: Receipt) -> ConsoleReceipt:
+        return ConsoleReceipt(
+            screen_id=receipt.play.screen_id,
+            creative_id=receipt.play.creative_id,
+            auction_id=receipt.play.auction_id,
+            people=receipt.play.people,
+            looking=receipt.play.looking,
+            played_s=format(receipt.played_s, "f"),
+            attention_seconds=format(receipt.attention.attention_seconds, "f"),
+            charges=[
+                ChargeLine(
+                    campaign_id=str(charge.campaign_id),
+                    brand_name=kits_by_id[charge.brand_id].name,
+                    attention_seconds=format(charge.attention_seconds, "f"),
+                    price_per_as=MoneyDTO(
+                        amount=format(charge.price_per_as.amount.normalize(), "f"),
+                        currency=str(charge.price_per_as.currency),
+                    ),
+                    amount=_money(charge.amount),
+                    reason=charge.reason.value,  # type: ignore[arg-type]
+                )
+                for charge in receipt.charges
+            ],
+            total=_money(receipt.total),
+        )
 
     # ------------------------------------------------------------ speech (opt-in screens)
 
@@ -448,6 +794,45 @@ def register_demo(
         if snapshot is not None:
             # Re-run the decision on the latest observation with speech merged in.
             decide(snapshot[0], Received(received_at=received.received_at), reconsider=True)
+
+    # ------------------------------------------------------------ AI copy (warm)
+
+    def request_copy(job: _CopyJob) -> None:
+        """Queue Claude copy → guard → score; never blocks (safe under the lock)."""
+        if warm is None:
+            return
+
+        async def run() -> None:
+            draft = await studio.upgrade_copy(job.brief, value_per_s_clp=job.value_per_s_clp)
+            if draft is not None:
+                upgrade_copy(job, draft)
+
+        warm.submit_threadsafe("claude", job.brief.signature(), run)
+
+    def upgrade_copy(job: _CopyJob, draft: CopyDraft) -> None:
+        """Apply only while the same creative and brief are on air (stale results are dropped)."""
+        nonlocal current_creative
+        with lock:
+            target = current_creative
+            if target.creative_id != job.creative_id or current_brief != job.brief:
+                return
+            # A fresh spec drops the old voice-over: it no longer matches the new line.
+            spec = render_spec(job.brief, draft, kits_by_id)
+            trace = target.trace.model_copy(update={"upgraded_at": clock.now_utc()})
+            current_creative = target.model_copy(update={"spec": spec, "trace": trace})
+            upgraded = CreativeUpgraded(
+                screen_id=DEMO_SCREEN,
+                creative_id=target.creative_id,
+                auction_id=target.auction_id,
+                upgrade_kind=UpgradeKind.COPY,
+                spec=spec,
+                trace=trace,
+            )
+            needs_voice = current_creative if job.brief.party > 0 else None
+        hub.send_to_screen_threadsafe(upgraded)
+        hub.broadcast_console_threadsafe(upgraded)
+        if needs_voice is not None:
+            request_voiceover(needs_voice)
 
     # ------------------------------------------------------------ voice-overs (warm)
 
@@ -472,7 +857,10 @@ def register_demo(
 
         async def job() -> None:
             nonlocal voice_degraded
+            characters = voiceovers.stats.characters
             url = await voiceovers.voiceover_url(line, voice)
+            if (spent := voiceovers.stats.characters - characters) > 0:
+                studio.record_spend(GenerationKind.VOICE, studio.cost_model.voice(spent))
             if url is not None:
                 upgrade_voice(None, line, voice, url)
             elif voiceovers.stats.disabled_by is not None and not voice_degraded:
@@ -517,8 +905,9 @@ def register_demo(
 
     def console_connected(sink: Sink) -> None:
         with lock:
+            # The latest decision first (consumers read it in order), then the book.
             if latest_console:
-                hub.broadcast_console_threadsafe(*latest_console, sink=sink)
+                hub.broadcast_console_threadsafe(*latest_console, book_view(), sink=sink)
 
     def receive_keyframe(keyframe: AudienceKeyframe, received: Received) -> None:
         # Face-blurred JPEG, in memory only (never stored or logged); tagged on the warm path.
@@ -530,8 +919,56 @@ def register_demo(
     router.on(AudienceSnapshot, receive_snapshot)
     router.on(AudienceKeyframe, receive_keyframe)
     router.on(AudienceUtterance, receive_utterance)
+    router.on(PlaybackReport, receive_playback)
     router.on_player_connected(player_connected)
     router.on_console_connected(console_connected)
+    return DemoControls(book_view=book_view, set_multiplier=set_multiplier, set_stock=set_stock)
+
+
+_CEILING = RoundingPolicy.create(money_rounding=ROUND_CEILING)
+
+
+def _money(value: Money) -> MoneyDTO:
+    return MoneyDTO(amount=format(value.amount, "f"), currency=str(value.currency))
+
+
+def _campaign_id(raw: str) -> CampaignId:
+    try:
+        return CampaignId.create(UUID(raw))
+    except ValueError as exc:
+        raise UnknownCampaign() from exc
+
+
+def _brand_id(raw: str) -> BrandId:
+    try:
+        return BrandId.create(UUID(raw))
+    except ValueError as exc:
+        raise UnknownBrand() from exc
+
+
+def _tiers(
+    brands: frozenset[BrandId], names: str, rows: tuple[tuple[int, str, str, int], ...]
+) -> list[BasketOffer]:
+    """Seed one basket's group-size offers: (min party, label, text suffix, CLP price)."""
+    return [
+        BasketOffer(
+            brand_ids=brands,
+            min_party=party,
+            label=label,
+            text=f"{names}{suffix}",
+            price=Money.create(currency="CLP", amount=price),
+        )
+        for party, label, suffix, price in rows
+    ]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class _CopyJob:
+    """A warm AI-copy request for the creative that just went on air."""
+
+    creative_id: str
+    brief: CreativeBrief
+    value_per_s_clp: Decimal
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -543,3 +980,4 @@ class _Decision:
     result: AuctionResult
     auction_id: str
     trace: LatencyTrace
+    trigger: Trigger

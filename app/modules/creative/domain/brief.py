@@ -89,8 +89,9 @@ class CreativeBrief:
         return self.party >= 2
 
     @property
-    def named_party(self) -> int:
-        return min(self.party, MAX_NAMED_PARTY)
+    def named_party(self) -> int | None:
+        """The number the copy may say ("para los 4"); None = too many to count aloud."""
+        return self.party if self.party <= MAX_NAMED_PARTY else None
 
     def signature(self) -> str:
         """Cache key: two briefs with the same signature deserve the same copy."""
@@ -98,7 +99,7 @@ class CreativeBrief:
             (
                 ",".join(sorted(str(b) for b in self.brand_ids)),
                 self.layout,
-                str(self.named_party),
+                str(self.named_party or "group"),
                 self.angle.angle.value,
                 str(self.offer.min_party) if self.offer else "-",
                 self.offer.price_text if self.offer else "-",

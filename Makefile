@@ -7,7 +7,7 @@ TF_ROOTS := terraform/modules/render-app terraform/modules/render-static-site te
 LOCAL_DATABASE_URL := postgresql://team18:team18@localhost:5432/team18
 
 .PHONY: help install edge-install edge-check test-live test-sandbox dev web-install web-dev web-check contract contract-check lint format typecheck test check migrate migrate-status db-up db-down db-reset \
-        eval eval-baseline eval-replay eval-perception eval-record eval-rehearsal \
+        eval eval-baseline eval-creative eval-creative-baseline eval-replay eval-perception eval-record eval-rehearsal \
         tf-init tf-fmt tf-fmt-check tf-validate tf-test tf-check tf-plan tf-apply tf-output tf-lock
 
 help: ## Show this help
@@ -74,6 +74,12 @@ eval: ## Scenarios + soak on a live backend -> evals/results/latest.md (fails on
 
 eval-baseline: ## Lock improved ratchet metrics into evals/baseline.json (refuses a failing run)
 	uv run python -m evals --update-baseline
+
+eval-creative: ## Creative generation eval: targeting, safety, quality, latency, cost (ARGS="--writer claude" spends)
+	uv run python -m evals creative $(ARGS)
+
+eval-creative-baseline: ## Lock improved creative ratchets into evals/creative/baseline.json
+	uv run python -m evals creative --update-baseline $(ARGS)
 
 eval-replay: ## Real-video perception recording -> live backend (REC=path.jsonl [SPEED=1])
 	uv run python -m evals replay $(REC) --speed $(or $(SPEED),1)

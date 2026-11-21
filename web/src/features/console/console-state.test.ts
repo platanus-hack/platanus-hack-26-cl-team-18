@@ -101,3 +101,61 @@ describe("console reducer", () => {
         expect(s.screens["s1"]?.degradation).toEqual(["vlm_unavailable"]);
     });
 });
+
+describe("market and receipts", () => {
+    const money = (amount: string) => ({ amount, currency: "CLP" });
+    const receipt = (creative: string, total: string) =>
+        ConsoleOutboundSchema.parse({
+            type: "console.receipt",
+            v: 1,
+            screen_id: "demo-01",
+            creative_id: creative,
+            auction_id: "a1",
+            people: 2,
+            looking: 2,
+            played_s: "4.000",
+            attention_seconds: total === "0" ? "0.000" : "8.000",
+            charges: [],
+            total: money(total),
+        });
+
+    it("keeps receipts newest first, every play window separately", () => {
+        let state = initialConsoleState;
+        for (const message of [receipt("c1", "26"), receipt("c1", "0"), receipt("c2", "9")]) {
+            state = consoleReducer(state, { type: "message", message });
+        }
+        const view = state.screens["demo-01"];
+        expect(view?.receipts.map((r) => [r.creative_id, r.total.amount])).toEqual([
+            ["c2", "9"],
+            ["c1", "0"],
+            ["c1", "26"],
+        ]);
+    });
+
+    it("stores the live book per screen", () => {
+        const book = ConsoleOutboundSchema.parse({
+            type: "console.book",
+            v: 1,
+            screen_id: "demo-01",
+            lines: [
+                {
+                    campaign_id: "c",
+                    brand_id: "b",
+                    brand_name: "Voltio",
+                    category: "sports_goods",
+                    accent_color: "#c6f26b",
+                    multiplier: "1.5",
+                    multiplier_seq: 2,
+                    in_stock: true,
+                    on_air: true,
+                    budget: money("50000"),
+                    spent: money("26"),
+                    reserved: money("0"),
+                    remaining: money("49974"),
+                },
+            ],
+        });
+        const state = consoleReducer(initialConsoleState, { type: "message", message: book });
+        expect(state.screens["demo-01"]?.book?.lines[0]?.multiplier).toBe("1.5");
+    });
+});

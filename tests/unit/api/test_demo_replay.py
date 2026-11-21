@@ -75,7 +75,7 @@ def test_console_explains_the_staged_basket_and_replays_latest_decision(tmp_path
         auction = ConsoleAuction.model_validate(console.receive_json())
         latency = ConsoleLatency.model_validate(console.receive_json())
 
-        assert "$3.490" in creative.spec.slots[0].copy_text
+        assert "$5.990" in creative.spec.slots[0].copy_text  # duo tier: 2 looking
         assert auction.auction_id == creative.auction_id
         assert latency.creative_id == creative.creative_id
         assert moment.moment_id == auction.moment_id

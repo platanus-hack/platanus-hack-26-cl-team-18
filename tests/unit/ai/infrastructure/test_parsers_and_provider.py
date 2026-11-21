@@ -92,6 +92,26 @@ def test_request_defaults_to_haiku_at_low_effort_with_a_cached_system_prompt() -
     assert provider.profile.describe() == "claude-haiku-5-5@low"
 
 
+def test_image_is_sent_as_an_anthropic_image_block() -> None:
+    client = FakeClient(reply(text("ok")))
+    provider = provider_with(client)
+    message = ProviderMessage.create(ProviderRole.USER, "Describe", image_jpeg=b"jpeg")
+    run_async(provider.complete([message]))
+    assert client.messages.calls[0]["messages"] == [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "source": {"type": "base64", "media_type": "image/jpeg", "data": "anBlZw=="},
+                },
+                {"type": "text", "text": "Describe"},
+            ],
+        }
+    ]
+    assert "jpeg" not in repr(message)
+
+
 def test_structured_output_constrains_decoding_to_the_schema() -> None:
     client = FakeClient(reply(text('{"segments":["IAB8"]}')))
     provider = provider_with(client)

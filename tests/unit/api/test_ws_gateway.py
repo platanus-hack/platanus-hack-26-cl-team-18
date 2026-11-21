@@ -6,9 +6,11 @@ import json
 import threading
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
+from io import BytesIO
 
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image
 from starlette.websockets import WebSocketDisconnect
 
 from app.bootstrap.container import Container, build_container
@@ -22,8 +24,14 @@ from app.contract.messages import (
     CreativeSpec,
     LatencyTrace,
     PlaybackReport,
+    RecognitionSnapshot,
 )
 from app.main import create_app
+from app.modules.audience.infrastructure.recognition_vlm import (
+    RecognitionVlm,
+    VisualDetail,
+    VisualDetails,
+)
 from app.modules.common.infrastructure.clock.fixed_clock import FixedClock
 from app.realtime.router import Received
 
@@ -92,6 +100,121 @@ def test_agent_snapshot_is_routed_with_the_server_received_at(
     assert isinstance(msg, AudienceSnapshot) and msg.seq == 1
     assert msg.measured_at == T0  # device clock
     assert received.received_at == T0 + timedelta(milliseconds=3)  # server clock
+
+
+def test_recognition_snapshot_reaches_router_and_ephemeral_read_model(
+    client: TestClient, container: Container
+) -> None:
+    rec = Recorder()
+    container.router.on(RecognitionSnapshot, rec)
+    message = {
+        "type": "recognition.snapshot",
+        "screen_id": "mall-01",
+        "session_id": "session-1",
+        "session_started_at": T0.isoformat(),
+        "seq": 1,
+        "measured_at": T0.isoformat(),
+        "video_time_s": 0.5,
+        "people": [
+            {
+                "track_id": "1",
+                "first_seen_s": 0.5,
+                "last_seen_s": 0.5,
+                "box": [1, 2, 3, 4],
+                "confidence": 0.8,
+                "direction": "unknown",
+                "currently_visible": True,
+                "attributes": [],
+            }
+        ],
+        "history": [],
+        "objects": [],
+        "audio_events": [],
+        "latency": {
+            "decode_ms": 1,
+            "detection_tracking_ms": 10,
+            "publication_delay_ms": 11,
+            "first_observation_ms": 11,
+        },
+    }
+    with client.websocket_connect("/ws/agent") as ws:
+        ws.send_json(message)
+        rec.wait_for(1)
+        response = client.get("/recognition/mall-01")
+    assert response.status_code == 200
+    assert response.json()["snapshot"]["people"][0]["track_id"] == "1"
+    assert response.json()["received_at"] == "2026-11-21T15:00:00.003000Z"
+
+
+def test_redacted_keyframe_enriches_snapshot_via_websocket(
+    client: TestClient, container: Container
+) -> None:
+    class FakeAI:
+        async def structured_output(self, *args: object, **kwargs: object) -> VisualDetails:
+            return VisualDetails(
+                details=[
+                    VisualDetail(
+                        kind="upper_clothing",
+                        value="black hoodie",
+                        evidence="visible fabric",
+                        associated_item="hoodie",
+                        uncertainty="medium",
+                    )
+                ]
+            )
+
+    rec = Recorder()
+    container.router.on(RecognitionSnapshot, rec)
+    vlm = RecognitionVlm(FakeAI(), "fake", container.warm, container.recognition, container.router)  # type: ignore[arg-type]
+    container.router.on(AudienceKeyframe, vlm.accept)
+    frame = Image.new("RGB", (120, 200), "white")
+    frame.paste("black", (0, 0, 120, 100))
+    buffer = BytesIO()
+    frame.save(buffer, format="JPEG")
+    jpeg = buffer.getvalue()
+    snapshot = {
+        "type": "recognition.snapshot",
+        "screen_id": "mall-01",
+        "session_id": "session-1",
+        "session_started_at": T0.isoformat(),
+        "seq": 1,
+        "measured_at": T0.isoformat(),
+        "video_time_s": 0.5,
+        "people": [
+            {
+                "track_id": "1",
+                "first_seen_s": 0.5,
+                "last_seen_s": 0.5,
+                "box": [1, 2, 3, 4],
+                "confidence": 0.8,
+                "direction": "unknown",
+                "currently_visible": True,
+            }
+        ],
+        "latency": {"decode_ms": 1, "detection_tracking_ms": 10, "publication_delay_ms": 11},
+    }
+    header = {
+        "type": "audience.keyframe",
+        "screen_id": "mall-01",
+        "session_id": "session-1",
+        "track_id": "1",
+        "video_time_s": 0.5,
+        "seq": 1,
+        "measured_at": T0.isoformat(),
+        "byte_length": len(jpeg),
+    }
+    with client.websocket_connect("/ws/agent") as ws:
+        ws.send_json(snapshot)
+        rec.wait_for(1)
+        ws.send_json(header)
+        ws.send_bytes(jpeg)
+        items = rec.wait_for(2)
+        ws.send_json({**snapshot, "seq": 2})
+        items = rec.wait_for(3)
+    enriched = items[-1][0]
+    assert isinstance(enriched, RecognitionSnapshot)
+    assert enriched.revision == 1
+    assert enriched.people[0].attributes[0].value == "black hoodie"
 
 
 def test_agent_duplicate_and_stale_seq_are_dropped(

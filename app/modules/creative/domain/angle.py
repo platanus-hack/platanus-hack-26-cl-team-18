@@ -121,7 +121,9 @@ def choose_angle(
     for segment in spoken:
         angle = segment_angles[segment.segment_id]
         if usable(angle):
-            return AngleChoice(angle=angle, reason=AngleReason.SPEECH, segment_id=segment.segment_id)
+            return AngleChoice(
+                angle=angle, reason=AngleReason.SPEECH, segment_id=segment.segment_id
+            )
 
     if held_in_basket:
         return AngleChoice(angle=Angle.COMPLETE_BASKET, reason=AngleReason.HELD_PRODUCT)
@@ -140,7 +142,7 @@ def choose_angle(
             )
 
     for category in categories:
-        angle = CATEGORY_ANGLE.get(category)
-        if angle is not None and usable(angle):
-            return AngleChoice(angle=angle, reason=AngleReason.CATEGORY)
+        fallback = CATEGORY_ANGLE.get(category)
+        if fallback is not None and usable(fallback):
+            return AngleChoice(angle=fallback, reason=AngleReason.CATEGORY)
     return AngleChoice(angle=Angle.GENERIC, reason=AngleReason.DEFAULT)

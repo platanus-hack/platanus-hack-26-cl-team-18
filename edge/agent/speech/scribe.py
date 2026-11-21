@@ -25,6 +25,7 @@ import base64
 import json
 import logging
 import random
+import time
 from collections import deque
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
@@ -42,6 +43,8 @@ DEFAULT_URL = "wss://api.elevenlabs.io/v1/speech-to-text/realtime"
 MIN_CHUNK_BYTES = 3 * FRAME_BYTES  # 96 ms
 MAX_CHUNK_BYTES = SAMPLE_RATE * 2  # 1 s
 KEEPALIVE_S = 5.0
+# Close the session after this long without speech: realtime STT bills session time.
+IDLE_CLOSE_S = 60.0
 KEEPALIVE_CHUNK = bytes(MIN_CHUNK_BYTES)
 
 
@@ -191,6 +194,7 @@ class ScribeStats:
     keepalives: int = 0
     transient_errors: int = 0
     dropped_audio_bytes: int = 0
+    idle_closes: int = 0
 
 
 class ScribeRealtime:
@@ -203,6 +207,7 @@ class ScribeRealtime:
         *,
         connect: Connect = _default_connect,
         keepalive_s: float = KEEPALIVE_S,
+        idle_close_s: float | None = IDLE_CLOSE_S,
         backoff: Sequence[float] = (0.5, 1, 2, 4, 8),
         max_buffer_bytes: int = 10 * SAMPLE_RATE * 2,  # 10 s
     ) -> None:
@@ -210,6 +215,9 @@ class ScribeRealtime:
         self._on_event = on_event
         self._connect = connect
         self._keepalive_s = keepalive_s
+        self._idle_close_s = idle_close_s
+        self._last_audio = time.monotonic()
+        self._idle_closed = False
         self._backoff = tuple(backoff)
         self._max_buffer = max_buffer_bytes
         self._outbox: deque[str] = deque()
@@ -233,6 +241,7 @@ class ScribeRealtime:
     def send_audio(self, pcm: bytes) -> None:
         if self._fatal is not None:
             return
+        self._last_audio = time.monotonic()
         self._pending += pcm
         while len(self._pending) >= MIN_CHUNK_BYTES:
             take = min(len(self._pending), MAX_CHUNK_BYTES)
@@ -243,6 +252,7 @@ class ScribeRealtime:
         """End of a speech segment: flush the tail and ask for a committed transcript."""
         if self._fatal is not None:
             return
+        self._last_audio = time.monotonic()
         tail = bytes(self._pending) or KEEPALIVE_CHUNK
         self._pending.clear()
         self._enqueue(audio_chunk(tail, commit=True))
@@ -257,9 +267,15 @@ class ScribeRealtime:
         self._wakeup.set()
 
     async def run(self) -> None:
-        """Run until a fatal error (raised) or cancellation."""
+        """Run until a fatal error (raised) or cancellation.
+
+        Lazy: no session is open (and nothing is billed) until there is audio
+        to send; after `idle_close_s` without speech the session closes again.
+        """
         attempt = 0
         while True:
+            if self._idle_close_s is not None and not self._outbox:
+                await self._wait_for_audio()
             try:
                 socket = await self._connect(self._config.connect_url(), self._config.headers())
             except (OSError, websockets.WebSocketException) as exc:
@@ -280,7 +296,16 @@ class ScribeRealtime:
                     pass
             if self._fatal is not None:
                 raise ScribeFatalError(f"{self._fatal.kind}: {self._fatal.detail}")
+            if self._idle_closed:
+                self._idle_closed = False
+                attempt = 0
+                continue  # a deliberate close: wait for speech, no backoff
             await self._sleep(attempt, "reconnecting")
+
+    async def _wait_for_audio(self) -> None:
+        while not self._outbox:
+            self._wakeup.clear()
+            await self._wakeup.wait()
 
     async def _session(self, socket: _Socket) -> bool:
         """Returns True if the session was healthy (reset the backoff)."""
@@ -299,8 +324,13 @@ class ScribeRealtime:
                     waiter.cancel()
                     if reader in done:
                         return (reader.result() is not False) and healthy
-                    if not done:  # idle: keep the session alive with silence
-                        await socket.send(audio_chunk(KEEPALIVE_CHUNK))
+                    if not done:
+                        idle_for = time.monotonic() - self._last_audio
+                        if self._idle_close_s is not None and idle_for >= self._idle_close_s:
+                            self._idle_closed = True
+                            self.stats.idle_closes += 1
+                            return True  # nobody is talking: stop paying for the session
+                        await socket.send(audio_chunk(KEEPALIVE_CHUNK))  # keep it alive
                         self.stats.keepalives += 1
                     continue
                 if reader.done():

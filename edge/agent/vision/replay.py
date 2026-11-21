@@ -5,10 +5,14 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 import time
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
+from .frame_selector import FrameSelector
+from .publisher import SnapshotPublisher
 from .state import AudienceState, Detection
 
 
@@ -29,7 +33,7 @@ class FileVideoSource:
             raise ValueError("Unable to open video")
         self.fps = self.capture.get(cv2.CAP_PROP_FPS)
         frames = self.capture.get(cv2.CAP_PROP_FRAME_COUNT)
-        if self.fps <= 0 or frames <= 0:
+        if not math.isfinite(self.fps) or not math.isfinite(frames) or self.fps <= 0 or frames <= 0:
             self.capture.release()
             raise ValueError("Video has no usable frame rate or duration")
         self.duration = frames / self.fps
@@ -79,12 +83,107 @@ class LocalDetector:
         return detections
 
 
-def run(source: VideoSource, detector: VisualDetector, fps: float = 3.0) -> None:
+def recognition_message(snapshot: dict, screen_id: str, seq: int, started_at: datetime) -> dict:
+    def person(item: dict) -> dict:
+        attributes = [
+            {
+                "name": name,
+                "value": str(value["value"]),
+                "source": value["source"],
+                "observed_at_s": value["observed_at"],
+                "evidence": value["evidence"],
+                "uncertainty": value.get("uncertainty", "unknown"),
+                "model": value.get("model", ""),
+            }
+            for name, value in item["attributes"].items()
+        ]
+        return {
+            "track_id": str(item["track_id"]),
+            "first_seen_s": item["first_seen"],
+            "last_seen_s": item["last_seen"],
+            "box": item["box"],
+            "confidence": item["confidence"],
+            "direction": item["direction"],
+            "currently_visible": item["currently_visible"],
+            "attributes": attributes[:64],
+        }
+
+    timestamp = snapshot["timestamp"]
+    objects = [
+        {"label": label, "count": count, "last_seen_s": timestamp, "currently_visible": True}
+        for label, count in snapshot["scene"]["currently_visible"].items()
+    ]
+    objects += [
+        {
+            "label": label,
+            "count": item["count"],
+            "last_seen_s": item["last_seen"],
+            "currently_visible": False,
+        }
+        for label, item in snapshot["scene"]["recently_observed"].items()
+    ]
+    latency = snapshot["latency_ms"]
+    return {
+        "type": "recognition.snapshot",
+        "v": 1,
+        "screen_id": screen_id,
+        "session_id": snapshot["session_id"],
+        "session_started_at": started_at.isoformat(),
+        "seq": seq,
+        "measured_at": (started_at + timedelta(seconds=timestamp)).isoformat(),
+        "video_time_s": timestamp,
+        "finished": snapshot["finished"],
+        "people": [person(p) for p in snapshot["people"][-128:]],
+        "history": [person(p) for p in snapshot["history"][-256:]],
+        "detections": [
+            {
+                "label": d["label"],
+                "confidence": d["confidence"],
+                "box": d["box"],
+                "track_id": str(d["track_id"]) if d["track_id"] is not None else None,
+                "observed_at_s": timestamp,
+            }
+            for d in snapshot["detections"][:256]
+        ],
+        "objects": objects[:128],
+        "audio_events": [],
+        "latency": {
+            "decode_ms": latency["decode"],
+            "detection_tracking_ms": latency["detection_and_tracking"],
+            "publication_delay_ms": latency["publication_delay"],
+            "first_observation_ms": latency["first_observation"],
+        },
+    }
+
+
+def run(
+    source: VideoSource,
+    detector: VisualDetector,
+    fps: float = 3.0,
+    *,
+    publisher: SnapshotPublisher | None = None,
+    screen_id: str = "demo-01",
+    vlm: bool = False,
+    print_snapshots: bool = False,
+) -> None:
     if not math.isfinite(fps) or fps <= 0:
         raise ValueError("fps must be positive")
     state = AudienceState(str(uuid.uuid4()))
+    started_at = datetime.now(UTC)
     started = time.monotonic()
+    selector = (
+        FrameSelector(publisher.url, screen_id, state.session_id, started_at)
+        if vlm and publisher
+        else None
+    )
     first_observation = None
+    seq = 0
+    last_latency = {
+        "decode": 0.0,
+        "detection_and_tracking": 0.0,
+        "publication_delay": 0.0,
+        "first_observation": None,
+    }
     try:
         while True:
             timestamp = time.monotonic() - started
@@ -95,6 +194,11 @@ def run(source: VideoSource, detector: VisualDetector, fps: float = 3.0) -> None
             decoded = time.monotonic()
             detections = detector.detect(frame)
             inferred = time.monotonic()
+            if selector is not None:
+                try:
+                    selector.offer(frame, detections, measured_at)
+                except Exception:
+                    pass  # The optional warm path must not stop detection.
             state.observe(measured_at, detections)
             if detections and first_observation is None:
                 first_observation = round((inferred - started) * 1000, 1)
@@ -110,11 +214,28 @@ def run(source: VideoSource, detector: VisualDetector, fps: float = 3.0) -> None
                 "publication_delay": round((inferred - started - measured_at) * 1000, 1),
                 "first_observation": first_observation,
             }
-            print(json.dumps(result), flush=True)
+            last_latency = result["latency_ms"]
+            seq += 1
+            message = recognition_message(result, screen_id, seq, started_at)
+            if print_snapshots:
+                print(json.dumps(message), flush=True)
+            if publisher is not None:
+                publisher.publish(message)
             # Never catch up by processing old frames: next read seeks to playback time.
             time.sleep(max(0.0, 1 / fps - (time.monotonic() - decode_start)))
+        state.finish(source.duration)
+        result = state.snapshot()
+        result["latency_ms"] = last_latency
+        seq += 1
+        message = recognition_message(result, screen_id, seq, started_at)
+        if print_snapshots:
+            print(json.dumps(message), flush=True)
+        if publisher is not None:
+            publisher.publish(message)
     finally:
         source.close()
+        if selector is not None:
+            selector.close()
 
 
 def main() -> None:
@@ -122,10 +243,35 @@ def main() -> None:
     parser.add_argument("video", help="Local MP4 or MOV file")
     parser.add_argument("--fps", type=float, default=3.0)
     parser.add_argument("--model", default="yolo26n.pt")
+    parser.add_argument(
+        "--backend", help="Backend WebSocket URL, e.g. ws://localhost:8000/ws/agent"
+    )
+    parser.add_argument("--screen-id", default="demo-01")
+    parser.add_argument("--vlm", action="store_true", help="Enable privacy-filtered VLM crops")
+    parser.add_argument(
+        "--print-snapshots", action="store_true", help="Print debug snapshots to stdout"
+    )
     args = parser.parse_args()
+    if args.vlm and not args.backend:
+        parser.error("--vlm requires --backend")
+    if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,64}", args.screen_id):
+        parser.error("--screen-id must contain 1–64 letters, digits, or _ . : -")
     detector = LocalDetector(args.model)
     detector.warmup()
-    run(FileVideoSource(args.video), detector, args.fps)
+    publisher = SnapshotPublisher(args.backend) if args.backend else None
+    try:
+        run(
+            FileVideoSource(args.video),
+            detector,
+            args.fps,
+            publisher=publisher,
+            screen_id=args.screen_id,
+            vlm=args.vlm,
+            print_snapshots=args.print_snapshots,
+        )
+    finally:
+        if publisher is not None:
+            publisher.close()
 
 
 if __name__ == "__main__":
