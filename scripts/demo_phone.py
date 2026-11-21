@@ -41,9 +41,10 @@ def create_relay(backend: str) -> Starlette:
             headers["content-type"] = "application/json"
         try:
             client: httpx.AsyncClient = request.app.state.backend
-            result = await client.request(
-                request.method, target, content=bytes(content), headers=headers
-            )
+            # FastAPI registers GET and HEAD separately. Serve the headers for
+            # the offer so a QR app can check the link before opening it.
+            method = "GET" if request.method == "HEAD" else request.method
+            result = await client.request(method, target, content=bytes(content), headers=headers)
         except httpx.RequestError:
             return Response("La pantalla no está disponible. Intenta otra vez.", status_code=503)
         return Response(

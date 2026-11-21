@@ -140,6 +140,22 @@ brands. If venue Wi-Fi isolates clients, run the phone and laptop on a
 hotspot. For mobile data, point a tunnel at the redemption relay and use that
 HTTPS URL for `PUBLIC_BASE_URL`.
 
+### Show a real stock video beside its live ad
+
+With the backend and web player running, install vision from `edge/` with
+`uv sync --extra vision` and fetch the stock demo clips with
+`make eval-video-fetch` from the repository root. Start the local viewer:
+
+```bash
+uv run python -m scripts.demo_replay --backend http://127.0.0.1:8018
+```
+
+Open [the side-by-side viewer](http://127.0.0.1:5189/). The launcher starts
+the actual CPU vision agent on the café clip and links to that screen's live
+auction console. Use `--clip` for another stock scene and `--player` if the
+Vite origin differs from `http://127.0.0.1:5173`. For frame-aligned
+inspection, use the [real-video eval report](evals.md#41-stock-video-ad-fit-does-the-ad-make-sense).
+
 ## 4. Demo insurance (build these, they save demos)
 
 The [audience replay runbook](simulator.md) runs the local WebSocket-to-player
