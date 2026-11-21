@@ -62,7 +62,7 @@ export function ConsolePage() {
     const { tone, label } = CONNECTION[connection.status];
 
     return (
-        <div className="min-h-screen">
+        <div className="paper-theme">
             <WorkspaceHeader />
             <main className="workspace-content flex flex-col gap-6">
                 <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-6">

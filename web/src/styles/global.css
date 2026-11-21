@@ -32,7 +32,7 @@
  *
  * Three layers: raw palette (--palette-*) -> semantic roles (--color-*) ->
  * Tailwind utilities generated from @theme (bg-surface, text-muted, ...).
- * The console runs on a projector/second monitor: dark-first.
+ * White surfaces and ink typography keep the workspace consistent across tools.
  */
 
 :root {
@@ -42,7 +42,18 @@
     --palette-ink-600: #9a9aa6;
     --palette-ink-300: #c9c9d2;
     --palette-ink-50: #ffffff;
-    --palette-teal: #8cc7c7;
+    --palette-paper: #ffffff;
+    --palette-paper-soft: #f6f7f8;
+    --palette-line: #dcdce2;
+    --palette-text-soft: #5c5c69;
+    --palette-text-muted: #6e6e7a;
+    --palette-teal: #186666;
+    --palette-teal-soft: #f0f9f5;
+    --palette-olive: #3f7a1c;
+    --palette-review: #8a5a00;
+    --palette-review-soft: #fbf3e4;
+    --palette-negative: #a3302a;
+    --palette-negative-soft: #fceeed;
     --palette-mint: #72ddaa;
     --palette-amber: oklch(0.82 0.16 78);
     --palette-red: oklch(0.66 0.21 25);
@@ -50,25 +61,25 @@
 }
 
 @theme {
-    --color-canvas: var(--palette-ink-950);
-    --color-surface: var(--palette-ink-900);
-    --color-surface-raised: var(--palette-ink-800);
-    --color-border: color-mix(in oklch, var(--palette-ink-300) 18%, transparent);
-    --color-fg: var(--palette-ink-50);
-    --color-muted: var(--palette-ink-300);
-    --color-subtle: var(--palette-ink-600);
+    --color-canvas: var(--palette-paper);
+    --color-surface: var(--palette-paper);
+    --color-surface-raised: var(--palette-paper-soft);
+    --color-border: var(--palette-line);
+    --color-fg: var(--palette-ink-950);
+    --color-muted: var(--palette-text-soft);
+    --color-subtle: var(--palette-text-muted);
 
     --color-accent: var(--palette-teal);
-    --color-rule: var(--palette-ink-300);
-    --color-accent-soft: rgb(140 199 199 / 0.1);
-    --color-success: var(--palette-mint);
-    --color-warning: var(--palette-amber);
-    --color-danger: var(--palette-red);
-    --color-info: var(--palette-sky);
-    --color-success-soft: color-mix(in oklch, var(--palette-mint) 16%, transparent);
-    --color-warning-soft: color-mix(in oklch, var(--palette-amber) 16%, transparent);
-    --color-danger-soft: color-mix(in oklch, var(--palette-red) 16%, transparent);
-    --color-info-soft: color-mix(in oklch, var(--palette-sky) 16%, transparent);
+    --color-rule: var(--palette-ink-950);
+    --color-accent-soft: var(--palette-teal-soft);
+    --color-success: var(--palette-olive);
+    --color-warning: var(--palette-review);
+    --color-danger: var(--palette-negative);
+    --color-info: var(--palette-teal);
+    --color-success-soft: var(--palette-teal-soft);
+    --color-warning-soft: var(--palette-review-soft);
+    --color-danger-soft: var(--palette-negative-soft);
+    --color-info-soft: var(--palette-teal-soft);
 
     --font-sans: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
     --font-mono: "JetBrains Mono", ui-monospace, monospace;
@@ -89,7 +100,7 @@
 
     /* Exactly two elevations */
     --shadow-resting: 0 1px 0 rgb(19 19 30 / 0.04);
-    --shadow-overlay: 0 12px 32px oklch(0 0 0 / 0.5);
+    --shadow-overlay: 0 1px 0 rgb(19 19 30 / 0.04), 0 8px 20px -10px rgb(19 19 30 / 0.18);
 
     /* Motion tiers; --duration-crossfade is the player's swap (docs/stack.md §6) */
     --duration-fast: 120ms;
@@ -117,6 +128,7 @@ body {
     color: var(--color-fg);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
+    color-scheme: light;
 }
 
 /* One focus ring, everywhere. */
@@ -146,26 +158,8 @@ body {
     }
 }
 
-/* Paper surfaces for operator tools; the live console stays ink-first. */
+/* All workspace routes share the same white brand surface. */
 .paper-theme {
-    --color-canvas: #f6f7f8;
-    --color-surface: #ffffff;
-    --color-surface-raised: #ececf0;
-    --color-border: #dcdce2;
-    --color-rule: #13131e;
-    --color-fg: #13131e;
-    --color-muted: #5c5c69;
-    --color-subtle: #6e6e7a;
-    --color-accent: #186666;
-    --color-accent-soft: #f0f9f5;
-    --color-success: #3f7a1c;
-    --color-success-soft: #f0f9f5;
-    --color-warning: #8a5a00;
-    --color-warning-soft: #fbf3e4;
-    --color-danger: #a3302a;
-    --color-danger-soft: #fceeed;
-    --color-info: #186666;
-    --color-info-soft: #dff4eb;
     min-height: 100dvh;
     background: var(--color-canvas);
     color: var(--color-fg);
@@ -236,7 +230,7 @@ body {
 }
 .tool-card {
     border: 1px solid var(--color-border);
-    border-top: 2px solid var(--color-rule);
+    border-top: 1px solid var(--color-rule);
     border-radius: var(--radius-container);
     background: var(--color-surface);
     padding: 1.5rem;
@@ -288,7 +282,7 @@ table td {
 @media (max-width: 40rem) {
     .workspace-links {
         width: 100%;
-        justify-content: space-between;
+        gap: 0.25rem;
     }
     .workspace-links a {
         padding-inline: 0.5rem;

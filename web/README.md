@@ -111,7 +111,9 @@ semantic roles → Tailwind utilities (`bg-surface`, `text-muted`, `text-kpi`,
 - Every data view handles its empty state. During a reconnect, keep showing
   the last data with a "Reconnecting" badge. Never blank it.
 - Each console panel has its own error boundary (`Panel`).
-- The console is dark-first because it runs on a projector or second monitor.
+- The workspace is white-first: white surfaces, ink text, fine dividers and teal
+  accents. Status colors use accessible dark text on pale backgrounds. Player
+  creatives own their presentation independently of the workspace theme.
 
 ## Tooling
 
