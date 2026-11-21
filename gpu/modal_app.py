@@ -33,9 +33,19 @@ image = (
             "GPU_DEVICE": "0",
             "GPU_TENSORRT": "0",
             "YOLO_CONFIG_DIR": "/models/.ultralytics",
+            "YOLO_AUTOINSTALL": "false",
         }
     )
-    .add_local_python_source("service")
+    # Bake the weights + YOLOE vocabulary into the image at build time (same as the
+    # Dockerfile), so the first container start downloads nothing. MobileCLIP is
+    # only needed to bake and is deleted afterwards.
+    .add_local_python_source("service", copy=True)
+    .run_commands(
+        "mkdir -p /opt/weights && cd /opt/weights && PYTHONPATH=/root YOLO_CONFIG_DIR=/tmp/yolo python -c "
+        '"from ultralytics import YOLO; from service.vocabulary import bake_object_model; '
+        "YOLO('yolo26s-pose.pt'); print(bake_object_model('yoloe-26s-seg.pt'))\" "
+        "&& rm -f mobileclip*.ts mobileclip*.pt && ls -la /opt/weights"
+    )
 )
 
 app = modal.App("team18-gpu")
@@ -56,8 +66,13 @@ models = modal.Volume.from_name("team18-gpu-models", create_if_missing=True)
 @modal.asgi_app()
 def serve():
     import os
+    import shutil
+    from pathlib import Path
 
-    os.chdir("/models")  # ultralytics downloads missing weights here; the volume keeps them
+    for baked in Path("/opt/weights").glob("*.pt"):  # seed the volume; never overwrite
+        if not (Path("/models") / baked.name).exists():
+            shutil.copy2(baked, "/models")
+    os.chdir("/models")  # an exported .engine lands here; the volume keeps it
     from service.app import create_app
 
     return create_app()

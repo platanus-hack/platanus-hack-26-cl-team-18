@@ -15,7 +15,11 @@ from app.modules.creative.application.loops import (
     loop_prompt,
 )
 from app.modules.creative.application.ports.video import VideoFailure, VideoGenerationError
-from app.modules.creative.infrastructure.fal_video import FalVideoGenerator
+from app.modules.creative.infrastructure.fal_video import (
+    DEFAULT_VIDEO_MODEL,
+    FalVideoGenerator,
+    request_body,
+)
 
 MP4 = b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 64
 
@@ -137,6 +141,48 @@ def test_fal_errors_are_typed(response: httpx.Response, failure: VideoFailure) -
     with pytest.raises(VideoGenerationError) as caught:
         anyio.run(lambda: generator.generate("steam", duration_s=6))
     assert caught.value.failure is failure
+
+
+def test_ltx2_gets_frames_fps_and_a_guarded_body() -> None:
+    body = request_body(DEFAULT_VIDEO_MODEL, "steam", duration_s=6)
+    assert "duration" not in body  # LTX-2 has no duration input
+    frames = body["num_frames"]
+    assert isinstance(frames, int) and frames % 8 == 1 and 6 <= frames / body["fps"] <= 6.5
+    assert body["generate_audio"] is False and body["enable_prompt_expansion"] is False
+    assert body["video_size"] == "landscape_16_9"
+    assert "logos" in str(body["negative_prompt"]) and "text" in str(body["negative_prompt"])
+
+
+def test_other_fal_models_keep_the_generic_body() -> None:
+    assert request_body("fal-ai/some/text-to-video", "steam", duration_s=6) == {
+        "prompt": "steam",
+        "duration": "6",
+    }
+
+
+def test_the_submit_uses_the_model_specific_body() -> None:
+    bodies: list[dict[str, object]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            bodies.append(json.loads(request.content))
+            return httpx.Response(
+                200,
+                json={
+                    "status_url": "https://queue.fal.run/s",
+                    "response_url": "https://queue.fal.run/r",
+                },
+            )
+        if request.url.path == "/s":
+            return httpx.Response(200, json={"status": "COMPLETED"})
+        if request.url.path == "/r":
+            return httpx.Response(200, json={"video": {"url": "https://cdn.fal.media/clip.mp4"}})
+        return httpx.Response(200, content=MP4)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    ltx = FalVideoGenerator("key", model=DEFAULT_VIDEO_MODEL, client=client, poll_s=0)
+    assert anyio.run(lambda: ltx.generate("steam", duration_s=6)) == MP4
+    assert bodies == [request_body(DEFAULT_VIDEO_MODEL, "steam", duration_s=6)]
 
 
 def test_fal_needs_a_key() -> None:

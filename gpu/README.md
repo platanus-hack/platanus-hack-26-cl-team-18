@@ -37,6 +37,11 @@ docker run --gpus all -p 8080:8080 -e GPU_TOKEN="$GPU_TOKEN" -e GPU_TENSORRT=1 \
   -v team18-gpu-models:/models team18-gpu
 ```
 
+The image bakes YOLO26-pose, YOLOE-26 and its vocabulary at **build** time
+(`/opt/weights`) and seeds the `/models` volume on start without overwriting,
+so a container starts with no network at all (verified with `--network none`).
+Rebuild the image after editing `service/vocabulary.py`.
+
 Put TLS in front of it (the provider's HTTPS proxy, Caddy, or a tunnel) so the
 agent connects over `wss://`. Raw frames travel only over TLS (ADR 0007).
 

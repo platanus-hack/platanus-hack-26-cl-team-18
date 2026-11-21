@@ -93,7 +93,9 @@ class AppSettings(BaseSettings):
     speech_topic_ttl_s: int = Field(default=60, gt=0, le=600)
     # Cold bundle-loop generation is an explicit CLI job, never an automatic live call.
     fal_key: SecretStr | None = None
-    fal_video_model: str | None = None
+    # Open-weights LTX-2 19B distilled on fal (~US$0.10 per 6 s 16:9 clip); any fal
+    # text-to-video id works, see fal_video.request_body.
+    fal_video_model: str | None = "fal-ai/ltx-2-19b/distilled/text-to-video"
 
     @property
     def voiceovers_configured(self) -> bool:

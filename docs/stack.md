@@ -84,7 +84,7 @@ failover) and the hosted generation APIs (warm).
 | "Talk to the screen" reply | **ElevenLabs Flash v2.5** over the `stream-input` WebSocket → PCM chunks → player | Start speaking on the first chunk |
 | Hero image (optional) | **fal**, fastest FLUX-class text-to-image endpoint, behind `ImageGenerator` | No logos or text in prompts |
 | Video, warm upgrade | **fal → MiniMax H3 Max Turbo** image-to-video, 5 s, 480–768p, behind `VideoGenerator` | Max 2 concurrent jobs, per-hour budget cap |
-| Video, cold loops | **fal → best-quality model available on fal** (Veo 3.1 Quality class), run at seed time | One loop per compatible bundle and per solo brand |
+| Video, cold loops | **fal → LTX-2 19B distilled** (`fal-ai/ltx-2-19b/distilled/text-to-video`, open weights, ~US$0.10 per 6 s 16:9 clip) by default, run at seed time; `FAL_VIDEO_MODEL` can name a higher-quality fal model (Veo 3.1 class) for the final render (ADR 0006 amendment) | One loop per compatible bundle and per solo brand. Audio off, prompt expansion off, text/logos in the negative prompt |
 
 `app/modules/ai` calls Claude through `AnthropicProvider`
 (`infrastructure/adapters/llm/anthropic.py`), which implements `ILLMProvider`

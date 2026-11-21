@@ -83,9 +83,33 @@ detector. One object model; nothing else in the stack changes.
   `minor_likely` (`ChildPropVote`), which only blocks age-restricted ads
   (invariant 2). ArUco markers stay the source of truth for *which brand* a
   held product is (ADR 0008 D2); YOLOE gives the category.
+- **Verified (2026-11-21).** ONNX export of the baked weights keeps the 26
+  classes and the same detections (TensorRT is built from that ONNX graph).
+  The `gpu/` image bakes the weights at build time and starts and serves
+  frames with `--network none` on an empty volume. Not yet run on a real GPU:
+  the TensorRT engine build itself; the Dockerfile now installs
+  `tensorrt-cu13` to match the locked torch's CUDA 13 wheels. If the export
+  fails, the service logs it and serves the `.pt` weights.
 - **Evidence.** `evals/scenarios/10_open_vocab_props.json`: the can and cup
   win the Voltio + Café Patio basket without a marker; the stroller blocks
   Malta Sur.
+
+## Amendment (2026-11-21): open-weights cold loops (LTX-2)
+
+Cold bundle loops default to **LTX-2 19B distilled** on fal
+(`fal-ai/ltx-2-19b/distilled/text-to-video`, open weights). It is about
+US$0.10 per 6 s 16:9 clip, so every approved pair and solo brand can be
+regenerated freely while iterating on prompts; `FAL_VIDEO_MODEL` still takes a
+higher-quality fal model (Veo 3.1 class) for a final render. Wan 2.2 was
+rejected: fal removes it on 2027-01-04.
+
+fal's video models disagree on the request shape (LTX-2 has no `duration`:
+length is `num_frames` = 8n + 1 at `fps`), so `fal_video.request_body` builds
+it per model family and is unit-tested. For LTX-2: audio off (loops play muted
+under our voice-over), fal's LLM prompt expansion off (it could put brand
+names or lettering back into a guarded prompt, invariant 4), and text, logos
+and people in the negative prompt. Not yet run against the live fal API: no
+`FAL_KEY` is configured on the demo laptop.
 
 ## Why Haiku rather than Opus for the warm path
 

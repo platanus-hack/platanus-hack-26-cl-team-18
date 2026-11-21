@@ -98,7 +98,9 @@ explicitly disable them. Voice needs both `ELEVENLABS_API_KEY` and
 `ELEVENLABS_NARRATOR_VOICE_ID`; `VOICEOVER_PREWARM=true` fills approved basket
 voice lines at startup within the persistent character budget.
 
-Cold video uses `FAL_KEY` and a verified `FAL_VIDEO_MODEL`. Install ffmpeg,
+Cold video uses `FAL_KEY` and `FAL_VIDEO_MODEL` (default: the open-weights
+LTX-2 19B distilled, ~US$0.10 per clip; `fal_video.request_body` shapes the
+request per model family). Install ffmpeg,
 then run `make bundle-loops ARGS="--budget-usd <total> --cost-per-clip-usd <maximum>"`
 with the provider model's verified maximum request charge. It generates only
 approved pairs and solos, transcodes to H.264 720p, and skips cached files.
