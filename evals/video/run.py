@@ -38,6 +38,7 @@ from evals.video.fetch import clip_path, load_clips
 HERE = Path(__file__).resolve().parent
 OUT = sc.RESULTS_DIR / "video"
 PERCEIVE = HERE / "perceive.py"
+BASELINE = HERE / "baseline.json"  # video ratchets: lock gains with --update-baseline
 UNMAPPED_MIN_SHARE = 0.3  # an object seen this often with no segment is a catalog gap
 
 
@@ -282,6 +283,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--speed", type=float, default=1.0, help="replay speed (1 = real time)")
     parser.add_argument(
+        "--update-baseline", action="store_true", help="lock improved video ratchets (all clips)"
+    )
+    parser.add_argument(
         "--perceiver",
         choices=["agent", "standin"],
         default="agent",
@@ -319,7 +323,13 @@ def main(argv: list[str] | None = None) -> int:
         / max(len(results), 1),
         "video_clips_with_unmapped_signals": sum(bool(r.unmapped) for r in results),
     }
-    verdicts = sc.judge(summary, {})
+    verdicts = sc.judge(summary, sc.load_baseline(BASELINE))
+    if args.update_baseline:
+        if args.only or any(v.status == "fail" for v in verdicts):
+            print("refusing: baseline needs every clip and a passing run", file=sys.stderr)
+            return 1
+        sc.write_baseline(summary, BASELINE)
+        print(f"baseline updated: {BASELINE}", file=sys.stderr)
     sections = [
         {
             "name": r.clip["id"],

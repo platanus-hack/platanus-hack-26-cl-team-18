@@ -128,10 +128,25 @@ SPECS: dict[str, Spec] = {
         "info", "lower", label="Browser: first pixels p50 (ms)"
     ),
     "video_clips": Spec("info", label="Video: clips"),
-    "video_ad_precision": Spec("info", label="Video: ad precision (fitting / paid time)"),
-    "video_sensible_ad_reach": Spec("info", label="Video: sensible-ad reach (fitting / clip time)"),
+    # Minor-safety on hand-labelled real footage (evals/video/minors.py).
+    "minor_sample_recall": Spec("ratchet", "higher", label="Minors: child snapshots flagged"),
+    "minor_windows_missed": Spec("ratchet", "lower", label="Minors: child windows never flagged"),
+    "minor_windows_labelled": Spec("info", label="Minors: child windows labelled"),
+    "minor_false_flag_rate": Spec(
+        "ratchet", "lower", tolerance=0.01, label="Minors: adult snapshots flagged"
+    ),
+    # Real-footage ratchets (evals/video/baseline.json): replays run in real time, so a
+    # small tolerance absorbs scheduling noise; a real regression is far larger.
+    "video_ad_precision": Spec(
+        "ratchet", "higher", tolerance=0.02, label="Video: ad precision (fitting / paid time)"
+    ),
+    "video_sensible_ad_reach": Spec(
+        "ratchet", "higher", tolerance=0.02, label="Video: sensible-ad reach (fitting / clip time)"
+    ),
     "video_paid_share": Spec("info", label="Video: paid screen-time share"),
-    "video_flicker_per_minute": Spec("info", "lower", label="Video: screen changes/min"),
+    "video_flicker_per_minute": Spec(
+        "ratchet", "lower", tolerance=0.5, label="Video: screen changes/min"
+    ),
     "video_clips_with_unmapped_signals": Spec(
         "info", "lower", label="Video: clips with objects seen but not understood"
     ),

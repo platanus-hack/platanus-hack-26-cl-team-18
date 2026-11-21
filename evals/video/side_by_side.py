@@ -75,6 +75,7 @@ NUMBER_WORDS = {"dos": 2, "tres": 3, "cuatro": 4, "cinco": 5, "seis": 6}
 @dataclass
 class Capture:
     t_s: float
+    creative_id: str | None
     image: str
     brands: tuple[str, ...]
     paid: bool
@@ -100,6 +101,20 @@ class ClipRun:
     captures: list[Capture]
     receipts: list[ConsoleReceipt]
     errors: list[str]
+    events: list[tuple[float, str, dict[str, Any]]] = field(default_factory=list)
+
+
+def _spec_facts(message: CreativeReady | CreativeUpgraded) -> dict[str, Any]:
+    spec = message.spec
+    return {
+        "creative_id": message.creative_id,
+        "paid": message.auction_id is not None,
+        "brands": sorted(s.brand_name for s in spec.slots),
+        "party": spec.offer.party_size if spec.offer else None,
+        "teaser": spec.stages[0].copy_text if spec.stages else "",
+        "copy_source": spec.copy_source.value if spec.copy_source else None,
+        "voice": spec.voiceover_url is not None,
+    }
 
 
 class _Listener:
@@ -110,6 +125,9 @@ class _Listener:
         self.auction: ConsoleAuction | None = None
         self.on_air: CreativeReady | None = None
         self.receipts: list[ConsoleReceipt] = []
+        # (seconds since t0, kind, facts): what the backend did, independent of the frames.
+        self.events: list[tuple[float, str, dict[str, Any]]] = []
+        self.t0 = time.perf_counter()
         self._socks = [backend.console(), backend.player(DEMO_SCREEN)]
         self._conns = [s.__enter__() for s in self._socks]
         self._threads = [
@@ -123,15 +141,44 @@ class _Listener:
         try:
             for raw in conn:
                 message = adapter.validate_json(raw)
+                now = time.perf_counter() - self.t0
                 if isinstance(message, ConsoleMoment):
                     self.moment = message
+                    self.events.append(
+                        (
+                            now,
+                            "moment",
+                            {
+                                "people": message.people,
+                                "looking": message.looking,
+                                "sources": sorted(
+                                    {src.value for seg in message.segments for src in seg.sources}
+                                ),
+                            },
+                        )
+                    )
                 elif isinstance(message, ConsoleAuction):
                     self.auction = message
+                    self.events.append(
+                        (
+                            now,
+                            "auction",
+                            {
+                                "swap": message.swap,
+                                "trigger": message.trigger,
+                                "winners": [w.brand_name for w in message.winners],
+                            },
+                        )
+                    )
                 elif isinstance(message, ConsoleReceipt):
                     self.receipts.append(message)
                 elif isinstance(message, CreativeReady) and adapter is PLAYER_MESSAGES:
                     self.on_air = message
+                    self.events.append((now, "ready", _spec_facts(message)))
                 elif isinstance(message, CreativeUpgraded) and adapter is PLAYER_MESSAGES:
+                    facts = _spec_facts(message)
+                    facts["upgrade"] = message.upgrade_kind.value
+                    self.events.append((now, "upgraded", facts))
                     if self.on_air and message.creative_id == self.on_air.creative_id:
                         self.on_air = CreativeReady(
                             screen_id=message.screen_id,
@@ -227,14 +274,13 @@ def _check(capture: Capture, shot: Path, clip: dict[str, Any], previous: Capture
             if not ok:
                 capture.notes.append(f"copy says {named}, {capture.looking} looking")
         capture.checks["has a video loop"] = capture.video is not None
-        capture.checks["has a voice-over"] = capture.voice
         if capture.held:
             capture.checks["held product in the pitch"] = any(
                 h.split(":")[-1].replace("-", " ") in capture.stage_text.lower()
                 or "le falta" in capture.stage_text
                 for h in capture.held
             )
-    if previous is not None and previous.brands == capture.brands and capture.paid:
+    if previous is not None and capture.paid and previous.creative_id == capture.creative_id:
         order = ["teaser", "offer", "close"]
         capture.checks["stage never goes backwards"] = order.index(
             _stage_name(capture)
@@ -262,6 +308,7 @@ def run_clip(clip: dict[str, Any], page: Any, backend: Any) -> ClipRun:
     page.wait_for_timeout(600)
     streamer = threading.Thread(target=_stream, args=(backend, lines, errors), daemon=True)
     started = time.perf_counter()
+    listener.t0 = started
     streamer.start()
     captures: list[Capture] = []
     end_s = float(lines[-1]["t_s"]) + 1.0
@@ -282,6 +329,7 @@ def run_clip(clip: dict[str, Any], page: Any, backend: Any) -> ClipRun:
         )
         capture = Capture(
             t_s=round(t, 1),
+            creative_id=on_air.creative_id if on_air else None,
             image="",
             brands=tuple(sorted(s.brand_name for s in spec.slots)) if spec and paid else (),
             paid=paid,
@@ -326,7 +374,88 @@ def run_clip(clip: dict[str, Any], page: Any, backend: Any) -> ClipRun:
     streamer.join(timeout=5)
     time.sleep(4.0)  # D5.5 grace runs out; the last play is reported and billed
     listener.close()
-    return ClipRun(clip, captures, list(listener.receipts), list(errors.queue))
+    (out / "events.json").write_text(
+        json.dumps(
+            [{"t_s": round(t, 2), "kind": k, **f} for t, k, f in listener.events],
+            indent=1,
+            ensure_ascii=False,
+        )
+    )
+    return ClipRun(clip, captures, list(listener.receipts), list(errors.queue), listener.events)
+
+
+VOICE_GATE_S = 1.5  # AI copy + its voice-over on air within this of an ad going up
+GROUP_STEADY_S = 4.0  # a group steady this long must see its own offer tier
+MAX_TIER = 4  # the largest approved party size in the seed
+ACTIVITY_CLAIM = re.compile(r"\b(entren\w*|corri\w*|jugaron|jugaste)\b", re.IGNORECASE)
+ACTIVITY_EVIDENCE = {"speech", "vlm", "sound"}
+
+
+@dataclass
+class TimelineCheck:
+    name: str
+    gate: bool  # False = tracked only (needs a team decision before it may fail a build)
+    failures: list[str]
+
+
+def timeline_checks(events: list[tuple[float, str, dict[str, Any]]]) -> list[TimelineCheck]:
+    """Checks on what the backend did over time, independent of capture timing."""
+    creatives = [(t, f) for t, k, f in events if k in ("ready", "upgraded")]
+    moments = [(t, f) for t, k, f in events if k == "moment"]
+
+    voice: list[str] = []
+    readies = [(t, f) for t, k, f in events if k == "ready" and f["paid"]]
+    for index, (t0, ready) in enumerate(readies):
+        replaced_at = readies[index + 1][0] if index + 1 < len(readies) else float("inf")
+        complete = next(
+            (
+                t
+                for t, f in creatives
+                if f["creative_id"] == ready["creative_id"]
+                and t >= t0
+                and f["voice"]
+                and f["copy_source"] in ("ai", "cache")
+            ),
+            None,
+        )
+        if replaced_at - t0 < VOICE_GATE_S:
+            continue  # replaced before the gate: nothing to hold it to
+        if complete is None or complete - t0 > VOICE_GATE_S:
+            took = "never" if complete is None else f"{complete - t0:.2f}s"
+            voice.append(f"t={t0:.1f}s {'+'.join(ready['brands'])}: copy+voice {took}")
+
+    def party_on_air(at: float) -> int | None:
+        current = None
+        for t, f in creatives:
+            if t > at:
+                break
+            current = f["party"] if f["paid"] else None
+        return current
+
+    group: list[str] = []
+    for index, (t0, moment) in enumerate(moments):
+        looking = moment["looking"]
+        end = moments[index + 1][0] if index + 1 < len(moments) else t0
+        if looking < 1 or end - t0 < GROUP_STEADY_S:
+            continue
+        on_air = party_on_air(t0 + GROUP_STEADY_S)
+        if on_air is not None and on_air != min(looking, MAX_TIER):
+            group.append(f"t={t0:.1f}–{end:.1f}s: {looking} looking, offer for {on_air}")
+
+    claims: list[str] = []
+    for t0, f in creatives:
+        if not f["paid"] or not ACTIVITY_CLAIM.search(f["teaser"]):
+            continue
+        evidence: dict[str, Any] = next(
+            (m for t, m in reversed(moments) if t <= t0), {"sources": []}
+        )
+        if not ACTIVITY_EVIDENCE & set(evidence["sources"]):
+            claims.append(f"t={t0:.1f}s “{f['teaser']}” from {evidence['sources'] or 'nothing'}")
+    return [
+        TimelineCheck("AI copy + voice-over within 1.5 s", True, voice),
+        TimelineCheck("a steady group sees its own offer tier", True, group),
+        TimelineCheck("activity claims need speech/VLM/sound evidence", False, sorted(set(claims))),
+    ]
 
 
 def render(runs: list[ClipRun]) -> str:
@@ -361,6 +490,15 @@ def render(runs: list[ClipRun]) -> str:
             f"({html.escape(clip['artist'])}, {html.escape(clip['license'])})</p>"
         )
         parts += [f"<p class=bad>{html.escape(e)}</p>" for e in run.errors]
+        for check in timeline_checks(run.events):
+            css = "ok" if not check.failures else ("bad" if check.gate else "")
+            mark = "✓" if not check.failures else "✗"
+            kind = "" if check.gate else " (tracked)"
+            detail = "; ".join(check.failures[:4])
+            parts.append(
+                f"<p class={css or 'ok'}>{mark} {html.escape(check.name)}{kind}"
+                f"{': ' + html.escape(detail) if detail else ''}</p>"
+            )
         parts += [f"<img src='{html.escape(c.image)}' loading=lazy>" for c in run.captures]
     return "\n".join(parts)
 
@@ -418,6 +556,9 @@ def main(argv: list[str] | None = None) -> int:
             "failed": [(c.t_s, n) for c in r.captures for n, ok in c.checks.items() if not ok],
             "billed": str(sum(Decimal(x.total.amount) for x in r.receipts)),
             "errors": r.errors,
+            "timeline": {
+                c.name: {"gate": c.gate, "failures": c.failures} for c in timeline_checks(r.events)
+            },
         }
         for r in runs
     ]
@@ -427,8 +568,15 @@ def main(argv: list[str] | None = None) -> int:
             f"{row['clip']:26} captures={row['captures']:2} billed=${row['billed']:>5} "
             f"failed={row['failed'][:4]}"
         )
+        for name, check in row["timeline"].items():
+            if check["failures"]:
+                kind = "GATE" if check["gate"] else "tracked"
+                print(f"    {kind} {name}: {check['failures'][:3]}")
     print(f"→ {OUT / 'index.html'}")
-    return 0 if not any(r["failed"] or r["errors"] for r in summary) else 1
+    gate_failed = any(
+        check["gate"] and check["failures"] for r in summary for check in r["timeline"].values()
+    )
+    return 0 if not gate_failed and not any(r["failed"] or r["errors"] for r in summary) else 1
 
 
 if __name__ == "__main__":
