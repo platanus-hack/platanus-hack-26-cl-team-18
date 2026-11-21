@@ -1,4 +1,9 @@
-import { ConsoleOutboundSchema, type ConsoleOutbound, type ExclusionReason } from "@/contract";
+import {
+    ConsoleOutboundSchema,
+    type ConsoleOutbound,
+    type ExclusionReason,
+    type SegmentMatchKind,
+} from "@/contract";
 import { backendWsUrl } from "@/lib/config";
 import { createStore, useStore } from "@/lib/store";
 import { TypedSocket, type ConnectionState } from "@/lib/ws/typed-socket";
@@ -30,6 +35,13 @@ const EXCLUSION_LABEL: Record<ExclusionReason, string> = {
     no_basket_offer: "No basket offer",
     outbid: "Outbid",
     invalid_bid: "Invalid bid",
+};
+
+const MATCH_LABEL: Record<SegmentMatchKind, string> = {
+    exact: "exact",
+    broader: "broader",
+    narrower: "narrower",
+    related: "related",
 };
 
 const fmtMs = (value: number | null) =>
@@ -201,7 +213,7 @@ function MomentPanel({ screenId, view }: { screenId: string; view: ScreenView })
                         <li>
                             <StatusBadge
                                 tone="warning"
-                                label="Minor likely: restricted categories blocked"
+                                label="Protección de menores: alcohol y categorías restringidas bloqueados"
                             />
                         </li>
                     )}
@@ -300,6 +312,7 @@ function AuctionPanel({ view }: { view: ScreenView }) {
                                 const exclusion = a.exclusions.find(
                                     (e) => e.campaign_id === bid.campaign_id,
                                 );
+                                const approximate = bid.matches.filter((m) => m.kind !== "exact");
                                 return (
                                     <li
                                         key={bid.campaign_id}
@@ -309,6 +322,19 @@ function AuctionPanel({ view }: { view: ScreenView }) {
                                         <span className="ml-auto text-muted tabular-nums">
                                             Bid {bid.bid_per_as.amount} {bid.bid_per_as.currency}/AS
                                         </span>
+                                        {approximate.length > 0 && (
+                                            <span
+                                                className="basis-full text-muted"
+                                                aria-label="Matched by segment affinity"
+                                            >
+                                                {approximate
+                                                    .map(
+                                                        (m) =>
+                                                            `via ${m.bid_segment_label || m.bid_segment_id} → ${m.segment_label || m.segment_id} · ${MATCH_LABEL[m.kind]} ${Math.round(m.weight * 100)}%`,
+                                                    )
+                                                    .join(" · ")}
+                                            </span>
+                                        )}
                                         {exclusion && (
                                             <span title={exclusion.detail || undefined}>
                                                 <StatusBadge

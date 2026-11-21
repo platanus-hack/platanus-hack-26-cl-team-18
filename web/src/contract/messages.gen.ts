@@ -15,6 +15,22 @@ export const AdvertiserBidMultiplierSchema = z.strictObject({
 });
 export type AdvertiserBidMultiplier = z.infer<typeof AdvertiserBidMultiplierSchema>;
 
+export const AgentRoleSchema = z.enum(["vision", "speech"]);
+export type AgentRole = z.infer<typeof AgentRoleSchema>;
+
+// First frame on every agent connection: the screen and sensor it serves.
+// 
+// The backend answers with that screen's `live.status` and pushes every change,
+// so an agent that reconnects learns the current switch position at once.
+export const AgentHelloSchema = z.strictObject({
+  v: z.literal(1),
+  type: z.literal("agent.hello"),
+  screen_id: z.string().min(1).max(64).regex(/^[A-Za-z0-9_.:-]+$/),
+  role: AgentRoleSchema,
+  seq: z.number().int().gte(0),
+});
+export type AgentHello = z.infer<typeof AgentHelloSchema>;
+
 // Header for a face-blurred JPEG; the bytes follow as the next binary WS frame.
 export const AudienceKeyframeSchema = z.strictObject({
   v: z.literal(1),
@@ -96,8 +112,24 @@ export const AudienceUtteranceSchema = z.strictObject({
   text: z.string().max(1000),
   language: z.string().min(2).max(16),
   keyterms_hit: z.array(z.string()).max(32),
+  is_final: z.boolean(),
+  utterance_id: z.string().min(1).max(64).nullable(),
 });
 export type AudienceUtterance = z.infer<typeof AudienceUtteranceSchema>;
+
+export const SegmentMatchKindSchema = z.enum(["exact", "broader", "narrower", "related"]);
+export type SegmentMatchKind = z.infer<typeof SegmentMatchKindSchema>;
+
+// How a bid reached one segment of the moment, and what share of its rate it kept.
+export const BidMatchSchema = z.strictObject({
+  segment_id: z.string().min(1).max(32).regex(/^[A-Za-z0-9_-]+$/),
+  bid_segment_id: z.string().min(1).max(32).regex(/^[A-Za-z0-9_-]+$/),
+  kind: SegmentMatchKindSchema,
+  weight: z.number().gte(0.0).lte(1.0),
+  segment_label: z.string().max(80),
+  bid_segment_label: z.string().max(80),
+});
+export type BidMatch = z.infer<typeof BidMatchSchema>;
 
 export const MoneyDTOSchema = z.strictObject({
   amount: z.string().max(32).regex(/^-?\d+(\.\d+)?$/),
@@ -113,6 +145,7 @@ export const BidLineSchema = z.strictObject({
   value: z.number().gte(0.0),
   value_per_s: MoneyDTOSchema.nullable(),
   multiplier: z.string().max(16).regex(/^\d+(\.\d+)?$/).nullable(),
+  matches: z.array(BidMatchSchema).max(32),
 });
 export type BidLine = z.infer<typeof BidLineSchema>;
 
@@ -426,6 +459,41 @@ export const ErrorMessageSchema = z.strictObject({
 });
 export type ErrorMessage = z.infer<typeof ErrorMessageSchema>;
 
+// The console's "En vivo" switch (HTTP POST /api/live).
+// 
+// Absolute values, so a retry is harmless and the last click wins. A field left
+// `None` keeps its value: the master `live` and the `mic` sub-switch are
+// independent axes.
+export const LiveSetSchema = z.strictObject({
+  v: z.literal(1),
+  type: z.literal("live.set"),
+  screen_id: z.string().min(1).max(64).regex(/^[A-Za-z0-9_.:-]+$/),
+  live: z.boolean().nullable(),
+  mic: z.boolean().nullable(),
+});
+export type LiveSet = z.infer<typeof LiveSetSchema>;
+
+// Where a screen's live switch stands, pushed to the console, player and agents.
+// 
+// `sensing`, `listening` and `ai_generation` are derived, never set directly:
+// sensing = live; listening = live and mic and speech_opt_in (ADR 0005);
+// ai_generation = live (warm AI copy, voice-overs, VLM tags and speech topics).
+export const LiveStatusSchema = z.strictObject({
+  v: z.literal(1),
+  type: z.literal("live.status"),
+  screen_id: z.string().min(1).max(64).regex(/^[A-Za-z0-9_.:-]+$/),
+  revision: z.number().int().gte(0),
+  live: z.boolean(),
+  mic: z.boolean(),
+  speech_opt_in: z.boolean(),
+  sensing: z.boolean(),
+  listening: z.boolean(),
+  ai_generation: z.boolean(),
+  agents: z.array(AgentRoleSchema).max(4),
+  changed_at: z.iso.datetime({ offset: true }),
+});
+export type LiveStatus = z.infer<typeof LiveStatusSchema>;
+
 export const PlaybackReportSchema = z.strictObject({
   v: z.literal(1),
   type: z.literal("playback.report"),
@@ -447,6 +515,18 @@ export const PlayerDisplayedSchema = z.strictObject({
   displayed_at: z.iso.datetime({ offset: true }),
 });
 export type PlayerDisplayed = z.infer<typeof PlayerDisplayedSchema>;
+
+// Actual Web Audio playback, used only for ephemeral echo rejection.
+export const PlayerVoiceSchema = z.strictObject({
+  v: z.literal(1),
+  type: z.literal("player.voice"),
+  screen_id: z.string().min(1).max(64).regex(/^[A-Za-z0-9_.:-]+$/),
+  creative_id: z.string().min(1).max(64),
+  seq: z.number().int().gte(0),
+  playing: z.boolean(),
+  duration_ms: z.number().int().gte(0).lte(120000),
+});
+export type PlayerVoice = z.infer<typeof PlayerVoiceSchema>;
 
 export const RecognitionAttributeSchema = z.strictObject({
   name: z.string().min(1).max(64),
@@ -553,18 +633,21 @@ export const StockSetSchema = z.strictObject({
 });
 export type StockSet = z.infer<typeof StockSetSchema>;
 
-export const AgentInboundSchema = z.discriminatedUnion("type", [AudienceSnapshotSchema, AudienceKeyframeSchema, AudienceUtteranceSchema, RecognitionSnapshotSchema]);
+export const AgentInboundSchema = z.discriminatedUnion("type", [AudienceSnapshotSchema, AudienceKeyframeSchema, AudienceUtteranceSchema, RecognitionSnapshotSchema, AgentHelloSchema]);
 export type AgentInbound = z.infer<typeof AgentInboundSchema>;
 
-export const PlayerInboundSchema = z.discriminatedUnion("type", [PlaybackReportSchema, PlayerDisplayedSchema]);
+export const AgentOutboundSchema = z.discriminatedUnion("type", [LiveStatusSchema, ErrorMessageSchema]);
+export type AgentOutbound = z.infer<typeof AgentOutboundSchema>;
+
+export const PlayerInboundSchema = z.discriminatedUnion("type", [PlaybackReportSchema, PlayerDisplayedSchema, PlayerVoiceSchema]);
 export type PlayerInbound = z.infer<typeof PlayerInboundSchema>;
 
-export const PlayerOutboundSchema = z.discriminatedUnion("type", [CreativeReadySchema, CreativeUpgradedSchema, ErrorMessageSchema, ScreenAttentionSchema]);
+export const PlayerOutboundSchema = z.discriminatedUnion("type", [CreativeReadySchema, CreativeUpgradedSchema, ErrorMessageSchema, ScreenAttentionSchema, LiveStatusSchema]);
 export type PlayerOutbound = z.infer<typeof PlayerOutboundSchema>;
 
-export const ConsoleOutboundSchema = z.discriminatedUnion("type", [ConsoleMomentSchema, ConsoleAuctionSchema, ConsoleLatencySchema, ConsoleDegradationSchema, CreativeReadySchema, CreativeUpgradedSchema, ErrorMessageSchema, ConsoleBookSchema, ConsoleReceiptSchema, ConsoleRedemptionSchema]);
+export const ConsoleOutboundSchema = z.discriminatedUnion("type", [ConsoleMomentSchema, ConsoleAuctionSchema, ConsoleLatencySchema, ConsoleDegradationSchema, CreativeReadySchema, CreativeUpgradedSchema, ErrorMessageSchema, ConsoleBookSchema, ConsoleReceiptSchema, ConsoleRedemptionSchema, LiveStatusSchema]);
 export type ConsoleOutbound = z.infer<typeof ConsoleOutboundSchema>;
 
-export const MESSAGE_TYPES = ["audience.snapshot", "audience.keyframe", "audience.utterance", "creative.ready", "creative.upgraded", "playback.report", "console.moment", "console.auction", "console.latency", "console.degradation", "system.error", "advertiser.bid_multiplier", "stock.set", "console.book", "console.receipt", "recognition.snapshot", "player.displayed", "screen.attention", "console.redemption", "campaign.catalog", "campaign.generate", "campaign.generated"] as const;
+export const MESSAGE_TYPES = ["audience.snapshot", "audience.keyframe", "audience.utterance", "creative.ready", "creative.upgraded", "playback.report", "console.moment", "console.auction", "console.latency", "console.degradation", "system.error", "advertiser.bid_multiplier", "stock.set", "console.book", "console.receipt", "recognition.snapshot", "player.displayed", "player.voice", "screen.attention", "console.redemption", "agent.hello", "live.set", "live.status", "campaign.catalog", "campaign.generate", "campaign.generated"] as const;
 
 export type MessageType = (typeof MESSAGE_TYPES)[number];

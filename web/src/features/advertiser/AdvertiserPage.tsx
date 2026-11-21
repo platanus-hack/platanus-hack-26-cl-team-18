@@ -2,7 +2,8 @@ import type { BookLine } from "@/contract";
 import { setBidMultiplier, useBook } from "@/lib/market-api";
 import { StatusBadge } from "@/shared/ui/StatusBadge";
 import { WorkspaceHeader } from "@/shared/ui/WorkspaceHeader";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { BidQueue, type BidState } from "./bid-queue";
 
 const MIN = 0.2;
 const MAX = 5;
@@ -48,7 +49,7 @@ function BrandPicker({
 }) {
     return (
         <div className="flex flex-col gap-3">
-            <p className="text-muted">Pick the brand you bid for.</p>
+            <p className="text-muted">Elige la marca por la que quieres pujar.</p>
             {lines.length === 0 && (
                 <p className="tool-card text-muted" role="status">
                     Esperando marcas del mercado. Aparecerán aquí cuando estén disponibles.
@@ -81,36 +82,57 @@ function Slider({
     onSent: () => void;
 }) {
     // While dragging, show the draft; otherwise follow the server (another phone may move it).
-    const [draft, setDraft] = useState<number | null>(null);
-    const [failed, setFailed] = useState(false);
-    const value = draft ?? Number(line.multiplier);
+    const [bid, setBid] = useState<BidState>({ kind: "idle", value: null });
+    const queue = useRef<BidQueue | null>(null);
+    const [confirmedSeq, setConfirmedSeq] = useState(0);
+    const refresh = useRef(onSent);
+    const observedSeq = useRef(line.multiplier_seq);
+    useEffect(() => {
+        observedSeq.current = line.multiplier_seq;
+    }, [line.multiplier_seq]);
+    useEffect(() => {
+        refresh.current = onSent;
+    }, [onSent]);
+    useEffect(() => {
+        const current = new BidQueue(
+            async (next) => {
+                setConfirmedSeq(
+                    await setBidMultiplier(line.campaign_id, next.toFixed(1), observedSeq.current),
+                );
+            },
+            setBid,
+            () => {
+                refresh.current();
+            },
+        );
+        queue.current = current;
+        return () => {
+            current.dispose();
+            queue.current = null;
+        };
+    }, [line.campaign_id]);
+    const value =
+        bid.kind === "idle" && line.multiplier_seq >= confirmedSeq
+            ? Number(line.multiplier)
+            : (bid.value ?? Number(line.multiplier));
     const competitors = rivals.filter(
         (r) => r.category === line.category && r.campaign_id !== line.campaign_id,
     );
     const send = (next: number) => {
-        setDraft(next);
-        setBidMultiplier(line.campaign_id, next.toFixed(1))
-            .then(() => {
-                setFailed(false);
-                setDraft(null);
-                onSent();
-            })
-            .catch(() => {
-                setFailed(true);
-            });
+        queue.current?.set(next);
     };
     return (
         <section className="tool-card flex flex-col gap-6">
             <div className="flex items-center justify-between">
                 <span className="text-section font-semibold">{line.brand_name}</span>
                 {line.on_air ? (
-                    <StatusBadge tone="success" label="On screen now" />
+                    <StatusBadge tone="success" label="En pantalla" />
                 ) : (
-                    <StatusBadge tone="neutral" label="Not on screen" />
+                    <StatusBadge tone="neutral" label="Fuera de pantalla" />
                 )}
             </div>
             <label className="flex flex-col gap-2">
-                <span className="text-muted">Bid multiplier</span>
+                <span className="text-muted">Multiplicador de puja</span>
                 <span className="text-kpi font-semibold tabular-nums">×{value.toFixed(1)}</span>
                 <input
                     type="range"
@@ -125,9 +147,38 @@ function Slider({
                     }}
                 />
             </label>
-            {failed && <StatusBadge tone="warning" label="Not sent, try again" />}
+            <div role="status" aria-live="polite">
+                {bid.kind === "sending" && (
+                    <StatusBadge tone="neutral" label="Enviando última puja…" />
+                )}
+                {bid.kind === "idle" && (
+                    <span className="text-metadata text-muted">
+                        Puja confirmada ×{value.toFixed(1)}
+                    </span>
+                )}
+                {bid.kind === "failed" && (
+                    <button
+                        type="button"
+                        className="button-secondary"
+                        onClick={() => {
+                            send(bid.value);
+                        }}
+                    >
+                        No enviada · Reintentar ×{bid.value.toFixed(1)}
+                    </button>
+                )}
+            </div>
+            <button
+                type="button"
+                className="button-secondary"
+                onClick={() => {
+                    send(1);
+                }}
+            >
+                Restablecer ×1.0
+            </button>
             <p className="text-metadata text-muted tabular-nums">
-                Budget left {line.remaining.amount} {line.remaining.currency} · spent{" "}
+                Saldo {line.remaining.amount} {line.remaining.currency} · gastado{" "}
                 {line.spent.amount}
             </p>
             {competitors.length > 0 && (
@@ -136,14 +187,16 @@ function Slider({
                         <li key={r.campaign_id} className="flex justify-between">
                             <span>Rival {r.brand_name}</span>
                             <span className="tabular-nums">
-                                ×{r.multiplier} {r.on_air ? "· on screen" : ""}
+                                ×{r.multiplier} {r.on_air ? "· en pantalla" : ""}
                             </span>
                         </li>
                     ))}
                 </ul>
             )}
             <p className="text-metadata text-muted">
-                Rivals never share a basket. A swap waits for the current teaser to finish.
+                Una puja mayor compite por el momento actual; no garantiza ganar. La relevancia,
+                seguridad, stock y saldo siguen aplicando. El cambio espera el tiempo mínimo del
+                anuncio.
             </p>
         </section>
     );

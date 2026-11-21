@@ -35,20 +35,33 @@ async function post(path: string, body: unknown): Promise<unknown> {
 let lastSeq = 0;
 
 /** Strictly increasing across reloads (ms clock), so a late request can't win. */
-function nextSeq(): number {
-    lastSeq = Math.max(lastSeq + 1, Date.now());
+function nextSeq(afterSeq = 0): number {
+    lastSeq = Math.max(lastSeq + 1, afterSeq + 1, Date.now());
     return lastSeq;
 }
 
-export async function setBidMultiplier(campaignId: string, multiplier: string): Promise<unknown> {
+export async function setBidMultiplier(
+    campaignId: string,
+    multiplier: string,
+    afterSeq = 0,
+): Promise<number> {
     const message: AdvertiserBidMultiplier = {
         type: "advertiser.bid_multiplier",
         v: 1,
         campaign_id: campaignId,
         multiplier,
-        seq: nextSeq(),
+        seq: nextSeq(afterSeq),
     };
-    return post("/api/advertiser/bid-multiplier", message);
+    const result = await post("/api/advertiser/bid-multiplier", message);
+    if (
+        typeof result !== "object" ||
+        result === null ||
+        !("outcome" in result) ||
+        (result.outcome !== "applied" && result.outcome !== "duplicate")
+    ) {
+        throw new Error("Bid superseded by another controller; retry against the latest market");
+    }
+    return message.seq;
 }
 
 export async function setStock(
@@ -79,14 +92,18 @@ export function useBook(intervalMs = 1000, screenId = "demo-01"): BookState {
     const [tick, setTick] = useState(0);
     useEffect(() => {
         const controller = new AbortController();
+        let latestRequest = 0;
         const load = () => {
+            const request = ++latestRequest;
             fetchBook(controller.signal, screenId)
                 .then((next) => {
+                    if (controller.signal.aborted || request !== latestRequest) return;
                     setBook(next);
                     setError(null);
                 })
                 .catch((reason: unknown) => {
-                    if (!controller.signal.aborted) setError(String(reason));
+                    if (!controller.signal.aborted && request === latestRequest)
+                        setError(String(reason));
                 });
         };
         load();

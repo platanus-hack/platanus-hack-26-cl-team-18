@@ -459,6 +459,36 @@ describe("glass-to-glass and attention-driven stages", () => {
         expect(host.textContent).toContain("válido 10 min");
     });
 
+    it("puts the price on the baseline during the hook and draws the day or night field", async () => {
+        const spec = {
+            ...HOUSE_AD.spec,
+            stages: [{ name: "teaser" as const, copy_text: "Entrenaron. Ahora recarguen." }],
+            offer: {
+                label: "Trío post-entreno",
+                text: "Voltio + Café Patio x3",
+                price: { amount: "8490", currency: "CLP" },
+                party_size: 3,
+            },
+        };
+        for (const theme of ["light", "dark"] as const) {
+            await act(async () => {
+                root.render(
+                    <CreativeView
+                        spec={spec}
+                        playKey={theme}
+                        previewStage="teaser"
+                        previewTheme={theme}
+                    />,
+                );
+                await Promise.resolve();
+            });
+            const canvas = host.querySelector<HTMLElement>(".creative-canvas");
+            expect(canvas?.getAttribute("data-theme")).toBe(theme);
+            expect(host.querySelector(".creative-meta-price")?.textContent).toBe("$8.490 · Para 3");
+            expect(host.querySelector(".creative-figure path")?.getAttribute("d")).toMatch(/^M/);
+        }
+    });
+
     it("sets the approved price apart at the offer stage instead of repeating it", async () => {
         const spec = {
             ...HOUSE_AD.spec,

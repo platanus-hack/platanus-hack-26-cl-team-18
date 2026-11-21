@@ -25,6 +25,10 @@ describe("live input status", () => {
         expect(inputLabels(health, "demo-01").speech).toContain("esperando frase");
         health.inputs["demo-01"]!.speech_recent = true;
         expect(inputLabels(health, "demo-01").speech).toBe("Voz recibida");
+        health.inputs["demo-01"]!.last_keyterm_count = 0;
+        expect(inputLabels(health, "demo-01").speech).toContain("sin términos reconocidos");
+        health.inputs["demo-01"]!.last_keyterm_count = 1;
+        expect(inputLabels(health, "demo-01").speech).toContain("1 término reconocido");
         expect(inputLabels(health, "other").player).toBe("Pantalla desconectada");
     });
 });

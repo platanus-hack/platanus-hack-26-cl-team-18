@@ -2,20 +2,73 @@
  * The ad canvas (16:9 TV, read from 1–4 m). Sizes are container units so the
  * studio preview and the TV render the same layout.
  *
- * House style: three faces with one job each (display serif for the hook,
- * Instrument Sans for products and the price, mono caps for labels); one
- * accent, the lead brand's, used once per stage (the price, or the QR edge);
- * hierarchy from scale and space, not boxes. Square-ish corners, no glows.
+ * After the Relvo brand system: a grotesk set large and tight for the one line
+ * of each stage, Geist Mono caps for metadata on the bottom baseline beside the
+ * brand lockup, a stroke-only line figure as the signature texture, and one
+ * accent (the lead brand's) for the figure and a single fill. Light accents are
+ * fills, never text: ink sits on them. Square corners except the pill tag.
+ *
+ * Two fields, one system:
+ * - light (day): Relvo grey, ink type, the product photo as a right-hand panel
+ *   with the figure emerging from behind it;
+ * - dark (night): the photo full-bleed under a shade, white type.
  */
 .creative-canvas {
     container-type: size;
-    --color-canvas: var(--palette-ink-950);
-    --color-fg: var(--palette-ink-50);
-    --color-muted: var(--palette-ink-300);
+    --ad-field: #e8e8e8;
+    --ad-ink: var(--palette-ink-950);
+    --ad-muted: #55555f;
+    --ad-rule: color-mix(in srgb, var(--palette-ink-950) 18%, transparent);
     --creative-accent: var(--palette-mint);
     --creative-gutter: 4.4cqw;
-    color: var(--color-fg);
+    --ad-column: 50cqw;
+    --ad-panel: 54cqw;
+    background: var(--ad-field);
+    color: var(--ad-ink);
     font-family: var(--font-sans);
+}
+.creative-canvas[data-theme="dark"] {
+    --ad-field: var(--palette-ink-950);
+    --ad-ink: var(--palette-ink-50);
+    --ad-muted: var(--palette-ink-300);
+    --ad-rule: color-mix(in srgb, var(--palette-ink-50) 22%, transparent);
+    --ad-column: 60cqw;
+}
+
+/* ------------------------------------------------------------------ figure + media */
+.creative-figure {
+    position: absolute;
+    width: 92cqh;
+    height: 92cqh;
+    top: 4cqh;
+    left: calc(var(--ad-panel) - 46cqh);
+    stroke: var(--creative-accent);
+    stroke-width: 1.1px;
+    stroke-opacity: 0.95;
+    pointer-events: none;
+}
+.creative-canvas[data-theme="dark"] .creative-figure {
+    left: auto;
+    right: -30cqh;
+    top: 50%;
+    width: 120cqh;
+    height: 120cqh;
+    transform: translateY(-50%);
+    stroke-opacity: 0.8;
+}
+.creative-visual {
+    position: absolute;
+    inset: 0 0 0 var(--ad-panel);
+    overflow: hidden;
+    background: var(--palette-ink-950);
+}
+.creative-canvas[data-theme="dark"] .creative-visual {
+    inset: 0;
+}
+/* The panel shows under half the 16:9 photo: the product photos put the products in their
+   right half (cup, then can), so the light panel crops toward there instead of the centre. */
+.creative-canvas[data-theme="light"] .creative-media {
+    object-position: 82% 50%;
 }
 .creative-media {
     position: absolute;
@@ -25,193 +78,204 @@
     object-fit: cover;
     transition: opacity var(--duration-crossfade) ease-out;
 }
-/* Copy sits on the left third: a deep, even fade keeps it legible over any photo. */
 .creative-shade {
+    display: none;
+}
+.creative-canvas[data-theme="dark"] .creative-shade {
+    display: block;
     position: absolute;
     inset: 0;
     background:
         linear-gradient(
             90deg,
-            var(--color-canvas) 0%,
-            color-mix(in srgb, var(--color-canvas) 88%, transparent) 30%,
-            color-mix(in srgb, var(--color-canvas) 35%, transparent) 62%,
+            var(--ad-field) 0%,
+            color-mix(in srgb, var(--ad-field) 88%, transparent) 32%,
+            color-mix(in srgb, var(--ad-field) 30%, transparent) 64%,
             transparent 85%
         ),
         linear-gradient(
-            0deg,
-            color-mix(in srgb, var(--color-canvas) 70%, transparent),
-            transparent 30%
-        ),
-        linear-gradient(
             180deg,
-            color-mix(in srgb, var(--color-canvas) 60%, transparent),
-            transparent 22%
+            color-mix(in srgb, var(--ad-field) 55%, transparent),
+            transparent 40%
         );
 }
-.creative-canvas[data-stage="close"] .creative-shade {
-    background: color-mix(in srgb, var(--color-canvas) 82%, transparent);
+.creative-canvas[data-theme="dark"][data-stage="close"] .creative-shade {
+    background: color-mix(in srgb, var(--ad-field) 82%, transparent);
 }
 
+/* ------------------------------------------------------------------ composition */
 .creative-composition {
     position: relative;
     display: flex;
     flex-direction: column;
-    height: 100%;
-    padding: var(--creative-gutter);
-}
-
-/* ------------------------------------------------------------------ top bar */
-.creative-top {
-    display: flex;
-    align-items: center;
     justify-content: space-between;
-    gap: 2cqw;
+    gap: 4cqh;
+    height: 100%;
+    padding: calc(var(--creative-gutter) * 1.25) var(--creative-gutter) var(--creative-gutter);
 }
-.creative-brands {
-    display: flex;
-    align-items: center;
-    gap: 1.4cqw;
-}
-.creative-brand {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.8cqw;
-    font-size: 1.75cqw;
-    font-weight: 600;
-    letter-spacing: -0.02em;
-}
-.creative-brand-logo {
-    width: 3.2cqw;
-    height: 3.2cqw;
-    object-fit: contain;
-}
-.creative-times {
-    color: var(--color-muted);
-    font-size: 1.5cqw;
-    font-weight: 400;
-}
-.creative-label {
-    font-family: var(--font-label);
-    font-size: 1.05cqw;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    color: var(--color-muted);
-}
-
-/* ------------------------------------------------------------------ story */
 .creative-story {
-    margin-top: auto;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 2.2cqh;
-    max-width: 58%;
+    gap: 3cqh;
+    max-width: calc(var(--ad-column) - 2 * var(--creative-gutter));
 }
+
+/* One line per stage: Relvo's display treatment, regular weight, tight. */
 .creative-hook {
     font-family: var(--font-display);
-    font-size: clamp(1.25rem, 7.4cqw, 9rem);
-    font-weight: 400;
+    font-size: clamp(1.25rem, 6.8cqw, 9rem);
+    font-weight: 500;
     line-height: 0.98;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.045em;
     text-wrap: balance;
 }
 .creative-offer-line {
-    font-size: clamp(1rem, 2.9cqw, 3.6rem);
-    font-weight: 600;
-    line-height: 1.12;
-    letter-spacing: -0.025em;
+    font-family: var(--font-display);
+    font-size: clamp(1rem, 3.1cqw, 4rem);
+    font-weight: 500;
+    line-height: 1.08;
+    letter-spacing: -0.03em;
     text-wrap: balance;
 }
 
-/* The price: the largest number on screen, tabular, in the one accent. */
+/* The price: the largest number on screen, tabular, in ink; the group rides an accent pill. */
 .creative-price {
     display: inline-flex;
-    align-items: baseline;
-    gap: 1.2cqw;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1.4cqw;
     font-variant-numeric: tabular-nums;
 }
 .creative-price-figure {
     display: inline-flex;
     align-items: flex-start;
-    font-size: 4.2cqw;
-    font-weight: 700;
-    line-height: 0.9;
-    letter-spacing: -0.04em;
-    color: var(--creative-accent);
-}
-.creative-price.is-hero .creative-price-figure {
-    font-size: clamp(2rem, 12cqw, 14rem);
+    font-size: 4.4cqw;
+    font-weight: 600;
+    line-height: 0.88;
     letter-spacing: -0.05em;
 }
+.creative-price.is-hero .creative-price-figure {
+    font-size: clamp(2rem, 13cqw, 15rem);
+    letter-spacing: -0.06em;
+}
 .creative-price-currency {
-    font-size: 0.48em;
+    font-size: 0.46em;
     line-height: 1;
-    margin-top: 0.14em;
-    margin-right: 0.06em;
-    font-weight: 600;
+    margin-top: 0.12em;
+    margin-right: 0.05em;
+    font-weight: 500;
 }
 .creative-price-party {
     font-family: var(--font-label);
-    font-size: 1.15cqw;
+    font-size: 1.3cqw;
     font-weight: 500;
     text-transform: uppercase;
-    letter-spacing: 0.12em;
-    color: var(--color-muted);
+    letter-spacing: 0.1em;
+    padding: 0.55cqw 1.1cqw;
+    border-radius: 999px;
+    background: var(--creative-accent);
+    color: var(--palette-ink-950);
 }
 .creative-price.is-hero .creative-price-party {
-    font-size: 1.4cqw;
+    font-size: 1.6cqw;
+}
+
+/* ------------------------------------------------------------------ baseline */
+.creative-baseline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1.6cqh 3.2cqw;
+    max-width: calc(var(--ad-column) - 2 * var(--creative-gutter));
+}
+.creative-brands {
+    display: flex;
+    align-items: center;
+    gap: 1.2cqw;
+}
+.creative-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.8cqw;
+    font-size: 1.8cqw;
+    font-weight: 600;
+    letter-spacing: -0.025em;
+    white-space: nowrap;
+}
+.creative-brand-logo {
+    width: 3.4cqw;
+    height: 3.4cqw;
+    object-fit: contain;
+}
+.creative-times {
+    color: var(--ad-muted);
+    font-size: 1.5cqw;
+}
+.creative-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.8cqh 2.4cqw;
+}
+.creative-label {
+    font-family: var(--font-label);
+    font-size: 1.3cqw;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ad-muted);
+    white-space: nowrap;
+}
+.creative-meta-price {
+    color: var(--ad-ink);
+    font-variant-numeric: tabular-nums;
 }
 
 /* ------------------------------------------------------------------ close */
 .creative-close {
     display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: 4cqw;
-    width: calc(100cqw - 2 * var(--creative-gutter));
-}
-.creative-close-copy {
-    display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 2.4cqh;
-    max-width: 56%;
+    gap: 2.6cqh;
 }
 .creative-close-line {
     font-family: var(--font-display);
     font-size: clamp(1.25rem, 5.6cqw, 7rem);
+    font-weight: 500;
     line-height: 1;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.045em;
     text-wrap: balance;
-}
-.creative-close-meta {
-    display: flex;
-    align-items: center;
-    gap: 1.6cqw;
 }
 .creative-code {
     font-family: var(--font-label);
-    font-size: 1.9cqw;
+    font-size: 2cqw;
     font-weight: 500;
-    letter-spacing: 0.16em;
-    padding: 0.5cqw 0.9cqw;
-    border: 1px solid color-mix(in srgb, var(--color-fg) 30%, transparent);
+    letter-spacing: 0.18em;
+    padding: 0.6cqw 1cqw;
+    border: 1px solid var(--ad-rule);
     border-radius: 0.25rem;
 }
 .creative-close-note {
-    font-size: 1.25cqw;
-    color: var(--color-muted);
+    font-size: 1.3cqw;
+    color: var(--ad-muted);
 }
 .creative-qr {
+    position: absolute;
+    top: 50%;
+    right: calc((100cqw - var(--ad-panel) - 46cqh) / 2);
+    transform: translateY(-50%);
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 1cqh;
-    padding: 1.4cqh;
-    background: var(--color-fg);
+    gap: 1.2cqh;
+    padding: 1.8cqh;
+    background: var(--palette-ink-50);
     border-radius: 0.25rem;
-    box-shadow: 0.45cqw 0.45cqw 0 var(--creative-accent);
+    box-shadow: 0.5cqw 0.5cqw 0 var(--creative-accent);
+}
+.creative-canvas[data-theme="dark"] .creative-qr {
+    right: calc(var(--creative-gutter) * 1.4);
 }
 .creative-qr-image {
     display: block;
@@ -220,55 +284,16 @@
 }
 .creative-qr-caption {
     font-family: var(--font-label);
-    font-size: 1cqw;
+    font-size: 1.1cqw;
     font-weight: 500;
     letter-spacing: 0.2em;
     text-transform: uppercase;
-    color: var(--color-canvas);
-}
-
-/* ------------------------------------------------------------------ legacy + house */
-.creative-legacy {
-    position: relative;
-    display: grid;
-    grid-template-columns: repeat(var(--legacy-cols, 1), minmax(0, 1fr));
-    gap: 4cqw;
-    height: 100%;
-    padding: var(--creative-gutter);
-}
-.creative-legacy[data-count="2"] {
-    --legacy-cols: 2;
-}
-.creative-legacy[data-count="3"] {
-    --legacy-cols: 3;
-}
-/* The logo holds the top edge, the line sits on the bottom, the space between is the design. */
-.creative-legacy-slot {
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    align-items: flex-start;
-    min-width: 0;
-}
-.creative-legacy-logo {
-    height: 8cqh;
-    max-width: 100%;
-    object-fit: contain;
-    padding-bottom: 1.6cqh;
-    border-bottom: 0.25cqw solid var(--creative-accent);
-}
-.creative-legacy[data-count="1"] .creative-hook {
-    max-width: 62cqw;
-    font-size: clamp(1.25rem, 8.4cqw, 10rem);
-}
-.creative-legacy[data-count="2"] .creative-hook,
-.creative-legacy[data-count="3"] .creative-hook {
-    font-size: clamp(1rem, 4.4cqw, 5rem);
+    color: var(--palette-ink-950);
 }
 
 /*
  * Distance-aware layout (screen.attention.distance_band, the nearest looking viewer).
- * Far: only what reads from across the shop — a bigger hook and price, no fine print.
+ * Far: only what reads from across the shop — a bigger line and price, no fine print.
  * Near: the QR and code come forward for scanning. Unknown keeps the default layout.
  * Sizes ease so a band change never jumps; the stage and copy never change here.
  */
@@ -283,21 +308,18 @@
 .creative-approach {
     display: none;
     font-family: var(--font-label);
-    font-size: 1.2cqw;
+    font-size: 1.3cqw;
     font-weight: 500;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
 }
 .creative-canvas[data-distance="far"] .creative-hook {
-    font-size: clamp(1.25rem, 9.4cqw, 11rem);
-}
-.creative-canvas[data-distance="far"] .creative-story {
-    max-width: 72%;
+    font-size: clamp(1.25rem, 8.6cqw, 11rem);
 }
 .creative-canvas[data-distance="far"] .creative-price.is-hero .creative-price-figure {
     font-size: clamp(2rem, 15cqw, 17rem);
 }
-.creative-canvas[data-distance="far"] .creative-label,
+.creative-canvas[data-distance="far"] .creative-label:not(.creative-meta-price),
 .creative-canvas[data-distance="far"] .creative-close-note,
 .creative-canvas[data-distance="far"] .creative-price-party {
     visibility: hidden;
@@ -309,5 +331,5 @@
     height: 52cqh;
 }
 .creative-canvas[data-distance="near"] .creative-code {
-    font-size: 2.4cqw;
+    font-size: 2.6cqw;
 }

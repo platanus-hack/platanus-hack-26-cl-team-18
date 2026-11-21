@@ -128,3 +128,21 @@ it("aborts an unused request and does not cache a late decode", async () => {
     await Promise.resolve();
     expect(voice.isReady("/retired.mp3")).toBe(false);
 });
+
+it("announces actual playback and interruption without repeating the same voice", async () => {
+    const { context } = fakeContext();
+    const playback = vi.fn();
+    const voice = new VoicePlayer(
+        () => context,
+        () => ok(8),
+        playback,
+    );
+    await voice.prepare("/voice.mp3", new AbortController().signal);
+    expect(playback).not.toHaveBeenCalled();
+    expect(voice.play("creative", "/voice.mp3")).toBe(true);
+    expect(playback).toHaveBeenLastCalledWith("creative", true, 8000);
+    voice.stop();
+    expect(playback).toHaveBeenLastCalledWith("creative", false, 0);
+    expect(voice.play("creative", "/voice.mp3")).toBe(false);
+    expect(playback).toHaveBeenCalledTimes(2);
+});

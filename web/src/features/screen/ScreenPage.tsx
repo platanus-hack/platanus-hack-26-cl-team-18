@@ -57,7 +57,20 @@ export function ScreenPage() {
                 },
             }),
     );
-    const [voice] = useState(() => new VoicePlayer());
+    const [voice] = useState(() => {
+        let seq = 0;
+        return new VoicePlayer(undefined, undefined, (creativeId, playing, durationMs) => {
+            socket.send({
+                type: "player.voice",
+                v: 1,
+                screen_id: screenId,
+                creative_id: creativeId,
+                seq: ++seq,
+                playing,
+                duration_ms: durationMs,
+            });
+        });
+    });
     const state = useStore(store, (s) => s);
 
     useEffect(() => {

@@ -27,10 +27,16 @@ export class VoicePlayer {
     private readonly played = new Set<string>();
     private readonly pending = new Map<string, PendingVoice>();
     private current: AudioBufferSourceNode | null = null;
+    private currentCreative: string | null = null;
 
     constructor(
         private readonly createContext: AudioContextFactory = () => new AudioContext(),
         private readonly fetcher: typeof fetch = (input, init) => fetch(input, init),
+        private readonly playback: (
+            creativeId: string,
+            playing: boolean,
+            durationMs: number,
+        ) => void = () => {},
     ) {}
 
     private ensureContext(): { context: AudioContext; gain: GainNode } {
@@ -108,13 +114,25 @@ export class VoicePlayer {
         const buffer = this.buffers.get(url);
         if (buffer === undefined || this.played.has(key)) return false;
         const { context, gain } = this.ensureContext();
-        if (context.state === "suspended") void context.resume();
         this.stop();
         const source = context.createBufferSource();
         source.buffer = buffer;
         source.connect(gain);
-        source.start();
         this.current = source;
+        this.currentCreative = creativeId;
+        source.onended = () => {
+            if (this.current === source) this.stop();
+        };
+        const start = () => {
+            if (this.current !== source) return;
+            source.start();
+            this.playback(creativeId, true, Math.min(120000, Math.ceil(buffer.duration * 1000)));
+        };
+        if (context.state === "suspended")
+            void context.resume().then(start, () => {
+                if (this.current === source) this.stop();
+            });
+        else start();
         this.played.add(key);
         return true;
     }
@@ -127,5 +145,7 @@ export class VoicePlayer {
             // already ended
         }
         this.current = null;
+        if (this.currentCreative !== null) this.playback(this.currentCreative, false, 0);
+        this.currentCreative = null;
     }
 }
