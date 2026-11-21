@@ -1,7 +1,7 @@
 """Compose one screen's live snapshot-to-creative flow and the shared seed market."""
 
 from base64 import b64encode
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from decimal import ROUND_CEILING, Decimal
@@ -27,12 +27,14 @@ from app.contract.messages import (
     CreativeSpec,
     CreativeUpgraded,
     DegradationFlag,
+    DistanceBand,
     LatencyTrace,
     MoneyDTO,
     PlaybackReport,
     PlayerDisplayed,
     ScreenAttention,
     StockSet,
+    Tracklet,
     UpgradeKind,
 )
 from app.modules.auction.application.desk import AuctionDesk
@@ -184,7 +186,7 @@ def seed_market(
         )
         for name, copy, color in (
             ("Voltio", "Voltio · Energía para tu próximo entrenamiento.", "#c6f26b"),
-            ("Café Patio", "Café Patio · Tu pausa después de entrenar.", "#f5bb84"),
+            ("Café Patio", "Café Patio · Café de grano y algo para acompañar.", "#f5bb84"),
             ("Malta Sur", "Malta Sur · Cerveza artesanal.", "#f6d15a"),
             ("Rayo", "Rayo · Energía para tu día.", "#b9adff"),
         )
@@ -371,7 +373,7 @@ def register_demo(
                 brand_id=BrandId.create(ids.new_uuid7()),
                 name="team18",
                 logo_url=market.house_logo_url,
-                stock_copy="team18 · Acércate a la pantalla.",
+                stock_copy="team18 · Acércate. Hay una oferta para tu grupo.",
                 accent_color="#c6f26b",
             ),
         ),
@@ -461,6 +463,7 @@ def register_demo(
                         creative_id=current_creative.creative_id,
                         looking=len(looks) if snapshot.tracklets else snapshot.looking,
                         dwell_s=max(looks, default=0.0),
+                        distance_band=nearest_band(snapshot.tracklets),
                         measured_at=measured_at.value,
                     )
                 )
@@ -1250,6 +1253,15 @@ def register_demo(
 
 
 _CEILING = RoundingPolicy.create(money_rounding=ROUND_CEILING)
+
+
+_NEAREST_FIRST = (DistanceBand.NEAR, DistanceBand.MID, DistanceBand.FAR)
+
+
+def nearest_band(tracklets: Sequence[Tracklet]) -> DistanceBand | None:
+    """The nearest looking viewer's distance band; the layout serves whoever can read it."""
+    bands = {t.distance_band for t in tracklets if t.looking}
+    return next((band for band in _NEAREST_FIRST if band in bands), None)
 
 
 def _slug(name: str) -> str:

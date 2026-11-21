@@ -454,3 +454,52 @@ layouts, real 1280×720 video decoding, template selection, media switching,
 JSON export and stage previews; no uncaught browser errors were observed.
 Camera-to-TV latency and live-provider generation latency remain separate
 hardware/provider measurements.
+
+## 12. House style: copy that reads like an agency wrote it (2026-11-21)
+
+The ad should read like copy from a senior retail copywriter, not a chatbot.
+Stock templates, the Claude prompt and the guard all follow the same rules, so
+an AI draft can only replace stock copy if it keeps them.
+
+**Copy rules**
+
+| Line | Rule | Example |
+|---|---|---|
+| teaser | A statement of 6 words or fewer that makes the angle obvious. Two beats work well. The daypart sharpens it. | "Entrenaron. Ahora recarguen." · "El primer café del día." · "Pilas bajas. Recarga aquí." |
+| offer | The approved offer text (or label) **verbatim**, then the group, then the price at the end. | "Voltio + Café Patio x3 para los 3 por $8.490." |
+| close | One instruction that matches the real redemption flow (scan, then *Canjear en caja*). | "Escanea y canjea en caja." |
+
+- No question openers ("¿Hambre?"), exclamation marks, ellipses, em dashes or emojis.
+- At most one Chilean idiom per ad ("pilas bajas", "bajón", "al paso").
+- Filler never airs. `lexicon.CLICHES` lists it ("momento perfecto", "experiencia", "descubre",
+  "irresistible", "disfruta", "te lo mereces"…). The guard rejects it as `CLICHE`; it also
+  rejects `! ¡ … —` and `...`.
+- The offer's quantities and items are the brands' claims. "Voltio + Café Patio x2" never becomes
+  "Voltio más dos Café Patio". The guard rejects such a line as `OFFER_CHANGED`. Joining items with
+  "+", "y" or "más" counts as the same text.
+
+**Layout** (`web/src/features/screen/CreativeView.tsx`, `creative.css`), drawn from the Relvo
+brand system:
+
+- Three typefaces, one job each: Instrument Serif for the hook, Instrument Sans for products and
+  the price, Geist Mono in caps for labels. All are self-hosted and preloaded for the kiosk.
+- One accent, the lead brand's, used once per stage: on the price, or on the QR's edge.
+- The price is the largest number on screen: a small "$", tabular digits. The offer stage drops the
+  copy's trailing price (`splitOfferHeadline`) so the price isn't said twice. Only an exact match of
+  the approved price at the end of the line is dropped.
+- The co-brand lockup uses the real logos with "×" between partners. No filler labels.
+- Distance-aware: far enlarges the hook and the price and hides fine print; near enlarges the QR.
+- The accent must reach 4.5:1 contrast on the dark canvas (`accent.ts`). Otherwise the ad falls
+  back to white, so a navy or deep-red brand colour never hides the price.
+- The house ad and any spec without stages use the same composition: logo top-left over a thin
+  accent rule, and the line large at the bottom. The kit's "Brand · " prefix is dropped, because
+  the logo already names the brand.
+
+**Targeting controls in the studio** (`CampaignGenerate`):
+
+- `brands` order is slot order, so the first brand leads.
+- `moment` adds `energy`, backed by IAB 997 Energy Drinks.
+- `daypart` picks the hook.
+- The preview can simulate viewer distance.
+
+None of these changes the offer or its price.

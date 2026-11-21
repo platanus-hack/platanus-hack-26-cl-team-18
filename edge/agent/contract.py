@@ -400,6 +400,9 @@ class ScreenAttention(_Message):
     creative_id: EntityId | None = None
     looking: Annotated[int, Field(ge=0)]
     dwell_s: Annotated[float, Field(ge=0.0)]
+    # The nearest looking viewer's band: the player sizes the layout for it
+    # (far: headline and price only; near: the QR up front). None = unknown.
+    distance_band: DistanceBand | None = None
     measured_at: AwareDatetime
 
 
@@ -705,11 +708,14 @@ class CampaignCatalog(_Message):
 
 class CampaignGenerate(_Message):
     type: Literal["campaign.generate"] = "campaign.generate"
+    # Slot order: the first brand leads (its logo first, the hook written for it).
     brands: Annotated[list[str], Field(min_length=1, max_length=2)]
     party_size: Annotated[int, Field(ge=1, le=12)] = 2
-    moment: Literal["post_workout", "coffee_break", "hunger", "queue", "complete_basket"] = (
-        "post_workout"
-    )
+    moment: Literal[
+        "post_workout", "coffee_break", "hunger", "energy", "queue", "complete_basket"
+    ] = "post_workout"
+    # The hour sharpens the hook ("El primer café del día"); None = any time.
+    daypart: Literal["morning", "midday", "afternoon", "evening", "night"] | None = None
     minor_likely: bool = False
     media: Literal["photo", "video"] = "video"
 

@@ -5,6 +5,7 @@ import {
     nextStageName,
     stageAt,
     stageNamed,
+    viewingDistance,
     type AttentionSample,
 } from "./stages";
 
@@ -35,7 +36,7 @@ describe("nextStageName (attention-driven dwell)", () => {
         looking = 1,
         receivedAt = 10_000,
         creativeId: string | null = "c1",
-    ) => ({ creativeId, looking, dwellS, receivedAt }) satisfies AttentionSample;
+    ) => ({ creativeId, looking, dwellS, distance: null, receivedAt }) satisfies AttentionSample;
     const base = { current: "teaser", playKey: "c1", elapsedMs: 20_000, now: 10_000 } as const;
 
     it.each([
@@ -73,5 +74,29 @@ describe("nextStageName (attention-driven dwell)", () => {
     it("maps a name to the spec's stage", () => {
         expect(stageNamed("close", STAGES)?.copy_text).toContain("QR");
         expect(stageNamed("teaser", [STAGES[1]!])?.name).toBe("offer");
+    });
+});
+
+describe("viewingDistance (distance-aware layout)", () => {
+    const sample = (
+        distance: AttentionSample["distance"],
+        looking = 1,
+        receivedAt = 10_000,
+    ): AttentionSample => ({ creativeId: "c1", looking, dwellS: 1, distance, receivedAt });
+
+    it.each([
+        ["follows the nearest looking viewer", sample("far"), null, "far"],
+        ["a viewer stepping close switches to near", sample("near"), "far", "near"],
+        ["nobody looking keeps the last band", sample("near", 0), "far", "far"],
+        ["an unknown band keeps the last one", sample(null), "mid", "mid"],
+        ["no attention: default layout", null, "near", null],
+    ] as const)("%s", (_label, input, previous, expected) => {
+        expect(viewingDistance(input, 10_000, previous)).toBe(expected);
+    });
+
+    it("stale attention drops back to the default layout", () => {
+        expect(
+            viewingDistance(sample("far"), 10_000 + ATTENTION_FALLBACK_MS + 1, "far"),
+        ).toBeNull();
     });
 });

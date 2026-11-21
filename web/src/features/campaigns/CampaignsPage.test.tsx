@@ -146,16 +146,16 @@ async function click(element: HTMLElement) {
 
 it("renders the real shared player with both brands, product photography and optional video", async () => {
     await settle();
-    expect(host.querySelector(".creative-photo")).not.toBeNull();
+    expect(host.querySelector("img.creative-media")).not.toBeNull();
     expect(host.querySelector("video")?.getAttribute("src")).toContain("video.mp4");
     expect(host.querySelector(".creative-brands")?.textContent).toContain("Voltio");
     expect(host.querySelector(".creative-brands")?.textContent).toContain("Café Patio");
-    expect(host.querySelector(".creative-headline")?.textContent).toBe("Oferta para 2");
+    expect(host.querySelector(".creative-offer-line")?.textContent).toBe("Oferta para 2");
     await click(button("Fotografía"));
     await settle();
     expect(host.querySelector("video")).toBeNull();
-    expect(host.querySelector(".creative-photo")).not.toBeNull();
-    await click(button("03 · Convertir"));
+    expect(host.querySelector("img.creative-media")).not.toBeNull();
+    await click(button("03 · Canje"));
     expect(host.textContent).toContain("El QR se emite al activar la campaña.");
 });
 
@@ -173,7 +173,7 @@ it("drops a late campaign result after a newer group size is ready", async () =>
     expect(button("Exportar campaña").disabled).toBe(true);
     await click(host.querySelectorAll<HTMLButtonElement>(".studio-party-options button")[3]!);
     await settle();
-    expect(host.querySelector(".creative-headline")?.textContent).toBe("Oferta para 4");
+    expect(host.querySelector(".creative-offer-line")?.textContent).toBe("Oferta para 4");
     await act(async () => {
         resolve(
             generated(
@@ -183,6 +183,7 @@ it("drops a late campaign result after a newer group size is ready", async () =>
                     brands: ["voltio", "cafe-patio"],
                     party_size: 3,
                     moment: "post_workout",
+                    daypart: null,
                     minor_likely: false,
                     media: "video",
                 }),
@@ -190,7 +191,7 @@ it("drops a late campaign result after a newer group size is ready", async () =>
         );
         await Promise.resolve();
     });
-    expect(host.querySelector(".creative-headline")?.textContent).toBe("Oferta para 4");
+    expect(host.querySelector(".creative-offer-line")?.textContent).toBe("Oferta para 4");
 });
 
 it("handles malformed generator output and disables exporting the previous draft", async () => {

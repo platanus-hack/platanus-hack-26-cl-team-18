@@ -4,12 +4,14 @@ import {
     type CampaignCatalog,
     type CampaignGenerate,
     type CampaignGenerated,
+    type DistanceBand,
 } from "@/contract";
 import { CreativeView } from "@/features/screen";
 import { assetUrl, backendHttpUrl } from "@/lib/config";
 import { WorkspaceHeader } from "@/shared/ui/WorkspaceHeader";
 import {
     ArrowDownToLine,
+    ArrowLeftRight,
     ArrowRight,
     Check,
     ChevronRight,
@@ -26,36 +28,89 @@ import "./campaigns.css";
 const MOMENTS = [
     ["post_workout", "Después de entrenar"],
     ["coffee_break", "Una pausa para café"],
-    ["hunger", "Algo rico para comer"],
-    ["queue", "Mientras esperan"],
-    ["complete_basket", "Completar la compra"],
+    ["hunger", "Hambre o antojo"],
+    ["energy", "Pilas bajas"],
+    ["queue", "Esperando en la fila"],
+    ["complete_basket", "Ya tienen un producto en la mano"],
 ] as const;
 
-const STARTERS = [
+type Daypart = NonNullable<CampaignGenerate["daypart"]>;
+const DAYPARTS: readonly (readonly [Daypart | null, string])[] = [
+    [null, "Siempre"],
+    ["morning", "Mañana"],
+    ["midday", "Mediodía"],
+    ["afternoon", "Tarde"],
+    ["night", "Noche"],
+];
+
+const DISTANCES: readonly (readonly [DistanceBand | undefined, string])[] = [
+    ["near", "Cerca"],
+    [undefined, "Media"],
+    ["far", "Lejos"],
+];
+
+interface Starter {
+    title: string;
+    subtitle: string;
+    brands: readonly string[];
+    party: number;
+    moment: CampaignGenerate["moment"];
+    daypart: Daypart | null;
+    media: CampaignGenerate["media"];
+}
+
+const STARTERS: readonly Starter[] = [
     {
-        title: "Recarga en equipo",
-        subtitle: "Post-entreno · para 3",
+        title: "Salida del gimnasio",
+        subtitle: "Voltio lidera · para 3",
         brands: ["voltio", "cafe-patio"],
         party: 3,
         moment: "post_workout",
+        daypart: null,
         media: "video",
     },
     {
-        title: "La pausa de la tarde",
-        subtitle: "Café + energía · para 2",
+        title: "Café de media tarde",
+        subtitle: "Café Patio lidera · para 2",
         brands: ["cafe-patio", "rayo"],
         party: 2,
         moment: "coffee_break",
+        daypart: "afternoon",
         media: "photo",
     },
     {
-        title: "Completa tu café",
-        subtitle: "El complemento perfecto",
+        title: "Pilas bajas",
+        subtitle: "Rayo lidera · tarde",
+        brands: ["rayo", "cafe-patio"],
+        party: 1,
+        moment: "energy",
+        daypart: "afternoon",
+        media: "video",
+    },
+    {
+        title: "Completa el café",
+        subtitle: "Producto en mano · para 1",
         brands: ["cafe-patio", "voltio"],
         party: 1,
         moment: "complete_basket",
+        daypart: null,
         media: "video",
     },
+];
+
+/** What each server-side check guarantees, in the advertiser's words. */
+const CHECKS: Record<string, readonly [string, string]> = {
+    real_brand_assets: ["Logos reales", "Del kit de cada marca, nunca generados."],
+    approved_pairing: ["Pareja aprobada", "Las dos marcas se aceptan como partners."],
+    guarded_copy: ["Textos revisados", "Sin competidores, claims ni frases de relleno."],
+    fixed_offer_price: ["Precio del catálogo", "El anuncio no puede cambiarlo."],
+    minor_safety: ["Protección de menores", "Bloquea categorías restringidas si hay menores."],
+};
+
+const STAGE_LABELS = [
+    ["teaser", "01 · Gancho"],
+    ["offer", "02 · Oferta"],
+    ["close", "03 · Canje"],
 ] as const;
 
 async function readJson(
@@ -98,6 +153,8 @@ export function CampaignsPage() {
     const [brands, setBrands] = useState(["voltio", "cafe-patio"]);
     const [party, setParty] = useState(2);
     const [moment, setMoment] = useState<CampaignGenerate["moment"]>("post_workout");
+    const [daypart, setDaypart] = useState<Daypart | null>(null);
+    const [distance, setDistance] = useState<DistanceBand | undefined>(undefined);
     const [media, setMedia] = useState<CampaignGenerate["media"]>("video");
     const [minor, setMinor] = useState(false);
     const [stage, setStage] = useState<"teaser" | "offer" | "close">("offer");
@@ -129,10 +186,11 @@ export function CampaignsPage() {
             brands,
             party_size: party,
             moment,
+            daypart,
             minor_likely: minor,
             media,
         }),
-        [brands, party, moment, minor, media],
+        [brands, party, moment, daypart, minor, media],
     );
     const requestKey = JSON.stringify(request);
     const busy = brands.length > 0 && (working || responseFor !== requestKey) && error === null;
@@ -174,7 +232,10 @@ export function CampaignsPage() {
         link.click();
         URL.revokeObjectURL(url);
     };
-    const selected = catalog?.brands.filter((brand) => brands.includes(brand.slug)) ?? [];
+    // In slot order: the first brand leads the creative.
+    const selected = brands.flatMap(
+        (slug) => catalog?.brands.find((brand) => brand.slug === slug) ?? [],
+    );
     return (
         <main className="paper-theme campaign-studio">
             <WorkspaceHeader />
@@ -185,15 +246,15 @@ export function CampaignsPage() {
                 </div>
                 <section className="studio-heading">
                     <div>
-                        <p className="eyebrow">CREATIVIDAD QUE ENTIENDE EL MOMENTO</p>
+                        <p className="eyebrow">NUEVA CAMPAÑA</p>
                         <h1>
-                            Dos marcas.
+                            Tú armas la oferta.
                             <br />
-                            <span>Un gran momento.</span>
+                            <span>La pantalla elige el momento.</span>
                         </h1>
                         <p>
-                            Convierte una pausa, una fila o un antojo en una oferta que hace
-                            sentido.
+                            Elige las marcas, la situación y la hora. La vista previa muestra el
+                            anuncio tal como sale en tienda, con el precio aprobado.
                         </p>
                     </div>
                     <button
@@ -215,6 +276,7 @@ export function CampaignsPage() {
                                 setBrands([...starter.brands]);
                                 setParty(starter.party);
                                 setMoment(starter.moment);
+                                setDaypart(starter.daypart);
                                 setMedia(starter.media);
                             }}
                         >
@@ -232,11 +294,12 @@ export function CampaignsPage() {
                         <div className="studio-step">
                             <span>01</span>
                             <h2>Las marcas</h2>
-                            <small>Hasta 2, mejor juntas</small>
+                            <small>Hasta 2 · la primera lidera</small>
                         </div>
                         <div className="studio-brand-grid">
                             {catalog?.brands.map((brand) => {
                                 const chosen = brands.includes(brand.slug);
+                                const leads = brands.length === 2 && brands[0] === brand.slug;
                                 const compatible = brands.every(
                                     (slug) => slug === brand.slug || brand.partners.includes(slug),
                                 );
@@ -273,16 +336,31 @@ export function CampaignsPage() {
                                         </div>
                                         <strong>{brand.name}</strong>
                                         <small>
-                                            {chosen
-                                                ? "Seleccionada"
-                                                : disabled
-                                                  ? "Combina con un partner"
-                                                  : "Añadir marca"}
+                                            {leads
+                                                ? "Lidera"
+                                                : chosen
+                                                  ? brands.length === 2
+                                                      ? "Acompaña"
+                                                      : "Seleccionada"
+                                                  : disabled
+                                                    ? "No es partner aprobado"
+                                                    : "Añadir marca"}
                                         </small>
                                     </button>
                                 );
                             })}
                         </div>
+                        {brands.length === 2 && (
+                            <button
+                                className="studio-swap"
+                                onClick={() => {
+                                    setBrands([...brands].reverse());
+                                }}
+                            >
+                                <ArrowLeftRight size={15} />
+                                Que lidere {selected[1]?.name ?? "la otra marca"}
+                            </button>
+                        )}
                         <div className="studio-partner-note">
                             <ShieldCheck size={16} />
                             <span>
@@ -310,6 +388,20 @@ export function CampaignsPage() {
                                 </option>
                             ))}
                         </select>
+                        <div className="studio-label studio-party-label">¿A qué hora?</div>
+                        <div className="studio-segmented" role="group" aria-label="Hora del día">
+                            {DAYPARTS.map(([value, label]) => (
+                                <button
+                                    key={label}
+                                    aria-pressed={daypart === value}
+                                    onClick={() => {
+                                        setDaypart(value);
+                                    }}
+                                >
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
                         <div className="studio-label studio-party-label">
                             <Users size={14} /> Personas mirando <strong>{party}</strong>
                         </div>
@@ -377,6 +469,7 @@ export function CampaignsPage() {
                                     spec={campaign.spec}
                                     playKey={campaign.campaign_key}
                                     previewStage={stage}
+                                    previewDistance={distance}
                                 />
                             ) : (
                                 <div className="studio-preview-empty">
@@ -396,18 +489,29 @@ export function CampaignsPage() {
                         </div>
                         <div className="studio-preview-bottom">
                             <div className="studio-stages">
-                                {(
-                                    [
-                                        ["teaser", "01 · Atraer"],
-                                        ["offer", "02 · Ofrecer"],
-                                        ["close", "03 · Convertir"],
-                                    ] as const
-                                ).map(([value, label]) => (
+                                {STAGE_LABELS.map(([value, label]) => (
                                     <button
                                         key={value}
                                         aria-pressed={stage === value}
                                         onClick={() => {
                                             setStage(value);
+                                        }}
+                                    >
+                                        {label}
+                                    </button>
+                                ))}
+                            </div>
+                            <div
+                                className="studio-stages"
+                                role="group"
+                                aria-label="Distancia del público"
+                            >
+                                {DISTANCES.map(([value, label]) => (
+                                    <button
+                                        key={label}
+                                        aria-pressed={distance === value}
+                                        onClick={() => {
+                                            setDistance(value);
                                         }}
                                     >
                                         {label}
@@ -434,10 +538,26 @@ export function CampaignsPage() {
                                 </button>
                             </div>
                         )}
+                        {campaign && !error && (
+                            <ol className="studio-copy" aria-label="Textos del anuncio">
+                                {campaign.spec.stages.map((item) => (
+                                    <li key={item.name}>
+                                        <span>
+                                            {STAGE_LABELS.find(([name]) => name === item.name)?.[1]}
+                                        </span>
+                                        <p>{item.copy_text}</p>
+                                    </li>
+                                ))}
+                            </ol>
+                        )}
                         <div className="studio-result-details">
                             <div>
-                                <p className="eyebrow">UNA CAMPAÑA, MÁS POSIBILIDADES</p>
-                                <h2>{campaign?.title ?? "Tu próxima gran combinación"}</h2>
+                                <p className="eyebrow">
+                                    {campaign?.spec.copy_source === "stock"
+                                        ? "TEXTOS BASE · REVISADOS"
+                                        : "TEXTOS IA · REVISADOS"}
+                                </p>
+                                <h2>{campaign?.title ?? "Elige las marcas"}</h2>
                                 <p>
                                     {selected.map((brand) => brand.name).join(" + ")} · {party}{" "}
                                     {party === 1 ? "persona" : "personas"} ·{" "}
@@ -448,23 +568,34 @@ export function CampaignsPage() {
                             </div>
                             <span className="studio-draft">Borrador</span>
                         </div>
-                        <div className="studio-proof-grid">
-                            <div>
-                                <ShieldCheck size={18} />
-                                <strong>Marca protegida</strong>
-                                <p>Logos del kit y copy validado.</p>
-                            </div>
-                            <div>
-                                <Users size={18} />
-                                <strong>Oferta para el grupo</strong>
-                                <p>Precios del catálogo, sin inventar.</p>
-                            </div>
-                            <div>
-                                <Sparkles size={18} />
-                                <strong>Lista para este momento</strong>
-                                <p>Foto y video ya preparados.</p>
-                            </div>
-                        </div>
+                        {campaign && !error && (
+                            <section className="studio-checks" aria-label="Revisión del anuncio">
+                                <header>
+                                    <span>
+                                        Revisión · {campaign.checks.length} de{" "}
+                                        {campaign.checks.length} controles
+                                    </span>
+                                    <strong>
+                                        Calidad {Math.round(Number(campaign.quality_score) * 100)}
+                                        /100
+                                    </strong>
+                                </header>
+                                <ul>
+                                    {campaign.checks.map((check) => {
+                                        const [label, detail] = CHECKS[check] ?? [check, ""];
+                                        return (
+                                            <li key={check}>
+                                                <ShieldCheck size={15} />
+                                                <span>
+                                                    <strong>{label}</strong>
+                                                    {detail && <small>{detail}</small>}
+                                                </span>
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
+                            </section>
+                        )}
                         <p className="studio-disclosure">
                             Imágenes ilustrativas generadas con IA. El pack exportado es un borrador
                             para revisión; no activa campañas ni cambia presupuestos.

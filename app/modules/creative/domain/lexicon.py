@@ -174,6 +174,47 @@ SENSITIVE_OR_CREEPY: tuple[str, ...] = (
     "parecen",
 )
 
+# Marketing filler that reads machine-written (anti-slop, docs/creative-generation.md §12).
+# A line built on these says nothing a viewer can act on; stock copy stays on air instead.
+CLICHES: tuple[str, ...] = (
+    "momento perfecto",
+    "complemento perfecto",
+    "combinacion perfecta",
+    "dupla perfecta",
+    "match perfecto",
+    "experiencia*",
+    "descubre",
+    "descubri",
+    "eleva*",
+    "sumergete",
+    "deleit*",
+    "irresistible*",
+    "inigualable*",
+    "sin igual",
+    "imperdible*",
+    "no te lo pierdas",
+    "no te pierdas",
+    "increible*",
+    "espectacular*",
+    "siguiente nivel",
+    "otro nivel",
+    "explosion de sabor*",
+    "magia",
+    "magic*",
+    "epic*",
+    "desata*",
+    "revoluciona*",
+    "sinergia",
+    "tu momento",
+    "este momento",
+    "hecho para ti",
+    "pensado para ti",
+    "te lo mereces",
+    "date un gusto",
+    "vive la",
+    "disfruta*",
+)
+
 NUMBER_WORDS: Mapping[str, int] = {
     "uno": 1,
     "una": 1,

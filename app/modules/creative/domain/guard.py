@@ -16,6 +16,7 @@ from app.modules.common.domain.primitives.specification import Specification
 from app.modules.creative.domain.brief import CreativeBrief
 from app.modules.creative.domain.draft import CopyDraft, Stage
 from app.modules.creative.domain.lexicon import (
+    CLICHES,
     FORBIDDEN_CLAIMS,
     GROUP_WORDS,
     KNOWN_BRANDS,
@@ -41,6 +42,8 @@ class ViolationKind(StrEnum):
     SENSITIVE_INFERENCE = "sensitive_inference"
     CONTACT_OR_LINK = "contact_or_link"
     UNSAFE_CHARACTERS = "unsafe_characters"  # hidden/look-alike characters that dodge the rules
+    OFFER_CHANGED = "offer_changed"  # the offer line rewords what the basket contains
+    CLICHE = "cliche"  # filler phrases and shouting punctuation (anti-slop house style)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -71,6 +74,8 @@ _SPELLED_MONEY = ("mil", "millon*", "luca*", "luka*", "cientos", "quinientos")
 # Promo mechanics (2x1, 3x2) are claims: only if the brand approved them.
 _PROMO = re.compile(r"\b\d\s?x\s?\d\b")
 _THOUSANDS = re.compile(r"\b\d+\s?k\b|\b\d+\s?lucas?\b")  # "9k", "9 lucas"
+# Shouting and trailing-off punctuation: house style states, it never exclaims.
+_LOUD_PUNCTUATION = re.compile(r"[!¡…—]|\.\.\.")
 _SOCIAL = re.compile(r"\b(?:instagram|insta|tiktok|facebook|whatsapp|twitter|youtube)\b")
 
 
@@ -114,6 +119,19 @@ class CopyGuard(Specification[tuple[CopyDraft, CreativeBrief]]):
     def is_satisfied_by(self, candidate: tuple[CopyDraft, CreativeBrief]) -> bool:
         draft, brief = candidate
         return check_copy(draft, brief).passed
+
+
+_JOINER = re.compile(r"\s*(?:\+|\by\b|\bmas\b|,)\s*")
+
+
+def _carries(line: str, approved: str) -> bool:
+    """`approved` appears in `line`, ignoring case, accents, spacing and how items are joined
+    ("Rayo + Café Patio" = "Rayo y Café Patio"); quantities and items must stay as approved."""
+
+    def squash(text: str) -> str:
+        return re.sub(r"\s+", "", _JOINER.sub("+", normalize(text)))
+
+    return squash(approved) in squash(line)
 
 
 def _unsafe_characters(text: str) -> str | None:
@@ -211,6 +229,10 @@ def check_copy(draft: CopyDraft, brief: CreativeBrief) -> GuardVerdict:
             out.append(Violation(kind=ViolationKind.RESTRICTED_FOR_MINOR, where=where, detail=term))
         if (term := any_term(norm, FORBIDDEN_CLAIMS)) and not contains_term(approved_text, term):
             out.append(Violation(kind=ViolationKind.UNAPPROVED_CLAIM, where=where, detail=term))
+        if (term := any_term(norm, CLICHES)) and not contains_term(approved_text, term):
+            out.append(Violation(kind=ViolationKind.CLICHE, where=where, detail=term))
+        if (m := _LOUD_PUNCTUATION.search(text)) is not None:
+            out.append(Violation(kind=ViolationKind.CLICHE, where=where, detail=m.group(0)))
         if term := any_term(norm, SENSITIVE_OR_CREEPY):
             out.append(Violation(kind=ViolationKind.SENSITIVE_INFERENCE, where=where, detail=term))
         # Only the exact group the offer is priced for may be named (or numbers the brand
@@ -233,6 +255,16 @@ def check_copy(draft: CopyDraft, brief: CreativeBrief) -> GuardVerdict:
                     detail=offer.price_text,
                 )
             )
+
+    # The offer text is what the customer gets ("Voltio + Café Patio x3"): quantities and
+    # items are claims, so the offer line carries it (or the approved label, "Trío
+    # post-entreno") verbatim. "Voltio más dos Café Patio" rewords the basket: rejected.
+    if offer is not None and not (
+        _carries(draft.offer, offer.text) or _carries(draft.offer, offer.label)
+    ):
+        out.append(
+            Violation(kind=ViolationKind.OFFER_CHANGED, where=Stage.OFFER.value, detail=offer.text)
+        )
 
     visible = normalize(" ".join((draft.teaser, draft.offer, draft.close)))
     for name in brief.names:

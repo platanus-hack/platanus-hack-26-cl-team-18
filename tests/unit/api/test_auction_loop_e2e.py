@@ -153,7 +153,7 @@ def test_same_brands_refresh_the_offer_and_held_product_copy(loop: Loop) -> None
     held = loop.creative()
     assert set(paid_brands(held)) == set(paid_brands(duo)), held_auction.model_dump()
     assert held.spec.angle == "complete_basket"
-    assert "Tu Café Patio pide Voltio" in held.spec.stages[0].copy_text
+    assert "A tu Café Patio le falta Voltio" in held.spec.stages[0].copy_text
     assert held.spec.offer == trio.spec.offer
 
 
@@ -178,7 +178,7 @@ def test_new_group_is_held_to_the_floor_then_released(loop: Loop) -> None:
     assert set(paid_brands(creative)) == {"Voltio", "Café Patio"}
     assert creative.auction_id == held.auction_id
     # Two people looking: the basket offer is sized to the group (duo tier).
-    assert "Para los 2" in creative.spec.slots[0].copy_text
+    assert "para los 2" in creative.spec.slots[0].copy_text
     assert "$5.990" in creative.spec.slots[0].copy_text
     # The trace keeps the hold so latency metrics can exclude it.
     assert creative.trace.swap_not_before == held.trace.swap_not_before

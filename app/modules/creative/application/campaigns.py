@@ -26,12 +26,14 @@ from app.modules.creative.application.briefing import CreativeCatalog, MomentCon
 from app.modules.creative.application.rendering import render_spec
 from app.modules.creative.application.studio import CreativeStudio
 from app.modules.creative.domain.angle import Angle
+from app.modules.creative.domain.brief import Daypart
 from app.modules.creative.domain.offer import OfferBook
 
 MOMENT_SEGMENTS = {
     "post_workout": ("408", Angle.POST_WORKOUT),
     "coffee_break": ("977", Angle.COFFEE_BREAK),
     "hunger": ("1404", Angle.HUNGER),
+    "energy": ("997", Angle.ENERGY),  # Purchase Intent | Beverages | Energy Drinks
 }
 
 
@@ -112,7 +114,7 @@ class CampaignGenerator:
 
     def generate(self, request: CampaignGenerate) -> CampaignGenerated:
         started = perf_counter()
-        slugs = tuple(sorted(request.brands))
+        slugs = tuple(request.brands)  # slot order: the lead brand first
         if len(set(slugs)) != len(slugs) or any(slug not in self._ids for slug in slugs):
             raise ValueError("Selecciona una o dos marcas diferentes del catálogo")
         ids = tuple(self._ids[slug] for slug in slugs)
@@ -135,7 +137,7 @@ class CampaignGenerator:
                 raise ValueError(
                     "La combinación requiere marcas complementarias y una oferta aprobada"
                 )
-        key = compute_request_hash({**request.model_dump(mode="json"), "brands": slugs})[:24]
+        key = compute_request_hash(request.model_dump(mode="json"))[:24]
         with self._lock:
             if key in self._memo:
                 self._memo.move_to_end(key)
@@ -160,6 +162,7 @@ class CampaignGenerator:
                 held_brand_ids=frozenset(ids[:1])
                 if request.moment == "complete_basket"
                 else frozenset(),
+                daypart=Daypart(request.daypart) if request.daypart else None,
             )
             brief = assemble_brief(
                 basket=tuple((brand, self._bidders[brand].category) for brand in ids),
@@ -176,7 +179,7 @@ class CampaignGenerator:
                 raise ValueError("La campaña no superó la revisión de copy")
             spec = apply_campaign_media(
                 render_spec(brief, composed.draft, self._kits),
-                self._media.get("+".join(slugs)),
+                self._media.get("+".join(sorted(slugs))),
                 video=request.media == "video",
             )
             result = CampaignGenerated(

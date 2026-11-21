@@ -1,33 +1,27 @@
 {
-  "_comment": "Model responses per case id, replayed by RecordedCopywriter in the offline eval. Hand-written stand-ins in the shape Claude returns until `python -m evals creative --writer claude --record` overwrites them with real ones. Some entries are deliberately bad (changed price, invalid output, timeout, bland) so the fallback path is measured too.",
-  "model_version": "claude-haiku-5-5@low (fixture)",
+  "_comment": "Model responses per case id, replayed by RecordedCopywriter in the offline eval. Recorded with `python -m evals creative --writer claude --record` (house-style prompt, 2026-11-21); gym-trio, gym-duo, coffee-vs-energy and big-group are kept as deliberately bad stand-ins (changed price, bland, invalid output, timeout) so the fallback path is measured too. Re-recording overwrites them: restore them afterwards. latency_ms values are the earlier stand-ins, not the live run's (live Haiku p95 was ~4.4 s on 2026-11-21, above the 2.5 s copy timeout).",
+  "model_version": "claude-haiku-5-5@low",
   "recordings": {
     "hungry-said-duo": {
-      "teaser": "¿Hambre los 2? Brasa + Voltio al tiro",
-      "offer": "Para los 2 · Dúo bajón: 2 Brasa + 2 Voltio por $8.990",
-      "close": "Muestra el QR en caja · 10 min",
-      "voice_line": "¿Hambre? Para los dos, Brasa y Voltio por $8.990",
-      "latency_ms": 640,
-      "input_tokens": 1180,
-      "output_tokens": 142
+      "teaser": "Hambre a dos, resuelta.",
+      "offer": "2 Brasa + 2 Voltio para los 2 por $8.990.",
+      "close": "Escanea el QR y canjea en caja.",
+      "voice_line": "Hamburguesas a la parrilla y energía para los dos, por $8.990.",
+      "latency_ms": 640
     },
     "hungry-said-solo": {
-      "teaser": "¿Hambre? Café Patio + Miga, recién hecho",
-      "offer": "Once: Café Patio + Miga por $2.990",
-      "close": "Escanea el QR, listo en 2 minutos",
-      "voice_line": "¿Hambre? Un Café Patio con Miga por $2.990",
-      "latency_ms": 520,
-      "input_tokens": 1150,
-      "output_tokens": 128
+      "teaser": "Hambre a media tarde.",
+      "offer": "Café Patio + Miga $2.990.",
+      "close": "Escanea el QR y canjea en caja.",
+      "voice_line": "Café Patio y Miga juntos por $2.990, para cuando te dé el bajón.",
+      "latency_ms": 520
     },
     "gym-group-of-4": {
-      "teaser": "¿Post-entreno los 4? Recarguen al tiro",
-      "offer": "Para los 4 · Pack x4 post-entreno: Voltio + Café Patio por $10.990",
-      "close": "Un QR para los 4 · válido 10 min",
-      "voice_line": "Para los cuatro, Voltio y Café Patio, el pack post-entreno",
-      "latency_ms": 710,
-      "input_tokens": 1190,
-      "output_tokens": 150
+      "teaser": "Entrenaron. Ahora recarguen.",
+      "offer": "Voltio + Café Patio x4 para los 4 por $10.990.",
+      "close": "Escanea el QR y canjea en caja.",
+      "voice_line": "Después de entrenar, Voltio y Café Patio para los 4 por $10.990, canjea en caja.",
+      "latency_ms": 710
     },
     "gym-trio": {
       "teaser": "¿Post-entreno los 3? Voltio + Café Patio",
@@ -48,13 +42,11 @@
       "output_tokens": 90
     },
     "coffee-trio": {
-      "teaser": "¿Una pausa los 3? Café Patio + Miga",
-      "offer": "Para los 3 · Trío once: Café Patio + Miga x3 por $6.990",
-      "close": "Escanea el QR y pasa a caja · 10 min",
-      "voice_line": "Una pausa para los tres: Café Patio y Miga",
-      "latency_ms": 820,
-      "input_tokens": 1175,
-      "output_tokens": 140
+      "teaser": "Pausa corta. Café para todos.",
+      "offer": "Café Patio + Miga x3 para los 3 por $6.990.",
+      "close": "Escanea el QR y canjea en caja.",
+      "voice_line": "Pausa corta para los 3: Café Patio y Miga por $6.990, canjea en caja con el QR.",
+      "latency_ms": 820
     },
     "complete-the-basket": {
       "teaser": "Tu Café Patio pide una Miga",
@@ -75,40 +67,32 @@
       "output_tokens": 133
     },
     "queue-of-3": {
-      "teaser": "¿En la fila? Café Patio + Miga",
-      "offer": "Para los 3 · Trío once: Café Patio + Miga x3 por $6.990",
-      "close": "Pídelo con el QR: listo al pagar",
-      "voice_line": "Mientras esperan, Café Patio y Miga para los tres, listo al pagar",
-      "latency_ms": 900,
-      "input_tokens": 1190,
-      "output_tokens": 146
+      "teaser": "La fila avanza. Tu pedido también.",
+      "offer": "Café Patio + Miga x3 para los 3 por $6.990.",
+      "close": "Escanea el QR y canjea en caja.",
+      "voice_line": "Mientras esperas en caja, Café Patio y Miga te dejan tres para los tres por $6.990.",
+      "latency_ms": 900
     },
     "queue-but-said-hungry": {
-      "teaser": "¿Hambre los 2? Café Patio + Miga",
-      "offer": "Para los 2 · Once para dos: Café Patio + Miga x2 por $4.990",
-      "close": "Escanea el QR: listo al pagar",
-      "voice_line": "¿Hambre? Once para dos con Café Patio y Miga",
-      "latency_ms": 700,
-      "input_tokens": 1185,
-      "output_tokens": 139
+      "teaser": "Hambre a dos, resuelta aquí.",
+      "offer": "Café Patio + Miga x2 para los 2 por $4.990.",
+      "close": "Escanea el QR y canjea en caja.",
+      "voice_line": "Café Patio y Miga para los 2 por $4.990, escanea el QR y canjea en caja.",
+      "latency_ms": 700
     },
     "minor-in-group": {
-      "teaser": "¿Post-entreno los 3? Voltio + Café Patio",
-      "offer": "Para los 3 · Trío post-entreno: Voltio + Café Patio x3 por $8.490",
-      "close": "Escanea el QR · válido 10 min",
-      "voice_line": "Trío post-entreno para los tres con Voltio y Café Patio",
-      "latency_ms": 650,
-      "input_tokens": 1190,
-      "output_tokens": 137
+      "teaser": "Entrenaron. Ahora recarguen.",
+      "offer": "Voltio + Café Patio x3 para los 3 por $8.490.",
+      "close": "Escanea el QR y canjea en caja.",
+      "voice_line": "Voltio y Café Patio para los 3, por $8.490, después de entrenar.",
+      "latency_ms": 650
     },
     "adults-after": {
-      "teaser": "¿Panorama para los 2? Brasa + Malta Sur",
-      "offer": "Para los 2 · After para dos: 2 Brasa + 2 Malta Sur por $11.990",
-      "close": "Escanea el QR · válido 10 min",
-      "voice_line": "Un after para los dos, Brasa y Malta Sur",
-      "latency_ms": 760,
-      "input_tokens": 1180,
-      "output_tokens": 136
+      "teaser": "Brindis para dos, ahora.",
+      "offer": "2 Brasa + 2 Malta Sur para los 2 por $11.990.",
+      "close": "Escanea el QR y canjea en caja.",
+      "voice_line": "Brasa y Malta Sur para los 2 por $11.990, escanea el QR y canjea en caja.",
+      "latency_ms": 760
     },
     "weak-speech-intent": {
       "teaser": "¿Post-entreno los 2? Voltio + Café Patio",
@@ -120,13 +104,11 @@
       "output_tokens": 125
     },
     "hunger-without-food": {
-      "teaser": "¿Te falta energía? Voltio al tiro",
+      "teaser": "Pilas bajas. Recarga aquí.",
       "offer": "Voltio · Energía para tu próximo entrenamiento.",
-      "close": "Escanea el QR · válido 10 min",
-      "voice_line": "Voltio, energía para lo que viene",
-      "latency_ms": 500,
-      "input_tokens": 1120,
-      "output_tokens": 101
+      "close": "Escanea el QR y canjea en caja.",
+      "voice_line": "Voltio, energía para tu próximo entrenamiento, canjea con el QR en caja.",
+      "latency_ms": 500
     },
     "coffee-vs-energy": {
       "failure": "invalid_output",
@@ -135,13 +117,11 @@
       "output_tokens": 60
     },
     "energy-solo-viewer": {
-      "teaser": "¿Te falta energía? Rayo + Café Patio",
-      "offer": "Combo: Rayo + Café Patio por $3.290",
-      "close": "Recarga con el QR · válido 10 min",
-      "voice_line": "Recarga energía con Rayo y Café Patio",
-      "latency_ms": 580,
-      "input_tokens": 1170,
-      "output_tokens": 115
+      "teaser": "Pilas bajas. Recarga aquí.",
+      "offer": "Rayo y Café Patio juntos, para ti, por $3.290.",
+      "close": "Escanea y canjea en caja.",
+      "voice_line": "Rayo y Café Patio juntos por $3.290, escanea el código y canjea en caja.",
+      "latency_ms": 580
     },
     "ranked-signals": {
       "teaser": "¿Post-entreno los 3? Recarguen con Voltio",
@@ -153,22 +133,18 @@
       "output_tokens": 138
     },
     "two-intents-spoken": {
-      "teaser": "¿Una pausa los 2? Café Patio + Miga",
-      "offer": "Para los 2 · Once para dos: Café Patio + Miga x2 por $4.990",
-      "close": "Escanea el QR · válido 10 min",
-      "voice_line": "Un cafecito con Miga para los dos",
-      "latency_ms": 610,
-      "input_tokens": 1180,
-      "output_tokens": 128
+      "teaser": "Pausa corta. Café para dos.",
+      "offer": "Café Patio + Miga x2 para los 2 por $4.990.",
+      "close": "Escanea el QR y canjea en caja.",
+      "voice_line": "Café Patio y Miga para los 2 por $4.990, recién horneado y listo en caja.",
+      "latency_ms": 610
     },
     "solo-brand-group": {
-      "teaser": "¿Con hambre los 2? Miga, recién horneado",
+      "teaser": "Hambre de a dos. Resuelve aquí.",
       "offer": "Para los 2 · Miga · Recién horneado.",
-      "close": "Escanea el QR · válido 10 min",
-      "voice_line": "Para los dos, Miga recién horneada",
-      "latency_ms": 530,
-      "input_tokens": 1130,
-      "output_tokens": 104
+      "close": "Escanea el QR y canjea en caja.",
+      "voice_line": "Para los dos que quieren algo rico, Miga está recién horneado y lo canjeas en caja.",
+      "latency_ms": 530
     },
     "big-group": {
       "failure": "timeout",
@@ -177,13 +153,11 @@
       "output_tokens": 0
     },
     "hungry-group-of-4": {
-      "teaser": "¿Con hambre los 4? Brasa + Voltio",
-      "offer": "Para los 4 · Pack x4 bajón: 4 Brasa + 4 Voltio por $16.990",
-      "close": "Un QR para los 4 · válido 10 min",
-      "voice_line": "¿Hambre? Para los cuatro, Brasa y Voltio, el pack bajón",
-      "latency_ms": 870,
-      "input_tokens": 1190,
-      "output_tokens": 149
+      "teaser": "Hambre en grupo, resuelta aquí.",
+      "offer": "4 Brasa + 4 Voltio para los 4 por $16.990.",
+      "close": "Escanea el QR y canjea en caja.",
+      "voice_line": "Para los 4, hamburguesas a la parrilla de Brasa con Voltio por $16.990, escanea el QR y canjea en caja.",
+      "latency_ms": 870
     },
     "crowd-of-15": {
       "teaser": "¿Post-entreno? Recarguen todos al tiro",

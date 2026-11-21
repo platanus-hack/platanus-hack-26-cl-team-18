@@ -82,7 +82,7 @@ def run(coro):  # type: ignore[no-untyped-def]
 def test_compose_is_targeted_stock_without_a_writer() -> None:
     composed = studio().compose(GROUP)
     assert composed.draft.source is CopySource.STOCK
-    assert "los 4" in composed.draft.teaser and "hambre" in composed.draft.teaser
+    assert "hambre" in composed.draft.teaser.lower() and "para los 4" in composed.draft.offer
     assert "$10.970" in composed.draft.offer
     assert composed.score.verdict.passed  # latency is gated by the eval, not a unit test
 
@@ -135,7 +135,7 @@ def test_guard_rejection_keeps_stock_and_records_why() -> None:
 def test_safe_but_worse_copy_does_not_replace_stock() -> None:
     bland = CopyDraft(
         teaser="Voltio + Café Patio",
-        offer="Voltio + Café Patio por $10.970",
+        offer="Voltio + Café Patio x4 por $10.970",
         close="QR",
         voice_line="Voltio y Café Patio",
         source=CopySource.AI,

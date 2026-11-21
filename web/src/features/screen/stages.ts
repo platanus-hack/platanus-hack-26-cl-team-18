@@ -1,4 +1,4 @@
-import type { CreativeStage, CreativeStageName, ScreenAttention } from "@/contract";
+import type { CreativeStage, CreativeStageName, DistanceBand, ScreenAttention } from "@/contract";
 import { useEffect, useState } from "react";
 
 /**
@@ -18,6 +18,8 @@ export const STAGE_STARTS_MS: Record<CreativeStageName, number> = {
 /** Attention older than this no longer drives the stage; timers take over. */
 export const ATTENTION_FALLBACK_MS = 2_500;
 const TICK_MS = 100;
+/** Layout changes are coarse; 4 checks a second is plenty. */
+const DISTANCE_TICK_MS = 250;
 const ORDER: readonly CreativeStageName[] = ["teaser", "offer", "close"];
 
 /** The latest `screen.attention`, stamped with the player's receive time (epoch ms). */
@@ -25,6 +27,8 @@ export interface AttentionSample {
     readonly creativeId: string | null;
     readonly looking: number;
     readonly dwellS: number;
+    /** The nearest looking viewer's band, when the agent reports tracklets. */
+    readonly distance: DistanceBand | null;
     readonly receivedAt: number;
 }
 
@@ -33,6 +37,7 @@ export function toAttentionSample(message: ScreenAttention, receivedAt: number):
         creativeId: message.creative_id,
         looking: message.looking,
         dwellS: message.dwell_s,
+        distance: message.distance_band ?? null,
         receivedAt,
     };
 }
@@ -123,4 +128,37 @@ export function useDwellStage(
         };
     }, [playKey, readAttention]);
     return stageNamed(dwell.key === playKey ? dwell.name : "teaser", stages);
+}
+
+/**
+ * The layout's viewing distance: the live sample's band, else null (default layout).
+ * Nobody looking keeps the last band so the layout doesn't jump while eyes drift.
+ */
+export function viewingDistance(
+    sample: AttentionSample | null,
+    now: number,
+    previous: DistanceBand | null,
+): DistanceBand | null {
+    if (sample === null || now - sample.receivedAt > ATTENTION_FALLBACK_MS) return null;
+    if (sample.looking === 0) return previous;
+    return sample.distance ?? previous;
+}
+
+export function useViewingDistance(
+    readAttention: () => AttentionSample | null = noAttention,
+): DistanceBand | null {
+    const [distance, setDistance] = useState<DistanceBand | null>(null);
+    useEffect(() => {
+        let current: DistanceBand | null = null;
+        const timer = window.setInterval(() => {
+            const next = viewingDistance(readAttention(), Date.now(), current);
+            if (next === current) return;
+            current = next;
+            setDistance(next);
+        }, DISTANCE_TICK_MS);
+        return () => {
+            window.clearInterval(timer);
+        };
+    }, [readAttention]);
+    return distance;
 }

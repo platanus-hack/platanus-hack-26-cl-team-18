@@ -195,7 +195,7 @@ describe("screen display and voice lifecycle", () => {
         );
         vi.spyOn(console, "warn").mockImplementation(() => {});
         await show("broken-ad", null);
-        expect(visibleCopy()).toContain("Esta pantalla");
+        expect(visibleCopy()).toContain("Acércate");
         expect(visibleCopy()).not.toContain("broken-ad");
     });
 
@@ -211,7 +211,7 @@ describe("screen display and voice lifecycle", () => {
         });
         const video = host.querySelector("video")!;
         expect(video.style.opacity).toBe("0");
-        expect(host.textContent).toContain("Esta pantalla");
+        expect(host.textContent).toContain("Acércate");
         await act(async () => {
             video.dispatchEvent(new Event("canplaythrough"));
             await Promise.resolve();
@@ -222,7 +222,7 @@ describe("screen display and voice lifecycle", () => {
             await Promise.resolve();
         });
         expect(video.style.opacity).toBe("0");
-        expect(host.textContent).toContain("Esta pantalla");
+        expect(host.textContent).toContain("Acércate");
     });
 
     it("applies a copy upgrade immediately without decoding logos or replacing the mounted video", async () => {
@@ -350,7 +350,11 @@ describe("glass-to-glass and attention-driven stages", () => {
             .map(([sent]) => sent as { type: string; creative_id: string; seq: number })
             .filter((sent) => sent.type === "player.displayed");
 
-    function attention(looking: number, dwell: number): PlayerOutbound {
+    function attention(
+        looking: number,
+        dwell: number,
+        distance: "near" | "mid" | "far" | null = null,
+    ): PlayerOutbound {
         return {
             type: "screen.attention",
             v: 1,
@@ -358,6 +362,7 @@ describe("glass-to-glass and attention-driven stages", () => {
             creative_id: null,
             looking,
             dwell_s: dwell,
+            distance_band: distance,
             measured_at: new Date().toISOString(),
         };
     }
@@ -408,6 +413,26 @@ describe("glass-to-glass and attention-driven stages", () => {
         expect(visibleCopy()).toContain("El QR se emite al activar la campaña.");
     });
 
+    it("sizes the layout for the nearest looking viewer's distance", async () => {
+        await show("distance", null);
+        const canvas = () => host.querySelector<HTMLElement>(".creative-canvas");
+        expect(canvas()?.getAttribute("data-distance")).toBeNull();
+        await act(async () => {
+            harness.receive(attention(1, 1, "far"));
+            await vi.advanceTimersByTimeAsync(300);
+        });
+        expect(canvas()?.getAttribute("data-distance")).toBe("far");
+        await act(async () => {
+            harness.receive(attention(1, 2, "near"));
+            await vi.advanceTimersByTimeAsync(300);
+        });
+        expect(canvas()?.getAttribute("data-distance")).toBe("near");
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(3_000); // attention went silent
+        });
+        expect(canvas()?.getAttribute("data-distance")).toBeNull();
+    });
+
     it("renders the scannable QR, approved price, and code at the close stage", async () => {
         const spec = {
             ...HOUSE_AD.spec,
@@ -432,6 +457,35 @@ describe("glass-to-glass and attention-driven stages", () => {
         );
         expect(host.textContent).toContain("AB12CD");
         expect(host.textContent).toContain("válido 10 min");
+    });
+
+    it("sets the approved price apart at the offer stage instead of repeating it", async () => {
+        const spec = {
+            ...HOUSE_AD.spec,
+            stages: [
+                {
+                    name: "offer" as const,
+                    copy_text: "Voltio + Café Patio x3 para los 3 por $8.490.",
+                },
+            ],
+            offer: {
+                label: "Trío post-entreno",
+                text: "Voltio + Café Patio x3",
+                price: { amount: "8490", currency: "CLP" },
+                party_size: 3,
+            },
+        };
+        await act(async () => {
+            root.render(<CreativeView spec={spec} playKey="offer" previewStage="offer" />);
+            await Promise.resolve();
+        });
+        expect(host.querySelector(".creative-offer-line")?.textContent).toBe(
+            "Voltio + Café Patio x3 para los 3",
+        );
+        expect(
+            host.querySelector(".creative-price.is-hero .creative-price-figure")?.textContent,
+        ).toBe("$8.490");
+        expect(host.querySelector(".creative-label")?.textContent).toBe("Trío post-entreno");
     });
 });
 

@@ -68,16 +68,23 @@ def test_cobrand_drafts_preserve_real_assets_and_approved_prices_without_spendin
         clip = studio.get(campaign.spec.video_url, headers={"range": "bytes=0-31"})
         assert clip.status_code == 206 and clip.content[4:8] == b"ftyp"
     assert campaign.spec.qr_url is campaign.spec.redemption_code is None
+    assert [slot.brand_name for slot in campaign.spec.slots] == ["Voltio", "Café Patio"]
     again = CampaignGenerated.model_validate(
-        studio.post(
-            "/api/campaigns/generate", json={**request, "brands": list(reversed(request["brands"]))}
-        ).json()
+        studio.post("/api/campaigns/generate", json=request).json()
     )
     assert (
         again.cache_hit
         and again.campaign_key == campaign.campaign_key
         and again.spec == campaign.spec
     )
+    led_by_coffee = CampaignGenerated.model_validate(
+        studio.post(
+            "/api/campaigns/generate", json={**request, "brands": list(reversed(request["brands"]))}
+        ).json()
+    )
+    assert led_by_coffee.campaign_key != campaign.campaign_key
+    assert [slot.brand_name for slot in led_by_coffee.spec.slots] == ["Café Patio", "Voltio"]
+    assert led_by_coffee.spec.offer == campaign.spec.offer  # the lead never changes the price
     assert studio.get("/api/book").json() == before
 
 
@@ -131,3 +138,30 @@ def test_missing_optional_video_still_renders_photography(
         library["cafe-patio"],
     )
     assert spec.video_url is None and spec.slots[0].hero_image_url
+
+
+def test_targeting_options_shape_the_hook_but_never_the_offer(studio: TestClient) -> None:
+    base = {"brands": ["cafe-patio", "rayo"], "party_size": 1, "moment": "coffee_break"}
+    any_time = CampaignGenerated.model_validate(
+        studio.post("/api/campaigns/generate", json=base).json()
+    )
+    morning = CampaignGenerated.model_validate(
+        studio.post("/api/campaigns/generate", json={**base, "daypart": "morning"}).json()
+    )
+    energy = CampaignGenerated.model_validate(
+        studio.post(
+            "/api/campaigns/generate",
+            json={**base, "brands": ["rayo", "cafe-patio"], "moment": "energy"},
+        ).json()
+    )
+    assert morning.spec.stages[0].copy_text == "El primer café del día."
+    assert morning.spec.stages[0].copy_text != any_time.spec.stages[0].copy_text
+    assert energy.spec.angle == "energy" and energy.spec.slots[0].brand_name == "Rayo"
+    assert any_time.spec.offer == morning.spec.offer == energy.spec.offer
+
+
+def test_an_unknown_daypart_is_rejected(studio: TestClient) -> None:
+    response = studio.post(
+        "/api/campaigns/generate", json={"brands": ["voltio"], "daypart": "brunch"}
+    )
+    assert response.status_code == 422

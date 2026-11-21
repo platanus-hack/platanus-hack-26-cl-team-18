@@ -1,134 +1,313 @@
+/*
+ * The ad canvas (16:9 TV, read from 1–4 m). Sizes are container units so the
+ * studio preview and the TV render the same layout.
+ *
+ * House style: three faces with one job each (display serif for the hook,
+ * Instrument Sans for products and the price, mono caps for labels); one
+ * accent, the lead brand's, used once per stage (the price, or the QR edge);
+ * hierarchy from scale and space, not boxes. Square-ish corners, no glows.
+ */
 .creative-canvas {
     container-type: size;
     --color-canvas: var(--palette-ink-950);
     --color-fg: var(--palette-ink-50);
     --color-muted: var(--palette-ink-300);
-    --color-accent: var(--palette-mint);
+    --creative-accent: var(--palette-mint);
+    --creative-gutter: 4.4cqw;
     color: var(--color-fg);
+    font-family: var(--font-sans);
 }
-.creative-photo {
+.creative-media {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;
+    transition: opacity var(--duration-crossfade) ease-out;
 }
+/* Copy sits on the left third: a deep, even fade keeps it legible over any photo. */
 .creative-shade {
     position: absolute;
     inset: 0;
     background:
         linear-gradient(
             90deg,
-            color-mix(in srgb, var(--color-canvas) 96%, transparent),
-            color-mix(in srgb, var(--color-canvas) 72%, transparent) 40%,
-            transparent 82%
+            var(--color-canvas) 0%,
+            color-mix(in srgb, var(--color-canvas) 88%, transparent) 30%,
+            color-mix(in srgb, var(--color-canvas) 35%, transparent) 62%,
+            transparent 85%
         ),
         linear-gradient(
             0deg,
-            color-mix(in srgb, var(--color-canvas) 78%, transparent),
-            transparent 35%
+            color-mix(in srgb, var(--color-canvas) 70%, transparent),
+            transparent 30%
+        ),
+        linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--color-canvas) 60%, transparent),
+            transparent 22%
         );
 }
+.creative-canvas[data-stage="close"] .creative-shade {
+    background: color-mix(in srgb, var(--color-canvas) 82%, transparent);
+}
+
 .creative-composition {
     position: relative;
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
     height: 100%;
-    padding: 3.8cqw;
-    gap: 3cqh;
+    padding: var(--creative-gutter);
+}
+
+/* ------------------------------------------------------------------ top bar */
+.creative-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 2cqw;
 }
 .creative-brands {
     display: flex;
     align-items: center;
-    gap: 1.5cqw;
+    gap: 1.4cqw;
 }
 .creative-brand {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 0.7cqw;
-    border-bottom: 0.2cqw solid;
-    padding-bottom: 0.7cqw;
-    font-size: 1.7cqw;
-    font-weight: 700;
-    letter-spacing: -0.04em;
+    gap: 0.8cqw;
+    font-size: 1.75cqw;
+    font-weight: 600;
+    letter-spacing: -0.02em;
 }
 .creative-brand-logo {
-    width: 2.9cqw;
-    height: 2.9cqw;
+    width: 3.2cqw;
+    height: 3.2cqw;
     object-fit: contain;
 }
-.creative-partnership {
-    margin-left: auto;
+.creative-times {
     color: var(--color-muted);
-    font-size: 0.7cqw;
-    letter-spacing: 0.18em;
+    font-size: 1.5cqw;
+    font-weight: 400;
 }
+.creative-label {
+    font-family: var(--font-label);
+    font-size: 1.05cqw;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--color-muted);
+}
+
+/* ------------------------------------------------------------------ story */
 .creative-story {
-    width: 65%;
     margin-top: auto;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 2.4cqh;
+    gap: 2.2cqh;
+    max-width: 58%;
 }
-.creative-eyebrow {
-    color: var(--color-accent);
-    font-size: 1.05cqw;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.17em;
-}
-.creative-headline {
-    font-size: clamp(1rem, 4.2cqw, 6rem);
-    line-height: 1.08;
-    font-weight: 650;
-    letter-spacing: -0.055em;
+.creative-hook {
+    font-family: var(--font-display);
+    font-size: clamp(1.25rem, 7.4cqw, 9rem);
+    font-weight: 400;
+    line-height: 0.98;
+    letter-spacing: -0.02em;
     text-wrap: balance;
 }
-.creative-action {
-    min-height: 7cqh;
+.creative-offer-line {
+    font-size: clamp(1rem, 2.9cqw, 3.6rem);
+    font-weight: 600;
+    line-height: 1.12;
+    letter-spacing: -0.025em;
+    text-wrap: balance;
 }
+
+/* The price: the largest number on screen, tabular, in the one accent. */
 .creative-price {
     display: inline-flex;
-    align-items: center;
-    padding: 1.1cqh 1.8cqw;
-    border-radius: var(--radius-control);
-    color: var(--color-canvas);
-    font-size: 2.1cqw;
-    font-weight: 750;
+    align-items: baseline;
+    gap: 1.2cqw;
+    font-variant-numeric: tabular-nums;
 }
-.creative-footer {
-    display: flex;
-    justify-content: space-between;
-    padding-top: 2cqh;
+.creative-price-figure {
+    display: inline-flex;
+    align-items: flex-start;
+    font-size: 4.2cqw;
+    font-weight: 700;
+    line-height: 0.9;
+    letter-spacing: -0.04em;
+    color: var(--creative-accent);
+}
+.creative-price.is-hero .creative-price-figure {
+    font-size: clamp(2rem, 12cqw, 14rem);
+    letter-spacing: -0.05em;
+}
+.creative-price-currency {
+    font-size: 0.48em;
+    line-height: 1;
+    margin-top: 0.14em;
+    margin-right: 0.06em;
+    font-weight: 600;
+}
+.creative-price-party {
+    font-family: var(--font-label);
+    font-size: 1.15cqw;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
     color: var(--color-muted);
-    border-top: 1px solid var(--color-border);
-    font-size: 0.7cqw;
-    letter-spacing: 0.15em;
 }
+.creative-price.is-hero .creative-price-party {
+    font-size: 1.4cqw;
+}
+
+/* ------------------------------------------------------------------ close */
 .creative-close {
     display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 4cqw;
+    width: calc(100cqw - 2 * var(--creative-gutter));
+}
+.creative-close-copy {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2.4cqh;
+    max-width: 56%;
+}
+.creative-close-line {
+    font-family: var(--font-display);
+    font-size: clamp(1.25rem, 5.6cqw, 7rem);
+    line-height: 1;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+}
+.creative-close-meta {
+    display: flex;
     align-items: center;
-    gap: 2cqw;
-}
-.creative-qr {
-    background: var(--color-fg);
-    padding: 1.2cqh;
-    border-radius: var(--radius-control);
-}
-.creative-qr-image {
-    display: block;
-    height: 23cqh;
-    aspect-ratio: 1;
+    gap: 1.6cqw;
 }
 .creative-code {
-    font-family: var(--font-mono);
-    font-size: 2cqw;
-    font-weight: 700;
-    letter-spacing: 0.15em;
+    font-family: var(--font-label);
+    font-size: 1.9cqw;
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    padding: 0.5cqw 0.9cqw;
+    border: 1px solid color-mix(in srgb, var(--color-fg) 30%, transparent);
+    border-radius: 0.25rem;
 }
 .creative-close-note {
     font-size: 1.25cqw;
     color: var(--color-muted);
+}
+.creative-qr {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1cqh;
+    padding: 1.4cqh;
+    background: var(--color-fg);
+    border-radius: 0.25rem;
+    box-shadow: 0.45cqw 0.45cqw 0 var(--creative-accent);
+}
+.creative-qr-image {
+    display: block;
+    height: 40cqh;
+    aspect-ratio: 1;
+}
+.creative-qr-caption {
+    font-family: var(--font-label);
+    font-size: 1cqw;
+    font-weight: 500;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--color-canvas);
+}
+
+/* ------------------------------------------------------------------ legacy + house */
+.creative-legacy {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(var(--legacy-cols, 1), minmax(0, 1fr));
+    gap: 4cqw;
+    height: 100%;
+    padding: var(--creative-gutter);
+}
+.creative-legacy[data-count="2"] {
+    --legacy-cols: 2;
+}
+.creative-legacy[data-count="3"] {
+    --legacy-cols: 3;
+}
+/* The logo holds the top edge, the line sits on the bottom, the space between is the design. */
+.creative-legacy-slot {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: flex-start;
+    min-width: 0;
+}
+.creative-legacy-logo {
+    height: 8cqh;
+    max-width: 100%;
+    object-fit: contain;
+    padding-bottom: 1.6cqh;
+    border-bottom: 0.25cqw solid var(--creative-accent);
+}
+.creative-legacy[data-count="1"] .creative-hook {
+    max-width: 62cqw;
+    font-size: clamp(1.25rem, 8.4cqw, 10rem);
+}
+.creative-legacy[data-count="2"] .creative-hook,
+.creative-legacy[data-count="3"] .creative-hook {
+    font-size: clamp(1rem, 4.4cqw, 5rem);
+}
+
+/*
+ * Distance-aware layout (screen.attention.distance_band, the nearest looking viewer).
+ * Far: only what reads from across the shop — a bigger hook and price, no fine print.
+ * Near: the QR and code come forward for scanning. Unknown keeps the default layout.
+ * Sizes ease so a band change never jumps; the stage and copy never change here.
+ */
+.creative-hook,
+.creative-close-line,
+.creative-price-figure,
+.creative-qr-image {
+    transition:
+        font-size var(--duration-crossfade) ease-out,
+        height var(--duration-crossfade) ease-out;
+}
+.creative-approach {
+    display: none;
+    font-family: var(--font-label);
+    font-size: 1.2cqw;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+.creative-canvas[data-distance="far"] .creative-hook {
+    font-size: clamp(1.25rem, 9.4cqw, 11rem);
+}
+.creative-canvas[data-distance="far"] .creative-story {
+    max-width: 72%;
+}
+.creative-canvas[data-distance="far"] .creative-price.is-hero .creative-price-figure {
+    font-size: clamp(2rem, 15cqw, 17rem);
+}
+.creative-canvas[data-distance="far"] .creative-label,
+.creative-canvas[data-distance="far"] .creative-close-note,
+.creative-canvas[data-distance="far"] .creative-price-party {
+    visibility: hidden;
+}
+.creative-canvas[data-distance="far"] .creative-approach {
+    display: inline;
+}
+.creative-canvas[data-distance="near"] .creative-qr-image {
+    height: 52cqh;
+}
+.creative-canvas[data-distance="near"] .creative-code {
+    font-size: 2.4cqw;
 }

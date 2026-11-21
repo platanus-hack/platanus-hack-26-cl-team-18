@@ -25,6 +25,27 @@
     font-display: swap;
 }
 
+/* Ad faces: a display serif for hooks and a mono for labels (both OFL, self-hosted for the kiosk). */
+@font-face {
+    font-family: "Instrument Serif";
+    src: url("/fonts/InstrumentSerif-Regular.woff2") format("woff2");
+    font-weight: 400;
+    font-display: swap;
+}
+@font-face {
+    font-family: "Instrument Serif";
+    src: url("/fonts/InstrumentSerif-Italic.woff2") format("woff2");
+    font-weight: 400;
+    font-style: italic;
+    font-display: swap;
+}
+@font-face {
+    font-family: "Geist Mono";
+    src: url("/fonts/GeistMono-Medium.woff2") format("woff2");
+    font-weight: 500;
+    font-display: swap;
+}
+
 /*
  * Design tokens. The scale is closed: every color, radius, shadow, duration and
  * z-index comes from a token here. If a need has no token, add one; never an
@@ -83,6 +104,8 @@
 
     --font-sans: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
     --font-mono: "JetBrains Mono", ui-monospace, monospace;
+    --font-display: "Instrument Serif", ui-serif, Georgia, serif;
+    --font-label: "Geist Mono", ui-monospace, monospace;
 
     /* Type tiers */
     --text-micro: 0.75rem;

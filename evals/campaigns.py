@@ -61,12 +61,17 @@ def evaluate_campaigns(*, gate_latency: bool = True) -> dict[str, Any]:
             failures.append(f"{name}: unsafe or nonsensical campaign accepted")
         times.append(generated.compose_ms)
         qualities.append(float(generated.quality_score))
-        repeated = generator.generate(request.model_copy(update={"brands": list(reversed(brands))}))
+        repeated = generator.generate(request)
         cached += int(
             repeated.cache_hit
             and repeated.spec == generated.spec
             and repeated.campaign_key == generated.campaign_key
         )
+        # Brand order is slot order: the first brand leads the creative.
+        if [slot.brand_name for slot in generated.spec.slots] != [
+            kits[brand].name for brand in brands
+        ]:
+            failures.append(f"{name}: lead brand not honored")
         ids = frozenset(kits[brand].brand_id for brand in brands)
         expected_offer = market.offers.for_party(ids, party)
         if expected_offer is not None and (

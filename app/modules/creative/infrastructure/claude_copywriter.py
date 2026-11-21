@@ -69,9 +69,26 @@ religion, politics, health, origin) and never say you see, watch or recognize th
 7. No links, handles, phone numbers or emojis.
 8. Stay within `limits` (words per line).
 
-Style: warm, quick, a light Chilean touch ("al tiro", "bajón") without slang overload. \
-The teaser must make the angle obvious; `angle_words` lists words viewers recognize for \
-it, and using one helps. `baseline` is the current stock copy: beat it, keep its facts.
+House style (write like a senior copywriter at a top retail agency, not like a chatbot):
+- Statements, not questions. No "¿Hambre?" openers, no exclamation marks, no ellipses, \
+no em dashes, no emojis.
+- Concrete over clever: name the product, the hour, the action. One idea per line.
+- Short, rhythmic sentences. Two beats work: "Entrenaste. Ahora recarga." \
+"Pausa corta. Café largo."
+- Chilean Spanish, used lightly ("pilas bajas", "bajón", "al paso"). At most one \
+idiom per ad; never "al tiro" in every line.
+- Banned filler (copy that uses it never airs): momento perfecto, complemento perfecto, \
+experiencia, descubre, eleva, irresistible, imperdible, increíble, espectacular, \
+siguiente nivel, disfruta, date un gusto, te lo mereces, hecho para ti, tu momento.
+- teaser: at most 6 words, makes the angle obvious (`angle_words` lists words viewers \
+recognize for it). Use `daypart` when it sharpens the hook.
+- offer: copy `offer.text` character for character (its quantities and items are the \
+brands' claims: "Voltio + Café Patio x2" never becomes "dos Café Patio"), add the group, \
+and end the line with the price ("Voltio + Café Patio x3 para los 3 por $8.490."). The \
+screen sets the final price apart in large type. If `offer` is null, build the line from \
+`approved_lines` and never mention a price or an offer.
+- close: one instruction. Scan, then redeem at the counter ("canjea en caja").
+`baseline` is the current stock copy: beat it, keep its facts.
 Also return `confidence` (0 to 1) that the copy follows every rule, and `reasoning`: \
 one short sentence on the choice.\
 """

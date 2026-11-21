@@ -15,7 +15,7 @@ from tests.unit.creative.factory import MIGA, PATIO, brief
 GROUP = brief(party=4, angle=Angle.HUNGER)
 GOOD = CopyDraft(
     teaser="¿Con hambre los 4? Voltio + Café Patio",
-    offer="Para los 4 · Pack x4: Voltio + Café Patio por $10.970",
+    offer="Voltio + Café Patio x4 para los 4 por $10.970",
     close="Escanea el QR · válido 10 min",
     voice_line="Para los 4, Voltio y Café Patio por 10.970 pesos",
     source=CopySource.AI,

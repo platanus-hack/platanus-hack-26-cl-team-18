@@ -158,7 +158,8 @@ export const CampaignGenerateSchema = z.strictObject({
   type: z.literal("campaign.generate"),
   brands: z.array(z.string()).min(1).max(2),
   party_size: z.number().int().gte(1).lte(12),
-  moment: z.enum(["post_workout", "coffee_break", "hunger", "queue", "complete_basket"]),
+  moment: z.enum(["post_workout", "coffee_break", "hunger", "energy", "queue", "complete_basket"]),
+  daypart: z.enum(["morning", "midday", "afternoon", "evening", "night"]).nullable(),
   minor_likely: z.boolean(),
   media: z.enum(["photo", "video"]),
 });
@@ -537,6 +538,7 @@ export const ScreenAttentionSchema = z.strictObject({
   creative_id: z.string().min(1).max(64).nullable(),
   looking: z.number().int().gte(0),
   dwell_s: z.number().gte(0.0),
+  distance_band: DistanceBandSchema.nullable(),
   measured_at: z.iso.datetime({ offset: true }),
 });
 export type ScreenAttention = z.infer<typeof ScreenAttentionSchema>;
