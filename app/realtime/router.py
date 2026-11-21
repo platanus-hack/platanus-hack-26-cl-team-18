@@ -84,6 +84,19 @@ class InboundRouter:
         for handler in handlers:
             await self._run(handler, message, received, label=message.type)
 
+    def dispatch_sync(self, message: Inbound, received: Received) -> None:
+        """Delegate to a screen router from an existing worker thread."""
+        for handler in self._handlers.get(type(message), ()):
+            handler(message, received)
+
+    def player_connected_sync(self, screen_id: str, sink: Sink) -> None:
+        for handler in self._on_player_connected:
+            handler(screen_id, sink)
+
+    def console_connected_sync(self, sink: Sink) -> None:
+        for handler in self._on_console_connected:
+            handler(sink)
+
     async def player_connected(self, screen_id: str, sink: Sink) -> None:
         for handler in self._on_player_connected:
             await self._run(handler, screen_id, sink, label="player.connected")

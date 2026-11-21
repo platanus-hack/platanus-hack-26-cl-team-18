@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import math
 import re
@@ -247,6 +248,11 @@ def main() -> None:
         "--backend", help="Backend WebSocket URL, e.g. ws://localhost:8000/ws/agent"
     )
     parser.add_argument("--screen-id", default="demo-01")
+    parser.add_argument(
+        "--recognition-only",
+        action="store_true",
+        help="Publish only the debug recognition feed; do not drive ads",
+    )
     parser.add_argument("--vlm", action="store_true", help="Enable privacy-filtered VLM crops")
     parser.add_argument(
         "--print-snapshots", action="store_true", help="Print debug snapshots to stdout"
@@ -256,6 +262,24 @@ def main() -> None:
         parser.error("--vlm requires --backend")
     if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,64}", args.screen_id):
         parser.error("--screen-id must contain 1–64 letters, digits, or _ . : -")
+    if args.backend and not args.recognition_only:
+        # Ads require pose-based attention and minor safety. Reuse the canonical
+        # pipeline rather than inventing those facts from detection-only tracks.
+        from .__main__ import argument_parser
+        from .__main__ import run as run_live
+
+        live_args = argument_parser().parse_args(
+            [
+                "--screen",
+                args.screen_id,
+                "--backend",
+                args.backend,
+                "--video",
+                args.video,
+            ]
+        )
+        asyncio.run(run_live(live_args))
+        return
     detector = LocalDetector(args.model)
     detector.warmup()
     publisher = SnapshotPublisher(args.backend) if args.backend else None

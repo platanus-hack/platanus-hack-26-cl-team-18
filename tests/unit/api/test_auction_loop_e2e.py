@@ -610,16 +610,33 @@ def test_a_brand_that_cannot_cover_its_next_lease_comes_down_and_is_capped(
     poor_loop: Loop,
 ) -> None:
     loop = poor_loop
-    shown = loop.send("fitness", after_s=0)
-    loop.auction()
-    voltio = loop.creative()
-    assert paid_brands(voltio) == ("Voltio",)  # 6.5 CLP/AS: each 15 s lease holds 98
-    for tick in range(5, 35, 5):  # the same viewer keeps watching
-        again = snapshot_for("fitness", 100 + tick, shown + timedelta(seconds=tick))
-        loop.clock.set(shown + timedelta(seconds=tick))
-        loop.agent.send_text(again.model_dump_json())
-        if tick in (15, 30):
-            loop.scheduler.fire_due()  # lease renewals
+    # Five seconds of simulated time per sample is not a network burst. Wait
+    # for receipt of each reading before advancing the fake clock, otherwise
+    # the gateway correctly conflates samples and attention has real gaps.
+    with loop.client.websocket_connect("/ws/screen/demo-01?attention=1") as observer:
+        observer.receive_json()  # last good house creative
+
+        def observed(at: datetime) -> None:
+            while True:
+                message = observer.receive_json()
+                if (
+                    message["type"] == "screen.attention"
+                    and datetime.fromisoformat(message["measured_at"].replace("Z", "+00:00")) == at
+                ):
+                    return
+
+        shown = loop.send("fitness", after_s=0)
+        loop.auction()
+        observed(shown)
+        voltio = loop.creative()
+        assert paid_brands(voltio) == ("Voltio",)  # 6.5 CLP/AS: each 15 s lease holds 98
+        for tick in range(5, 35, 5):  # the same viewer keeps watching
+            again = snapshot_for("fitness", 100 + tick, shown + timedelta(seconds=tick))
+            loop.clock.set(shown + timedelta(seconds=tick))
+            loop.agent.send_text(again.model_dump_json())
+            observed(again.measured_at)
+            if tick in (15, 30):
+                loop.scheduler.fire_due()  # lease renewals
     # Lease 2 (196) fits the 200 budget, lease 3 (294) doesn't: Voltio comes down at once.
     gone = loop.next_of(ConsoleAuction)
     assert gone.trigger == "budget_changed" and gone.swap == "swap"

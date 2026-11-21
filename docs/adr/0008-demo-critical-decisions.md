@@ -190,3 +190,19 @@ fixture" label is a demo heuristic.
 - Two hand-offs (D2) are needed before beat 3 works end to end.
 - The pitch wording changes (D5); `docs/demo.md` is updated.
 - Logistics (D3, D7) go on the demo-day checklist.
+
+
+## Amendment: live startup and `on-sight` backend mode
+
+The live market now registers in every environment independently of
+`DEMO_SIMULATOR`, with `LIVE_ADS_ENABLED=false` as an explicit transport-only
+escape hatch. Each wire screen id gets its own audience/auction/creative state;
+campaigns, budgets, charges and redemption codes are shared across the market.
+The seed remains the approved brand catalog. Operator mutation endpoints stay
+disabled in production.
+
+D12 is amended for `on-sight --backend`: this mode now delegates to the
+canonical pose pipeline and drives ads without inventing attention or safety
+facts from detection-only boxes. `--recognition-only` preserves the existing
+workbench contract and crop enrichment. The debug recognition feed itself
+continues to carry observations rather than fabricated auction facts.

@@ -7,6 +7,7 @@ TF_ROOTS := terraform/modules/render-app terraform/modules/render-static-site te
 LOCAL_DATABASE_URL := postgresql://team18:team18@localhost:5432/team18
 
 .PHONY: help install edge-install edge-check test-live test-sandbox dev web-install web-dev web-check contract contract-check lint format typecheck test check migrate migrate-status db-up db-down db-reset \
+        live-preflight bundle-loops \
         eval eval-baseline eval-creative eval-creative-baseline eval-replay eval-perception eval-record eval-rehearsal eval-video-fetch eval-video eval-pipeline demo-warmup \
         tf-init tf-fmt tf-fmt-check tf-validate tf-test tf-check tf-plan tf-apply tf-output tf-lock
 
@@ -49,6 +50,12 @@ contract: ## Regenerate web/src/contract/messages.gen.ts from app/contract/messa
 
 contract-check: ## Fail if the generated TS contract is stale
 	uv run python scripts/gen_contract.py --check
+
+live-preflight: ## Report live-loop providers and missing media (ARGS="--require-providers" to gate)
+	uv run python -m scripts.live_preflight $(ARGS)
+
+bundle-loops: ## Generate cold H.264 loops (requires ARGS="--budget-usd N --cost-per-clip-usd N")
+	uv run python -m scripts.generate_loops $(ARGS)
 
 lint: ## Ruff lint
 	uv run ruff check .

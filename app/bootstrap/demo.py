@@ -1,4 +1,4 @@
-"""Compose the local simulator's snapshot-to-creative flow."""
+"""Compose one screen's live snapshot-to-creative flow and the shared seed market."""
 
 from base64 import b64encode
 from collections.abc import Awaitable, Callable
@@ -6,7 +6,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from decimal import ROUND_CEILING, Decimal
 from pathlib import Path
-from threading import Lock
+from threading import RLock
 from uuid import UUID
 
 from app.bootstrap.demo_console import decision_messages
@@ -129,39 +129,37 @@ class DemoControls:
     set_stock: Callable[[StockSet], bool]
     offer_for: Callable[[str], RedeemableOffer | None]
     redeem: Callable[[str, str], tuple[ConsoleRedemption, bool]]
+    reauction_bids: Callable[[], None]
+    book_for: Callable[[str], ConsoleBook] | None = None
 
 
 def _clp_per_as(amount: str) -> MoneyRate:
     return MoneyRate.create(currency="CLP", amount=amount)
 
 
-def register_demo(
+@dataclass(slots=True)
+class LiveMarket:
+    """Campaign identities, budgets and receipts shared by all screens in this market."""
+
+    kits: tuple[BrandKit, ...]
+    offers: OfferBook
+    bidders: tuple[Bidder, ...]
+    book: LiveCampaignBook
+    stock: StockBoard
+    auctions: AuctionLog
+    delivery: DeliveryDesk
+    redemptions: RedemptionDesk
+    lock: RLock
+
+
+def seed_market(
     *,
-    router: InboundRouter,
-    hub: ConnectionHub,
-    clock: BaseClock,
     ids: IdGenerator,
-    warm: WarmWorker | None = None,
-    voiceovers: VoiceoverService | None = None,
-    narrator_voice_id: str | None = None,
-    speech_screens: frozenset[str] = frozenset(),
-    speech_ttl: timedelta = timedelta(seconds=60),
-    swap_holds: bool = False,
-    scheduler: Scheduler = thread_timer,
-    tagger: AudienceTagger | None = None,
+    budget_clp: int,
     auction_log: AuctionLog | None = None,
     ledger: ChargeLedger | None = None,
-    copywriter: CopyWriter | None = None,
-    copy_timeout_s: float = 2.5,
-    hourly_budget_usd: Decimal = Decimal(2),
-    budget_clp: int = 50_000,
-    startup: list[Callable[[], Awaitable[None]]] | None = None,
-    topic_extractor: TopicExtractor | None = None,
     redemption_ledger: RedemptionLedger | None = None,
-    public_base_url: str = "http://localhost:5173",
-    media_dir: Path | None = None,
-) -> DemoControls:
-    screen_id = ScreenId.create(ids.new_uuid7())
+) -> LiveMarket:
     # Reuse the existing project mark for these fictional fixture brands.
     logo = Path(__file__).resolve().parents[2].joinpath("project-logo.png").read_bytes()
     logo_url = "data:image/png;base64," + b64encode(logo).decode("ascii")
@@ -186,11 +184,6 @@ def register_demo(
             ("Rayo", "Rayo · Energía para tu día.", "#b9adff"),
         )
     )
-    kits_by_id = {kit.brand_id: kit for kit in kits}
-    # Stable brand slugs: prop markers (edge/props/markers.json, ADR 0008 D2), the
-    # audience catalog's brand_refs and the bundle loop files all use them.
-    slug_of = {kit.brand_id: _slug(kit.name) for kit in kits}
-    brand_by_slug = {slug: brand for brand, slug in slug_of.items()}
     voltio, patio, rayo = kits[0].brand_id, kits[1].brand_id, kits[3].brand_id
     # Every mutual-partner pair gets an approved basket (docs/demo.md), so Rayo competes
     # for the energy slot inside a basket and prices it. Offers are sized to the group
@@ -247,14 +240,67 @@ def register_demo(
             strict=True,
         )
     )
+    book = LiveCampaignBook(bidders)
+    return LiveMarket(
+        kits=kits,
+        offers=offer_book,
+        bidders=bidders,
+        book=book,
+        stock=StockBoard(),
+        auctions=auction_log or InMemoryAuctionLog(),
+        delivery=DeliveryDesk(ledger=ledger or InMemoryChargeLedger(), ids=ids, budgets=book),
+        redemptions=RedemptionDesk(ids=ids, ledger=redemption_ledger or InMemoryRedemptionLedger()),
+        lock=RLock(),
+    )
+
+
+def register_demo(
+    *,
+    router: InboundRouter,
+    wire_screen_id: str = DEMO_SCREEN,
+    market: LiveMarket | None = None,
+    hub: ConnectionHub,
+    clock: BaseClock,
+    ids: IdGenerator,
+    warm: WarmWorker | None = None,
+    voiceovers: VoiceoverService | None = None,
+    narrator_voice_id: str | None = None,
+    speech_screens: frozenset[str] = frozenset(),
+    speech_ttl: timedelta = timedelta(seconds=60),
+    swap_holds: bool = False,
+    scheduler: Scheduler = thread_timer,
+    tagger: AudienceTagger | None = None,
+    auction_log: AuctionLog | None = None,
+    ledger: ChargeLedger | None = None,
+    copywriter: CopyWriter | None = None,
+    copy_timeout_s: float = 2.5,
+    hourly_budget_usd: Decimal = Decimal(2),
+    budget_clp: int = 50_000,
+    startup: list[Callable[[], Awaitable[None]]] | None = None,
+    topic_extractor: TopicExtractor | None = None,
+    redemption_ledger: RedemptionLedger | None = None,
+    public_base_url: str = "http://localhost:5173",
+    media_dir: Path | None = None,
+) -> DemoControls:
+    screen_id = ScreenId.create(ids.new_uuid7())
+    market = market or seed_market(
+        ids=ids,
+        budget_clp=budget_clp,
+        auction_log=auction_log,
+        ledger=ledger,
+        redemption_ledger=redemption_ledger,
+    )
+    kits, bidders, offer_book = market.kits, market.bidders, market.offers
+    kits_by_id = {kit.brand_id: kit for kit in kits}
+    logo_url = kits[0].logo_url
+    slug_of = {kit.brand_id: _slug(kit.name) for kit in kits}
+    brand_by_slug = {slug: brand for brand, slug in slug_of.items()}
+    fitness, coffee, beer, food = (SegmentId.create(key) for key in ("408", "977", "369", "1404"))
     layouts = (Layout.solo(), Layout.duo())
     reserve = _clp_per_as("1.5")
     desk = AuctionDesk(InProcessBundleEngine(), holds_enabled=swap_holds)
-    book = LiveCampaignBook(bidders)
-    stock = StockBoard()
-    auctions = auction_log or InMemoryAuctionLog()
-    delivery = DeliveryDesk(ledger=ledger or InMemoryChargeLedger(), ids=ids, budgets=book)
-    redemptions = RedemptionDesk(ids=ids, ledger=redemption_ledger or InMemoryRedemptionLedger())
+    book, stock, auctions = market.book, market.stock, market.auctions
+    delivery, redemptions = market.delivery, market.redemptions
     loops = BundleLoopLibrary(media_dir) if media_dir is not None else None
     campaign_of = {bidder.campaign_id: bidder for bidder in bidders}
     # Demo cues at full weight replace any real catalog cue with the same label, so
@@ -325,12 +371,12 @@ def register_demo(
         ),
     )
     current_creative = CreativeReady(
-        screen_id=DEMO_SCREEN,
+        screen_id=wire_screen_id,
         creative_id=str(ids.new_uuid7()),
         spec=house_spec,
         trace=LatencyTrace(ready_at=clock.now_utc()),
     )
-    lock = Lock()
+    lock = market.lock
     current_moment: AudienceMomentSnapshot | None = None
     current_brief: CreativeBrief | None = None
     latest_observed_at: UtcTimestamp | None = None
@@ -341,11 +387,11 @@ def register_demo(
     voice_degraded = False
     vlm_degraded = False
 
-    def vlm_findings_landed(wire_screen_id: str) -> None:
+    def vlm_findings_landed(found_screen_id: str) -> None:
         # Re-run the decision on the latest observation with the VLM findings merged in.
         with lock:
             latest = last_snapshot
-        if latest is not None and wire_screen_id == DEMO_SCREEN:
+        if latest is not None and found_screen_id == wire_screen_id:
             decide(latest[0], Received(received_at=clock.now_utc()), reconsider=True)
 
     def vlm_degradation(wire_screen_id: str, signal: DegradedSignal, active: bool) -> None:
@@ -378,7 +424,7 @@ def register_demo(
     def decide(snapshot: AudienceSnapshot, received: Received, *, reconsider: bool) -> None:
         nonlocal current_creative, current_moment, latest_observed_at, latest_console
         nonlocal last_snapshot
-        if snapshot.screen_id != DEMO_SCREEN:
+        if snapshot.screen_id != wire_screen_id:
             return
         measured_at = UtcTimestamp.create(snapshot.measured_at.astimezone(UTC))
         if not reconsider and abs(received.received_at - measured_at.value) > MAX_MEASUREMENT_SKEW:
@@ -398,14 +444,14 @@ def register_demo(
                 last_snapshot = (snapshot, received)
                 # Every fresh reading feeds attention, even when the moment is unchanged.
                 delivery.attention.record(
-                    DEMO_SCREEN,
+                    wire_screen_id,
                     measured_at.value,
                     (tracklet.id for tracklet in snapshot.tracklets if tracklet.looking),
                 )
                 looks = [t.dwell_s for t in snapshot.tracklets if t.looking]
                 hub.send_to_screen_threadsafe(
                     ScreenAttention(
-                        screen_id=DEMO_SCREEN,
+                        screen_id=wire_screen_id,
                         creative_id=current_creative.creative_id,
                         looking=len(looks) if snapshot.tracklets else snapshot.looking,
                         dwell_s=max(looks, default=0.0),
@@ -481,7 +527,7 @@ def register_demo(
                 layouts=layouts,
                 reserve=reserve,
                 approved_baskets=offer_book.baskets(),
-                out_of_stock=stock.out_of_stock(DEMO_SCREEN),
+                out_of_stock=stock.out_of_stock(wire_screen_id),
                 max_play_seconds=Decimal(MAX_PLAY_SECONDS),
                 # Complete the basket (ADR 0008 D2): a held brand boosts its partners.
                 held_products=tuple(
@@ -507,7 +553,7 @@ def register_demo(
         auctions.append(
             AuctionRecord(
                 auction_id=auction_id,
-                screen_id=DEMO_SCREEN,
+                screen_id=wire_screen_id,
                 moment=moment,
                 trigger=trigger,
                 result=outcome.result,
@@ -599,7 +645,7 @@ def register_demo(
         ready_at = clock.now_utc()
         trace = decision.trace.model_copy(update={"ready_at": ready_at})
         current_creative = CreativeReady(
-            screen_id=DEMO_SCREEN,
+            screen_id=wire_screen_id,
             creative_id=creative_id,
             auction_id=decision.auction_id if result.winners else None,
             spec=spec,
@@ -613,7 +659,7 @@ def register_demo(
                 PlayRecord(
                     creative_id=current_creative.creative_id,
                     auction_id=decision.auction_id,
-                    screen_id=DEMO_SCREEN,
+                    screen_id=wire_screen_id,
                     people=decision.moment.people,
                     looking=decision.moment.looking,
                     aired_at=ready_at,
@@ -722,7 +768,7 @@ def register_demo(
 
     def book_view() -> ConsoleBook:
         on_air = desk.on_air.campaign_ids if desk.on_air is not None else frozenset()
-        out = stock.out_of_stock(DEMO_SCREEN)
+        out = stock.out_of_stock(wire_screen_id)
         lines = []
         for entry in book.entries():
             bidder, account = entry.bidder, entry.account
@@ -745,7 +791,7 @@ def register_demo(
                     remaining=_money(account.remaining if account else zero),
                 )
             )
-        return ConsoleBook(screen_id=DEMO_SCREEN, lines=lines)
+        return ConsoleBook(screen_id=wire_screen_id, lines=lines)
 
     def set_multiplier(message: AdvertiserBidMultiplier) -> MultiplierOutcome:
         campaign_id = _campaign_id(message.campaign_id)
@@ -759,12 +805,12 @@ def register_demo(
         return outcome
 
     def set_stock(message: StockSet) -> bool:
-        if message.screen_id != DEMO_SCREEN:
+        if message.screen_id != wire_screen_id:
             raise UnknownBrand()
         brand_id = _brand_id(message.brand_id)
         if brand_id not in kits_by_id:
             raise UnknownBrand()
-        changed = stock.set(DEMO_SCREEN, brand_id, in_stock=message.in_stock)
+        changed = stock.set(wire_screen_id, brand_id, in_stock=message.in_stock)
         if changed:
             reauction(Trigger.STOCK_CHANGED)
         return changed
@@ -816,7 +862,7 @@ def register_demo(
         offer = redemptions.issue(
             auction_id=auction_id,
             creative_id=creative_id,
-            screen_id=DEMO_SCREEN,
+            screen_id=wire_screen_id,
             campaign_ids=[winner.campaign_id for winner in result.winners],
             brand_names=[kits_by_id[brand].name for brand in brands],
             offer_text=spec.offer.text if spec.offer is not None else None,
@@ -850,7 +896,7 @@ def register_demo(
     def receive_displayed(report: PlayerDisplayed, received: Received) -> None:
         """Close glass-to-glass: the player made a creative visible."""
         nonlocal current_creative
-        if report.screen_id != DEMO_SCREEN:
+        if report.screen_id != wire_screen_id:
             return
         displayed_at = report.displayed_at.astimezone(UTC)
         with lock:
@@ -861,13 +907,13 @@ def register_demo(
             current_creative = target.model_copy(update={"trace": trace})
             desk.displayed(displayed_at)  # minimum ad seconds count from what people saw
         hub.broadcast_console_threadsafe(
-            ConsoleLatency(screen_id=DEMO_SCREEN, creative_id=report.creative_id, trace=trace)
+            ConsoleLatency(screen_id=wire_screen_id, creative_id=report.creative_id, trace=trace)
         )
 
     # ------------------------------------------------------------ delivery (billing)
 
     def receive_playback(report: PlaybackReport, received: Received) -> None:
-        if report.screen_id != DEMO_SCREEN:
+        if report.screen_id != wire_screen_id:
             return
         receipt = delivery.record_playback(
             screen_id=report.screen_id,
@@ -923,7 +969,7 @@ def register_demo(
 
     def receive_utterance(utterance: AudienceUtterance, received: Received) -> None:
         nonlocal speech
-        if utterance.screen_id != DEMO_SCREEN or DEMO_SCREEN not in speech_screens:
+        if utterance.screen_id != wire_screen_id or wire_screen_id not in speech_screens:
             return  # speech mode is off for this screen: drop it, unread
         topics = topics_from_keyterms(
             utterance.keyterms_hit,
@@ -959,7 +1005,7 @@ def register_demo(
             if draft is not None:
                 upgrade_copy(job, draft)
 
-        warm.submit_threadsafe("claude", job.brief.signature(), run)
+        warm.submit_threadsafe("claude", f"copy:{wire_screen_id}:{job.brief.signature()}", run)
 
     def upgrade_copy(job: _CopyJob, draft: CopyDraft) -> None:
         """Apply to whatever creative airs this brief now; a different brief means stale, drop it.
@@ -987,7 +1033,7 @@ def register_demo(
             trace = target.trace.model_copy(update={"upgraded_at": clock.now_utc()})
             current_creative = target.model_copy(update={"spec": spec, "trace": trace})
             upgraded = CreativeUpgraded(
-                screen_id=DEMO_SCREEN,
+                screen_id=wire_screen_id,
                 creative_id=target.creative_id,
                 auction_id=target.auction_id,
                 upgrade_kind=UpgradeKind.COPY,
@@ -1063,11 +1109,11 @@ def register_demo(
                 voice_degraded = True
                 hub.broadcast_console_threadsafe(
                     ConsoleDegradation(
-                        screen_id=DEMO_SCREEN, flags=[DegradationFlag.VOICE_FALLBACK]
+                        screen_id=wire_screen_id, flags=[DegradationFlag.VOICE_FALLBACK]
                     )
                 )
 
-        warm.submit_threadsafe("elevenlabs", key, job)
+        warm.submit_threadsafe("elevenlabs", f"voice:{wire_screen_id}:{key}", job)
 
     def upgrade_voice(creative_id: str | None, line: str, voice: str, url: str) -> None:
         """Apply only while the target creative is still on air (stale results are dropped)."""
@@ -1084,7 +1130,7 @@ def register_demo(
             trace = target.trace.model_copy(update={"upgraded_at": clock.now_utc()})
             current_creative = target.model_copy(update={"spec": spec, "trace": trace})
             upgraded = CreativeUpgraded(
-                screen_id=DEMO_SCREEN,
+                screen_id=wire_screen_id,
                 creative_id=target.creative_id,
                 auction_id=target.auction_id,
                 upgrade_kind=UpgradeKind.VOICE,
@@ -1094,8 +1140,8 @@ def register_demo(
         hub.send_to_screen_threadsafe(upgraded)
         hub.broadcast_console_threadsafe(upgraded)
 
-    def player_connected(wire_screen_id: str, sink: Sink) -> None:
-        if wire_screen_id == DEMO_SCREEN:
+    def player_connected(connected_screen_id: str, sink: Sink) -> None:
+        if connected_screen_id == wire_screen_id:
             with lock:
                 hub.send_to_screen_threadsafe(current_creative, sink=sink)
 
@@ -1109,7 +1155,7 @@ def register_demo(
         # Face-blurred JPEG, in memory only (never stored or logged); tagged on the warm path.
         # Recognition-stream crops (session_id set) belong to RecognitionVlm.
         if (
-            keyframe.screen_id == DEMO_SCREEN
+            keyframe.screen_id == wire_screen_id
             and keyframe.session_id is None
             and received.payload is not None
         ):
@@ -1130,6 +1176,7 @@ def register_demo(
         set_stock=set_stock,
         offer_for=redemptions.offer,
         redeem=redeem,
+        reauction_bids=lambda: reauction(Trigger.BID_CHANGED),
     )
 
 

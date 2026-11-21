@@ -9,16 +9,23 @@ uv sync --extra vision
 uv run on-sight /path/to/video.mp4 --fps 3 --print-snapshots
 ```
 
-`on-sight` is a local debug and classifier-development tool (ADR 0008 D12);
-the live loop uses `python -m agent.vision` below. To publish its
-`recognition.snapshot` feed to the local backend while replaying, start `uvicorn app.main:app`
-from the repository root, then run from `edge/`:
+With `--backend`, `on-sight` uses the same pose-based pipeline as
+`python -m agent.vision`: it publishes `audience.snapshot` and face-blurred
+keyframes, and drives ads for the given screen id. Start `make dev` from the
+repository root, then run from `edge/`:
 
 ```sh
 uv run on-sight /path/to/video.mp4 --fps 3 --screen-id demo-01 --backend ws://localhost:8000/ws/agent
 ```
 
-`GET /recognition/demo-01` returns the latest snapshot and backend receive
+For the detection-only workbench, add `--recognition-only` to the command.
+That explicitly selects the debug `recognition.snapshot` feed and optional
+`--vlm` crop enrichment. Without `--backend`, `on-sight` also stays in debug
+mode; its `--model`, `--fps`, and `--print-snapshots` options apply to that mode.
+Live mode uses the canonical pose/object models and face-blurred whole keyframes;
+`AUDIENCE_AI` controls their warm enrichment.
+
+In recognition-only mode, `GET /recognition/demo-01` returns the latest snapshot and backend receive
 time in local/test environments; a missing or expired snapshot returns 404.
 The classifier can also register an in-process handler for
 `RecognitionSnapshot` with `container.router.on(...)`. This is a separate
@@ -155,7 +162,7 @@ make edge-install                        # Python 3.12 project, separate from th
 cp edge/.env.example edge/.env           # ELEVENLABS_API_KEY=...
 cd edge && uv run python -m agent.speech --speech-mode --screen demo-01            # microphone
 cd edge && uv run python -m agent.speech --speech-mode --wav line.wav              # replay a WAV
-# For the backend to use the topics: SPEECH_MODE_SCREENS='["demo-01"]' DEMO_SIMULATOR=true make dev
+# For the backend to use the topics: SPEECH_MODE_SCREENS='["demo-01"]' make dev
 ```
 
 The audio path, in `agent/speech/`:

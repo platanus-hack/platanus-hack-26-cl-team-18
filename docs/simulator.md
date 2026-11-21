@@ -11,7 +11,7 @@ Run each command from the repository root in a separate terminal.
 
 ```sh
 make install
-DEMO_SIMULATOR=true make dev
+make dev
 ```
 
 ```sh
@@ -36,14 +36,16 @@ The script verifies the creative over a player socket and prints the result.
 When the expected outcome already plays, it sends a different fixture scene
 first so the requested replay produces an observable transition. Use
 `--server ws://127.0.0.1:8000` to point the script at a different local port.
-The backend enables this wiring only when `DEMO_SIMULATOR=true` outside
-production. Run it on loopback for these synthetic observations.
+The live pipeline is enabled by default, including in production. The
+`DEMO_SIMULATOR` setting no longer gates sensing, auctions or playback.
+Use loopback for synthetic observations. Operator mutations stay disabled
+in production; QR redemption and the live loop remain available.
 
 ## Follow a snapshot through the code
 
 1. [Replay script](../scripts/replay_audience.py) sends an `audience.snapshot` to
    `/ws/agent` with structured observations and the measurement instant.
-2. [Demo wiring](../app/bootstrap/demo.py) resolves `demo-01` to a typed screen
+2. [Live market wiring](../app/bootstrap/live.py) resolves each wire screen id to its own runtime and typed screen
    ID, rejects stale measurements, and suppresses repeated audience facts.
    The trace preserves device time. Ordering caps it at server receipt so a
    fast device clock cannot delay a subsequent safety update.
@@ -76,19 +78,35 @@ production. Run it on loopback for these synthetic observations.
    from receipt to creative readiness. Glass-to-glass needs a display
    timestamp from the player.
 
-The seeded campaigns use one bid each and the screen offers solo and duo
-layouts. The duo splits screen share evenly and receives an affinity bonus
-for the two mutually opted-in brands. With the co-brand fixture the duo is
-worth CLP 120 versus CLP 100 for the best solo. Voltio clears at CLP 40
-per attention-second because Rayo could take its place with Café Patio.
-Café Patio clears at CLP 30. The shopper-facing CLP 3,490 offer is fixture
-copy. Segment coverage counts matched segments in this replay.
+The approved seed catalog is shared across screen runtimes. Audience moments,
+stock, swap holds and current creatives belong to each screen; campaign identities,
+budgets, delivery and redemptions belong to the market. For example, open
+`/screen?id=north` and `/screen?id=south`, and send observations with the matching
+`screen_id`. A reconnect receives that screen's last creative. `/clerk?id=north`
+reads and writes north's stock, while budgets remain shared.
 
-The [context map](../CONTEXT-MAP.md) covers the full design. The replay stops at
-template playback and the console. Live recognition, IAB catalog resolution,
-time-based debouncing, warm media upgrades, QR redemption and billing remain
-integration work. The simulator stores its current state in memory and
-uses the existing WebSocket schema.
+Run `make live-preflight` to inspect configuration without spending provider
+credits. `/health` exposes the same `ads` section. `configured` means an adapter
+was built, not that a live provider request succeeded. `make live-preflight
+ARGS="--require-providers"` fails if any provider is disabled/unconfigured or
+any of the six expected seed loops is missing. Approved stock copy, a silent
+creative and a template remain available when optional providers are absent.
+
+AI copy and audience tagging default on, but need `ANTHROPIC_API_KEY`.
+Existing `.env` values of `AUDIENCE_AI=false` or `CREATIVE_AI_COPY=false` still
+explicitly disable them. Voice needs both `ELEVENLABS_API_KEY` and
+`ELEVENLABS_NARRATOR_VOICE_ID`; `VOICEOVER_PREWARM=true` fills approved basket
+voice lines at startup within the persistent character budget.
+
+Cold video uses `FAL_KEY` and a verified `FAL_VIDEO_MODEL`. Install ffmpeg,
+then run `make bundle-loops ARGS="--budget-usd <total> --cost-per-clip-usd <maximum>"`
+with the provider model's verified maximum request charge. It generates only
+approved pairs and solos, transcodes to H.264 720p, and skips cached files.
+Each submitted job leaves an `.attempt.json` intent. If generation times out or
+fails, the command refuses another submission for that job until an operator
+reconciles it with the provider and either installs the recovered MP4 or removes
+the intent after confirming no request can still complete. It never retries a
+potentially billed request automatically. No generation runs in the hot path.
 
 ## Drive the market: bidding war, stock, billing
 

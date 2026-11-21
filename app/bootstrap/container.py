@@ -10,10 +10,10 @@ import logging
 import os
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from datetime import timedelta
 from typing import Any
 
-from app.bootstrap.demo import DemoControls, register_demo
+from app.bootstrap.demo import DemoControls
+from app.bootstrap.live import register_live_market
 from app.config.settings import AppSettings
 from app.contract.messages import AudienceKeyframe
 from app.modules.ai.application.service.llm import AIService
@@ -27,7 +27,6 @@ from app.modules.audience.infrastructure.recognition_store import RecognitionSto
 from app.modules.audience.infrastructure.recognition_vlm import RecognitionVlm
 from app.modules.audience.infrastructure.tagging.claude import ClaudeAudienceTagger
 from app.modules.common.application.clock import BaseClock
-from app.modules.common.application.id_generator import IdGenerator
 from app.modules.common.infrastructure.clock.system_clock import SystemClock
 from app.modules.common.infrastructure.postgres.write_behind import WriteBehindWriter
 from app.modules.creative.application.ports.copywriter import CopyWriter
@@ -44,6 +43,17 @@ from app.realtime.scheduler import Scheduler, thread_timer
 from app.realtime.warm_worker import WarmWorker
 
 logger = logging.getLogger(__name__)
+
+
+def _llm_environment(settings: AppSettings) -> dict[str, str]:
+    from dotenv import dotenv_values
+
+    env = {k: v for k, v in dotenv_values(".env").items() if v is not None} | dict(os.environ)
+    # Respect explicitly supplied settings as well as the normal .env/env load.
+    env["ANTHROPIC_API_KEY"] = (
+        settings.anthropic_api_key.get_secret_value() if settings.anthropic_api_key else ""
+    )
+    return env
 
 
 @dataclass
@@ -70,6 +80,7 @@ class Container:
     writer: WriteBehindWriter | None = None
     redemption_ledger: Any = None  # RedemptionLedger; in memory unless DATABASE_URL is set
     topic_extractor: TopicExtractor | None = None  # speech topics (AUDIENCE_AI)
+    loop_keys: tuple[str, ...] = ()
     # Async cleanups run at shutdown (HTTP clients, ...).
     closers: list[Callable[[], Awaitable[None]]] = field(default_factory=list)
 
@@ -110,32 +121,8 @@ def register_contexts(container: Container) -> None:
 
     if container.vlm is not None:
         container.router.on(AudienceKeyframe, container.vlm.accept)
-    if container.settings.demo_simulator and container.settings.app_env != "prod":
-        container.demo = register_demo(
-            router=container.router,
-            hub=container.hub,
-            clock=container.clock,
-            ids=IdGenerator(),
-            warm=container.warm,
-            voiceovers=container.voiceovers,
-            narrator_voice_id=container.settings.elevenlabs_narrator_voice_id,
-            speech_screens=frozenset(container.settings.speech_mode_screens),
-            speech_ttl=timedelta(seconds=container.settings.speech_topic_ttl_s),
-            swap_holds=container.settings.swap_holds_enabled,
-            scheduler=container.scheduler,
-            tagger=container.tagger,
-            auction_log=container.auction_log,
-            ledger=container.ledger,
-            budget_clp=container.settings.demo_budget_clp,
-            topic_extractor=container.topic_extractor,
-            redemption_ledger=container.redemption_ledger,
-            public_base_url=container.settings.public_base_url,
-            media_dir=container.settings.media_dir,
-            copywriter=container.copywriter,
-            startup=container.startup if container.settings.voiceover_prewarm else None,
-            copy_timeout_s=container.settings.creative_copy_timeout_s,
-            hourly_budget_usd=container.settings.creative_hourly_budget_usd,
-        )
+    if container.settings.live_ads_enabled:
+        container.demo = register_live_market(container)
 
 
 def build_copywriter(container: Container, copywriter: CopyWriter | None = None) -> None:
@@ -146,10 +133,8 @@ def build_copywriter(container: Container, copywriter: CopyWriter | None = None)
     if copywriter is not None:
         container.copywriter = copywriter
         return
-    if not container.settings.creative_ai_copy:
+    if not container.settings.creative_ai_copy or container.settings.app_env == "test":
         return
-    from dotenv import dotenv_values
-
     from app.modules.ai.domain.model_capabilities import DEFAULT_EFFORT, ModelProfile, parse_effort
     from app.modules.ai.infrastructure.adapters.llm.anthropic import DEFAULT_MODEL
     from app.modules.ai.infrastructure.adapters.llm.factory import (
@@ -159,7 +144,7 @@ def build_copywriter(container: Container, copywriter: CopyWriter | None = None)
     from app.modules.creative.infrastructure.claude_copywriter import ClaudeCopywriter
 
     # The factory reads the environment only; merge `.env` so local runs match settings.
-    env = {k: v for k, v in dotenv_values(".env").items() if v is not None} | dict(os.environ)
+    env = _llm_environment(container.settings)
     try:
         provider = build_llm_provider(env)
     except LLMNotConfigured:
@@ -190,15 +175,13 @@ def build_audience_ai(
     settings = container.settings
     if not settings.audience_ai or settings.app_env == "test":
         return  # unit tests never call live providers
-    from dotenv import dotenv_values
-
     from app.modules.ai.domain.model_capabilities import DEFAULT_EFFORT, ModelProfile, parse_effort
     from app.modules.ai.infrastructure.adapters.llm.anthropic import DEFAULT_MODEL
     from app.modules.audience.infrastructure.claude_topics import ClaudeTopicExtractor
 
     # AppSettings reads `.env` into its own fields only; the LLM factory reads a
     # mapping, so give it `.env` overlaid by the real environment.
-    env = {k: v for k, v in dotenv_values(".env").items() if v is not None} | dict(os.environ)
+    env = _llm_environment(settings)
     try:
         provider = build_llm_provider(env)
     except LLMNotConfigured:

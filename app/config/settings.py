@@ -16,6 +16,8 @@ class AppSettings(BaseSettings):
     app_env: Literal["local", "test", "prod"] = "local"
     log_level: str = "INFO"
     demo_simulator: bool = False
+    # The real sensing-to-ad loop runs independently of simulator/operator tooling.
+    live_ads_enabled: bool = True
     vlm_enabled: bool = False
     # Postgres is the record (auctions, charges), written behind the hot path.
     # Unset: everything stays in memory (simulator, tests, offline rehearsal).
@@ -26,7 +28,8 @@ class AppSettings(BaseSettings):
     public_base_url: str = "http://localhost:5173"
     # Warm audience AI (Claude): keyframe tags (objects/held products only) and speech
     # topics for utterances the keyterm matcher missed. Off: keyterms and markers only.
-    audience_ai: bool = False
+    audience_ai: bool = True
+    anthropic_api_key: SecretStr | None = None  # readiness only; the AI factory owns the client
     # Minimum ad seconds (docs/auction-plan.md D5): hold a swap so ads aren't strobed.
     # None = on, except app_env=test (fixed-clock tests get immediate swaps unless
     # they opt in and inject a scheduler).
@@ -77,13 +80,16 @@ class AppSettings(BaseSettings):
     # ------------------------------------------------------------ creative (docs/creative-generation.md)
     # Warm AI copy (Claude Haiku 5.5) upgrades targeted stock copy in place. Needs
     # ANTHROPIC_API_KEY; without it every creative airs on stock copy.
-    creative_ai_copy: bool = False
+    creative_ai_copy: bool = True
     creative_copy_timeout_s: float = Field(default=2.5, gt=0, le=20)
     # Generation spend cap per screen-hour, USD (the ROI rule applies under it).
     creative_hourly_budget_usd: Decimal = Field(default=Decimal(2), gt=0, le=1000)
     # Speech topics from opted-in screens (ADR 0005: off by default, per screen).
     speech_mode_screens: list[str] = Field(default_factory=list)
     speech_topic_ttl_s: int = Field(default=60, gt=0, le=600)
+    # Cold bundle-loop generation is an explicit CLI job, never an automatic live call.
+    fal_key: SecretStr | None = None
+    fal_video_model: str | None = None
 
     @property
     def voiceovers_configured(self) -> bool:

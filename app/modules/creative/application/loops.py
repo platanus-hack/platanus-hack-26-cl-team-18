@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 
+from app.modules.common.application.idempotency import compute_request_hash
 from app.modules.creative.application.ports.video import VideoGenerationError, VideoGenerator
 
 LOOP_DIR = "loops"
@@ -88,6 +89,7 @@ class BundleLoopLibrary:
         cost_per_clip_usd: Decimal,
         budget_usd: Decimal,
         duration_s: int = 6,
+        record_attempts: bool = False,
     ) -> LoopReport:
         """Generate loops that don't exist yet, never spending past `budget_usd`."""
         self._dir.mkdir(parents=True, exist_ok=True)
@@ -102,6 +104,27 @@ class BundleLoopLibrary:
                 skipped.append(job.key)
                 continue
             prompt = loop_prompt(job.categories)
+            if record_attempts:
+                # A timed-out paid request may still complete. Leave its intent
+                # behind and require reconciliation before another submission.
+                try:
+                    with path.with_suffix(".attempt.json").open("x") as intent:
+                        request = {
+                            "model": generator.model,
+                            "prompt": prompt,
+                            "duration_s": duration_s,
+                        }
+                        json.dump(
+                            {
+                                "key": job.key,
+                                "request": request,
+                                "request_hash": compute_request_hash(request),
+                            },
+                            intent,
+                        )
+                except FileExistsError:
+                    failed.append((job.key, "reconciliation_required"))
+                    continue
             spent += cost_per_clip_usd  # count before the call: a timeout may still bill
             try:
                 clip = await generator.generate(prompt, duration_s=duration_s)

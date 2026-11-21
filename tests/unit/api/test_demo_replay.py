@@ -52,9 +52,9 @@ def test_replay_reaches_player_and_falls_back_when_a_minor_is_likely(tmp_path) -
         assert player.receive_json()["type"] == "system.error"
 
 
-def test_simulator_can_never_register_for_prod() -> None:
-    container = build_container(AppSettings(app_env="prod", demo_simulator=True))
-    assert not container.router.has_handlers(AudienceSnapshot)
+def test_live_loop_registers_for_prod_without_simulator() -> None:
+    container = build_container(AppSettings(_env_file=None, app_env="prod", demo_simulator=False))
+    assert container.router.has_handlers(AudienceSnapshot)
 
 
 def test_console_explains_the_staged_basket_and_replays_latest_decision(tmp_path) -> None:

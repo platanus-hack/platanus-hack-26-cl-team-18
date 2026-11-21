@@ -6,7 +6,7 @@ import { useState } from "react";
 /** `/clerk?id=demo-01`: the store's stock tablet. A stock-out re-forms the basket at once. */
 export function ClerkPage() {
     const screenId = screenIdFromLocation();
-    const { book, error, refresh } = useBook();
+    const { book, error, refresh } = useBook(1000, screenId);
     const [failed, setFailed] = useState<string | null>(null);
     return (
         <main className="mx-auto flex min-h-screen max-w-md flex-col gap-4 bg-canvas p-4 text-body">

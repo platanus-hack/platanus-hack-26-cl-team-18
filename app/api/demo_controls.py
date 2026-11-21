@@ -2,7 +2,7 @@
 
 Thin transport: validate the contract message → call the demo controls in a
 worker thread (the kernel is synchronous) → map domain errors to HTTP. No
-business logic here. Only mounted when the simulator is wired (never in prod).
+business logic here. The live market supplies controls; production rejects operator calls.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Annotated
 
 import anyio
-from fastapi import APIRouter, Body, HTTPException, Request
+from fastapi import APIRouter, Body, HTTPException, Query, Request
 
 from app.bootstrap.container import Container
 from app.bootstrap.demo import DemoControls, UnknownBrand
@@ -25,14 +25,19 @@ router = APIRouter(prefix="/api", tags=["demo"])
 
 def _controls(request: Request) -> DemoControls:
     container: Container = request.app.state.container
-    if container.demo is None:
+    if container.demo is None or container.settings.app_env == "prod":
         raise HTTPException(status_code=404, detail="the demo market is not running")
     return container.demo
 
 
 @router.get("/book")
-async def book(request: Request) -> ConsoleBook:
+async def book(
+    request: Request,
+    screen_id: Annotated[str, Query(pattern=r"^[A-Za-z0-9_.:-]{1,64}$")] = "demo-01",
+) -> ConsoleBook:
     controls = _controls(request)
+    if controls.book_for is not None:
+        return await anyio.to_thread.run_sync(controls.book_for, screen_id)
     return await anyio.to_thread.run_sync(controls.book_view)
 
 

@@ -160,7 +160,7 @@ async def run(args: argparse.Namespace) -> int:
     return 0
 
 
-def main() -> None:
+def argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="agent.vision")
     parser.add_argument("--screen", required=True)
     parser.add_argument("--backend", default="ws://127.0.0.1:8000/ws/agent")
@@ -187,7 +187,11 @@ def main() -> None:
     parser.add_argument("--no-keyframes", action="store_true")
     parser.add_argument("--gpu-url", help="remote GPU service, e.g. wss://host/infer (ADR 0007)")
     parser.add_argument("--gpu-token", default=None, help="bearer token (default: env GPU_TOKEN)")
-    args = parser.parse_args()
+    return parser
+
+
+def main() -> None:
+    args = argument_parser().parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     raise SystemExit(asyncio.run(run(args)))
 

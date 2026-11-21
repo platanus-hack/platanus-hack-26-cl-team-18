@@ -142,3 +142,32 @@ def test_fal_errors_are_typed(response: httpx.Response, failure: VideoFailure) -
 def test_fal_needs_a_key() -> None:
     with pytest.raises(VideoGenerationError):
         FalVideoGenerator("", model="m")
+
+
+def test_uncertain_paid_generation_requires_reconciliation_before_resubmitting(tmp_path):
+    library = BundleLoopLibrary(tmp_path)
+    generator = FakeGenerator(fail={"coffee"})
+    for _ in range(2):
+        report = anyio.run(
+            lambda: library.generate_missing(
+                generator,
+                jobs()[:1],
+                cost_per_clip_usd=Decimal("0.5"),
+                budget_usd=Decimal("1"),
+                record_attempts=True,
+            )
+        )
+    assert len(generator.prompts) == 1
+    assert report.failed == (("cafe-patio+voltio", "reconciliation_required"),)
+    assert report.spent_usd == 0
+
+
+def test_missing_transcoder_never_spends_on_a_video(monkeypatch):
+    from app.modules.creative.infrastructure.h264_video import H264VideoGenerator
+
+    monkeypatch.setattr("shutil.which", lambda _: None)
+    generator = FakeGenerator()
+    with pytest.raises(VideoGenerationError) as error:
+        anyio.run(lambda: H264VideoGenerator(generator).generate("coffee", duration_s=6))
+    assert error.value.failure == VideoFailure.NOT_CONFIGURED
+    assert not generator.prompts

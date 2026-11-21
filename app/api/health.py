@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import APIRouter, Request
 
 from app.bootstrap.container import Container
+from app.bootstrap.readiness import live_readiness
 from app.contract.messages import CONTRACT_VERSION
 
 router = APIRouter()
@@ -18,6 +19,7 @@ def health(request: Request) -> dict[str, Any]:
         "status": "ok",
         "env": c.settings.app_env,
         "contract_version": CONTRACT_VERSION,
+        "ads": live_readiness(c),
         "screens_connected": c.hub.connected_screens(),
         "consoles_connected": c.hub.console_count(),
         "warm": {

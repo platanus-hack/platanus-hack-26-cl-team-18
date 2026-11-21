@@ -13,8 +13,11 @@ import { backendHttpUrl } from "./config";
  * Every response is validated against the generated contract.
  */
 
-export async function fetchBook(signal?: AbortSignal): Promise<ConsoleBook> {
-    const response = await fetch(`${backendHttpUrl}/api/book`, signal ? { signal } : {});
+export async function fetchBook(signal?: AbortSignal, screenId = "demo-01"): Promise<ConsoleBook> {
+    const response = await fetch(
+        `${backendHttpUrl}/api/book?screen_id=${encodeURIComponent(screenId)}`,
+        signal ? { signal } : {},
+    );
     if (!response.ok) throw new Error(`book: HTTP ${response.status}`);
     return ConsoleBookSchema.parse(await response.json());
 }
@@ -70,14 +73,14 @@ export interface BookState {
 }
 
 /** Poll the live book (default every second); `refresh` after a write for snappy feedback. */
-export function useBook(intervalMs = 1000): BookState {
+export function useBook(intervalMs = 1000, screenId = "demo-01"): BookState {
     const [book, setBook] = useState<ConsoleBook | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [tick, setTick] = useState(0);
     useEffect(() => {
         const controller = new AbortController();
         const load = () => {
-            fetchBook(controller.signal)
+            fetchBook(controller.signal, screenId)
                 .then((next) => {
                     setBook(next);
                     setError(null);
@@ -92,7 +95,7 @@ export function useBook(intervalMs = 1000): BookState {
             controller.abort();
             clearInterval(timer);
         };
-    }, [intervalMs, tick]);
+    }, [intervalMs, tick, screenId]);
     return {
         book,
         error,

@@ -57,7 +57,8 @@ class Recorder:
 @pytest.fixture
 def container() -> Container:
     return build_container(
-        AppSettings(app_env="test"), clock=FixedClock(T0 + timedelta(milliseconds=3))
+        AppSettings(app_env="test", live_ads_enabled=False),
+        clock=FixedClock(T0 + timedelta(milliseconds=3)),
     )
 
 
