@@ -7,6 +7,7 @@ from threading import RLock
 from typing import TYPE_CHECKING
 
 from app.bootstrap.demo import DEMO_SCREEN, DemoControls, _slug, register_demo, seed_market
+from app.bootstrap.demo_catalog import catalog_named
 from app.contract.messages import (
     AdvertiserBidMultiplier,
     AudienceKeyframe,
@@ -50,6 +51,7 @@ def register_live_market(container: Container) -> DemoControls:
         auction_log=container.auction_log,
         ledger=container.ledger,
         redemption_ledger=container.redemption_ledger,
+        catalog=catalog_named(settings.demo_catalog),
     )
     slugs = {kit.brand_id: _slug(kit.name) for kit in market.kits}
     container.campaign_generator = CampaignGenerator(

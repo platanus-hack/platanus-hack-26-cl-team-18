@@ -74,7 +74,7 @@ from app.modules.audience.application.playback_echo import PlaybackEcho
 from app.modules.audience.application.ports import AudienceTagger
 from app.modules.audience.application.ports.tagger import WarmScheduler
 from app.modules.audience.application.ports.topics import TopicExtractor, TopicOutcome
-from app.modules.audience.domain.catalog import CueRule
+from app.modules.audience.domain.catalog import CueRule, ProductRef
 from app.modules.audience.domain.policies.group_default import GroupDefault
 from app.modules.audience.domain.speech_evidence import (
     SpeechEvidence,
@@ -196,6 +196,8 @@ class LiveMarket:
     # One learner for the whole market: every screen's auctions and plays feed it.
     autobidder: AutoBidder
     autobid_lock: Lock = field(default_factory=Lock)
+    # Which brand catalog this market runs (DEMO_CATALOG): fictional or chile.
+    catalog: demo_catalog.Catalog = demo_catalog.FICTIONAL
 
 
 def seed_market(
@@ -205,6 +207,7 @@ def seed_market(
     auction_log: AuctionLog | None = None,
     ledger: ChargeLedger | None = None,
     redemption_ledger: RedemptionLedger | None = None,
+    catalog: demo_catalog.Catalog = demo_catalog.FICTIONAL,
 ) -> LiveMarket:
     # Keep the project mark on the house ad. The fictional brands have fixed
     # mock marks included with their kits.
@@ -228,12 +231,12 @@ def seed_market(
             tagline=brand.tagline,
             voice=brand.voice,
         )
-        for brand in demo_catalog.BRANDS
+        for brand in catalog.brands
     )
     # Stable brand slugs: prop markers (edge/props/markers.json, ADR 0008 D2), the
     # audience catalog's brand_refs and the bundle loop files all use them.
     brand_by_slug = {
-        brand.slug: kit.brand_id for brand, kit in zip(demo_catalog.BRANDS, kits, strict=True)
+        brand.slug: kit.brand_id for brand, kit in zip(catalog.brands, kits, strict=True)
     }
     # Every mutual-partner pair gets an approved basket (docs/demo.md), so a rival
     # competes for its slot inside a basket and prices it. The price is the brands',
@@ -241,7 +244,7 @@ def seed_market(
     offer_book = OfferBook.of(
         [
             offer
-            for basket in demo_catalog.BASKETS
+            for basket in catalog.baskets
             for offer in _tiers(
                 frozenset(brand_by_slug[slug] for slug in basket.slugs),
                 basket.names,
@@ -262,12 +265,10 @@ def seed_market(
                 )
                 for segment in brand.segments
             ),
-            partners=frozenset(
-                brand_by_slug[slug] for slug in demo_catalog.partners_of(brand.slug)
-            ),
+            partners=frozenset(brand_by_slug[slug] for slug in catalog.partners_of(brand.slug)),
             budget_remaining=Money.create(currency="CLP", amount=budget_clp),
         )
-        for brand in demo_catalog.BRANDS
+        for brand in catalog.brands
     )
     book = LiveCampaignBook(bidders)
     return LiveMarket(
@@ -283,6 +284,7 @@ def seed_market(
         campaign_media=load_campaign_media(),
         house_logo_url=logo_url,
         autobidder=AutoBidder(book),
+        catalog=catalog,
     )
 
 
@@ -365,12 +367,25 @@ def register_demo(
             (SegmentSource.VISION, "beer bottle", beer),
         )
     )
+    # The market's catalog may read a demo cue as another segment (demo_catalog.Catalog).
+    cue_segments = {
+        label: SegmentId.create(segment) for label, segment in market.catalog.cue_segments
+    }
+    fixture_cues = tuple(
+        replace(rule, segment_id=cue_segments.get(rule.cue, rule.segment_id))
+        for rule in fixture_cues
+    )
     fixture_keys = {(rule.source, rule.cue) for rule in fixture_cues}
     audience_catalog = loaded.catalog.with_cues(
         (
             *(rule for rule in loaded.catalog.cues if (rule.source, rule.cue) not in fixture_keys),
             *fixture_cues,
         )
+    ).with_products(
+        # The market's own brands, so a held prop ("product:<slug>") has a category.
+        ProductRef(category=brand.product, brand_ref=brand.slug)
+        for brand in market.catalog.brands
+        if brand.product is not None
     )
     segment_labels = {segment.segment_id: segment.label for segment in audience_catalog.segments}
     # Segment matching beyond exact ids (auction affinity.py): the IAB hierarchy from
@@ -392,6 +407,7 @@ def register_demo(
         "comida": food,
         "cerveza": beer,
     }
+    keyterm_catalog = {term: cue_segments.get(term, seg) for term, seg in keyterm_catalog.items()}
     # Creative generation (docs/creative-generation.md): targeted stock copy on the hot
     # path, guarded AI copy as a warm upgrade when a copywriter is configured.
     catalog = CreativeCatalog(
@@ -408,6 +424,7 @@ def register_demo(
             SegmentId.create(demo_catalog.SALTY_SNACKS): Angle.HUNGER,
             SegmentId.create(demo_catalog.WATER): Angle.POST_WORKOUT,
             SegmentId.create(demo_catalog.ENERGY_DRINKS): Angle.ENERGY,
+            SegmentId.create(demo_catalog.CANDY): Angle.HUNGER,
         },
     )
     studio = CreativeStudio(
@@ -1781,17 +1798,21 @@ def nearest_band(tracklets: Sequence[Tracklet]) -> DistanceBand | None:
 
 
 def _brand_logo(slug: str, name: str, color: str) -> str:
-    if (CAMPAIGN_ASSETS / "logos" / f"{slug}.svg").is_file():
-        return f"/campaign-assets/logos/{slug}.svg"
+    # An official file (press kit or Wikimedia) wins; else a plain wordmark. Never AI.
+    for ext in ("svg", "png", "webp"):
+        if (CAMPAIGN_ASSETS / "logos" / f"{slug}.{ext}").is_file():
+            return f"/campaign-assets/logos/{slug}.{ext}"
     return wordmark(name, color)
 
 
 def _slug(name: str) -> str:
-    """'Café Patio' → 'cafe-patio' (matches edge/props/markers.json)."""
+    """'Café Patio' → 'cafe-patio', "Lay's" → 'lays' (matches edge/props/markers.json)."""
+    import re
     import unicodedata
 
     plain = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode("ascii")
-    return "-".join(plain.lower().split())
+    plain = plain.lower().replace("'", "")
+    return "-".join(re.findall(r"[a-z0-9]+", plain))
 
 
 def _money(value: Money) -> MoneyDTO:

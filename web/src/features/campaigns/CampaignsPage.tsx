@@ -98,7 +98,51 @@ const STARTERS: readonly Starter[] = [
         daypart: null,
         media: "video",
     },
+    // DEMO_CATALOG=chile (real brands at a Pronto Copec); only the running catalog's show.
+    {
+        title: "Turno de noche",
+        subtitle: "Score lidera · para 2",
+        brands: ["score", "juan-valdez"],
+        party: 2,
+        moment: "energy",
+        daypart: "night",
+        media: "video",
+    },
+    {
+        title: "Antes de la ruta",
+        subtitle: "Juan Valdez lidera · para 2",
+        brands: ["juan-valdez", "pronto-copec"],
+        party: 2,
+        moment: "coffee_break",
+        daypart: "morning",
+        media: "photo",
+    },
+    {
+        title: "Completo y bebida",
+        subtitle: "Pronto Copec lidera · para 3",
+        brands: ["pronto-copec", "coca-cola"],
+        party: 3,
+        moment: "hunger",
+        daypart: "midday",
+        media: "photo",
+    },
+    {
+        title: "Red Bull pelea el turno",
+        subtitle: "Red Bull lidera · para 1",
+        brands: ["red-bull", "juan-valdez"],
+        party: 1,
+        moment: "energy",
+        daypart: "night",
+        media: "video",
+    },
 ];
+
+/** Starters whose brands all exist in the catalog the backend runs. */
+function startersFor(catalog: CampaignCatalog | null): readonly Starter[] {
+    if (catalog === null) return STARTERS.slice(0, 4);
+    const slugs = new Set(catalog.brands.map((brand) => brand.slug));
+    return STARTERS.filter((starter) => starter.brands.every((slug) => slugs.has(slug)));
+}
 
 /** What each server-side check guarantees, in the advertiser's words. */
 const CHECKS: Record<string, readonly [string, string]> = {
@@ -170,7 +214,19 @@ export function CampaignsPage() {
         const controller = new AbortController();
         void readJson("catalog", controller.signal)
             .then((data) => {
-                if (!controller.signal.aborted) setCatalog(CampaignCatalogSchema.parse(data));
+                if (controller.signal.aborted) return;
+                const parsed = CampaignCatalogSchema.parse(data);
+                setCatalog(parsed);
+                // The default pair is fictional; another catalog starts on its first starter.
+                const known = new Set(parsed.brands.map((brand) => brand.slug));
+                setBrands((current) =>
+                    current.every((slug) => known.has(slug))
+                        ? current
+                        : [
+                              ...(startersFor(parsed)[0]?.brands ??
+                                  parsed.brands.slice(0, 1).map((b) => b.slug)),
+                          ],
+                );
             })
             .catch((reason: unknown) => {
                 if (!controller.signal.aborted) {
@@ -258,7 +314,7 @@ export function CampaignsPage() {
                     }
                 />
                 <div className="studio-starters" aria-label="Campañas sugeridas">
-                    {STARTERS.map((starter) => (
+                    {startersFor(catalog).map((starter) => (
                         <button
                             key={starter.title}
                             disabled={catalog === null}

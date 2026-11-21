@@ -23,6 +23,20 @@ export const DEMO_BRANDS: Readonly<Record<string, string>> = {
     voltio: "Voltio",
     rayo: "Rayo",
     "malta-sur": "Malta Sur",
+    // DEMO_CATALOG=chile (app/bootstrap/demo_catalog_chile.py)
+    score: "Score",
+    "red-bull": "Red Bull",
+    monster: "Monster",
+    "juan-valdez": "Juan Valdez",
+    nescafe: "Nescafé",
+    "pronto-copec": "Pronto Copec",
+    "coca-cola": "Coca-Cola",
+    pepsi: "Pepsi",
+    cachantun: "Cachantun",
+    benedictino: "Benedictino",
+    lays: "Lay's",
+    "marco-polo": "Marco Polo",
+    "super-8": "Super 8",
 };
 
 export function AudiencePanel({ view }: { view: ScreenView }) {

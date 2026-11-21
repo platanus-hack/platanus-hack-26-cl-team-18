@@ -23,6 +23,7 @@ import sys
 from pathlib import Path
 
 from app.bootstrap.demo import _slug, seed_market
+from app.bootstrap.demo_catalog import catalog_named
 from app.config.settings import AppSettings
 from app.modules.common.application.id_generator import IdGenerator
 from app.modules.creative.application.loops import LOOP_DIR, bundle_key
@@ -87,7 +88,11 @@ def main() -> int:
     args = parser.parse_args()
     settings = AppSettings()
     media_dir: Path = args.media_dir or settings.media_dir
-    market = seed_market(ids=IdGenerator(), budget_clp=settings.demo_budget_clp)
+    market = seed_market(
+        ids=IdGenerator(),
+        budget_clp=settings.demo_budget_clp,
+        catalog=catalog_named(settings.demo_catalog),
+    )
     kits = {kit.brand_id: kit for kit in market.kits}
     category = {bidder.brand_id: bidder.category for bidder in market.bidders}
     bundles = {frozenset({brand}) for brand in kits} | set(market.offers.baskets())

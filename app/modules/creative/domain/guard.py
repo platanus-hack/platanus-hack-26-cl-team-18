@@ -195,10 +195,13 @@ def check_copy(draft: CopyDraft, brief: CreativeBrief) -> GuardVerdict:
     )
     approved_price = _digits(str(offer.price.amount)) if offer else None
     basket = {normalize(name) for name in brief.names}
+    # A basket brand's own name may contain a known brand ("Pronto Copec" ⊃ "Copec"):
+    # naming your own brand is never naming a competitor.
     competitors = tuple(
         name
         for name in sorted(brief.avoid_names | set(KNOWN_BRANDS))
         if normalize(name) not in basket
+        and not any(contains_term(own, normalize(name)) for own in basket)
     )
     allowed_party = party_mentions(approved_text)
     if brief.addressed_party is not None:

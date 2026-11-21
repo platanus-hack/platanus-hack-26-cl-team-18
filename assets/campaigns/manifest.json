@@ -25,6 +25,34 @@
     "cafe-patio+rayo": {
       "photo": "rayo-coffee",
       "video": "rayo-coffee"
+    },
+    "score": {
+      "photo": "rayo",
+      "video": "rayo"
+    },
+    "red-bull": {
+      "photo": "rayo",
+      "video": "rayo"
+    },
+    "monster": {
+      "photo": "energy",
+      "video": "energy"
+    },
+    "juan-valdez": {
+      "photo": "coffee",
+      "video": "coffee"
+    },
+    "nescafe": {
+      "photo": "coffee",
+      "video": "coffee"
+    },
+    "juan-valdez+score": {
+      "photo": "rayo-coffee",
+      "video": "rayo-coffee"
+    },
+    "juan-valdez+red-bull": {
+      "photo": "rayo-coffee",
+      "video": "rayo-coffee"
     }
   }
 }

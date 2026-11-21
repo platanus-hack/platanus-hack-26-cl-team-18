@@ -3,6 +3,7 @@
 from decimal import Decimal
 
 from app.bootstrap.demo import _slug, seed_market
+from app.bootstrap.demo_catalog import catalog_named
 from app.config.settings import AppSettings
 from app.modules.common.application.id_generator import IdGenerator
 from app.modules.creative.application.loops import BundleLoopLibrary, LoopJob, LoopReport
@@ -24,7 +25,11 @@ async def generate_seed_loops(
 
     if shutil.which("ffmpeg") is None:
         raise ValueError("Install ffmpeg before generating loops")
-    market = seed_market(ids=IdGenerator(), budget_clp=settings.demo_budget_clp)
+    market = seed_market(
+        ids=IdGenerator(),
+        budget_clp=settings.demo_budget_clp,
+        catalog=catalog_named(settings.demo_catalog),
+    )
     slugs = {kit.brand_id: _slug(kit.name) for kit in market.kits}
     categories = {bidder.brand_id: bidder.category for bidder in market.bidders}
     bundles = {frozenset({brand}) for brand in slugs} | set(market.offers.baskets())

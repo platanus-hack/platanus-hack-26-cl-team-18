@@ -136,6 +136,16 @@ and Rayo (energy, Voltio's competitor). Approved baskets today: Voltio + Café
 Patio, Rayo + Café Patio. The seed uses distinct fictional marks from
 [`assets/campaigns/logos`](../assets/campaigns/logos).
 
+**Real-brand catalog (local station only):** `DEMO_CATALOG=chile` swaps in
+[`demo_catalog_chile.py`](../app/bootstrap/demo_catalog_chile.py): a Pronto Copec
+highway shop with Score, Red Bull, Monster, Juan Valdez, Nescafé, Pronto Copec,
+Coca-Cola, Pepsi, Cachantun, Benedictino, Lay's, Marco Polo and Super 8. Hero
+basket: Score + Juan Valdez (Red Bull bids for Score's slot). No alcohol (Ley 21.363
+bans it at gas stations); the minor-safety beat blocks the "ALTO EN" snacks instead
+(Ley 20.606). Props use `edge/props/markers-chile.json`. Real trademarks, no
+affiliation: keep it off the public URL. Logo provenance:
+[`assets/campaigns/logos/SOURCES.md`](../assets/campaigns/logos/SOURCES.md).
+
 **Prop markers:** `edge/props/markers.json` maps marker id → brand slug. Print
 the [Café Patio marker](../edge/props/cafe-patio-marker.svg) at 100% scale. It
 prints with a 4.2 × 4.2 cm code and a white border. Face it toward the camera

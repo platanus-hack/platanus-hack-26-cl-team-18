@@ -148,3 +148,15 @@ class SegmentCatalog:
             products=self.products,
             relations=self.relations,
         )
+
+    def with_products(self, products: Iterable[ProductRef]) -> Self:
+        """The same segments and cues with extra products (a market's own brands)."""
+        known = {(product.category, product.brand_ref) for product in self.products}
+        extra = tuple(p for p in products if (p.category, p.brand_ref) not in known)
+        return type(self)(
+            version=self.version,
+            segments=self.segments,
+            cues=self.cues,
+            products=(*self.products, *extra),
+            relations=self.relations,
+        )

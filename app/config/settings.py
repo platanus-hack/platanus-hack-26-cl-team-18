@@ -28,6 +28,10 @@ class AppSettings(BaseSettings):
     database_url: SecretStr | None = None
     # Each seeded demo campaign's budget (CLP). Small values exercise budget exhaustion.
     demo_budget_clp: int = Field(default=50_000, gt=0)
+    # Which brand catalog the market runs (app/bootstrap/demo_catalog.py): "fictional"
+    # (tests, evals, the public URL) or "chile" (real brands at a Pronto Copec, for the
+    # local station; real trademarks, so keep it off public deploys).
+    demo_catalog: Literal["fictional", "chile"] = "fictional"
     # Where phones reach the backend through the tunnel (QR → {public_base_url}/r/{code}).
     public_base_url: str = "http://localhost:5173"
     # Warm audience AI (Claude): keyframe tags (objects/held products only) and speech

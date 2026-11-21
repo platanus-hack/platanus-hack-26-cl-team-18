@@ -49,7 +49,7 @@ class AngleReason(StrEnum):
 
 # Which brand categories can credibly answer each angle.
 ANGLE_CATEGORIES: Mapping[Angle, frozenset[str]] = {
-    Angle.HUNGER: frozenset({"food", "pastry", "burger", "snacks", "coffee", "cola"}),
+    Angle.HUNGER: frozenset({"food", "pastry", "burger", "snacks", "candy", "coffee", "cola"}),
     Angle.ENERGY: frozenset({"energy_drink", "sports_goods", "coffee"}),
     Angle.COFFEE_BREAK: frozenset({"coffee", "pastry"}),
     Angle.POST_WORKOUT: frozenset({"sports_goods", "energy_drink", "coffee", "water"}),
@@ -63,6 +63,7 @@ CATEGORY_ANGLE: Mapping[str, Angle] = {
     "food": Angle.HUNGER,
     "burger": Angle.HUNGER,
     "snacks": Angle.HUNGER,
+    "candy": Angle.HUNGER,
     "cola": Angle.HUNGER,  # a cold soda answers the burger moment
     "water": Angle.POST_WORKOUT,
     "energy_drink": Angle.ENERGY,

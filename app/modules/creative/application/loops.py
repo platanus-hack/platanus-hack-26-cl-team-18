@@ -27,6 +27,8 @@ MOTION_BY_CATEGORY = {
     "burger": "a juicy burger with melting cheese, slow push-in",
     "cola": "dark cola fizzing over ice cubes",
     "snack": "crunchy chips tumbling in slow motion",
+    "snacks": "crunchy chips tumbling in slow motion",
+    "candy": "a chocolate wafer bar snapping in half, crumbs in slow motion",
     "water": "clear water splashing into a bottle, crisp light",
 }
 

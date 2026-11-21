@@ -27,6 +27,7 @@ SNACKS = "1115"  # Purchase Intent | CPG | Edible | Snacks
 SALTY_SNACKS = "1122"  # Purchase Intent | CPG | Edible | Salty Snacks
 WATER = "1000"  # Purchase Intent | CPG | Edible | Beverages | Bottled Water
 ENERGY_DRINKS = "997"  # Purchase Intent | CPG | Edible | Beverages | Energy Drinks
+CANDY = "1074"  # Purchase Intent | CPG | Edible | General Food | Candy
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -43,6 +44,9 @@ class DemoBrand:
     # signature line and the tone AI copy writes in.
     tagline: str | None = None
     voice: tuple[str, ...] = ()
+    # The audience catalog's product category for a held prop ("product:<slug>").
+    # None when iab_audience_1_1_cstore.json already lists the brand.
+    product: str | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -360,9 +364,40 @@ BASKETS: tuple[DemoBasket, ...] = (
 
 
 def partners_of(slug: str) -> frozenset[str]:
-    return frozenset(
-        other for basket in BASKETS if slug in basket.slugs for other in basket.slugs
-    ) - {slug}
+    return FICTIONAL.partners_of(slug)
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Catalog:
+    """One market's brands and approved baskets. `DEMO_CATALOG` picks which one runs."""
+
+    name: str
+    brands: tuple[DemoBrand, ...]
+    baskets: tuple[DemoBasket, ...]
+    # Demo cue and keyterm labels this market reads differently: (label, IAB segment id).
+    # The fictional seed reads an energy can as fitness (Voltio is sports goods); a gas
+    # station reads it as an energy-drink moment, so the hook isn't "you just trained".
+    cue_segments: tuple[tuple[str, str], ...] = ()
+
+    def partners_of(self, slug: str) -> frozenset[str]:
+        return frozenset(
+            other for basket in self.baskets if slug in basket.slugs for other in basket.slugs
+        ) - {slug}
+
+
+# The pinned fictional catalog: tests, evals and the public URL.
+FICTIONAL = Catalog(name="fictional", brands=BRANDS, baskets=BASKETS)
+
+
+def catalog_named(name: str) -> Catalog:
+    """`fictional` (default) or `chile` (real brands, Pronto Copec; demo_catalog_chile.py)."""
+    if name == FICTIONAL.name:
+        return FICTIONAL
+    if name == "chile":
+        from app.bootstrap.demo_catalog_chile import CHILE
+
+        return CHILE
+    raise ValueError(f"Unknown demo catalog: {name!r} (expected 'fictional' or 'chile')")
 
 
 def wordmark(name: str, color: str) -> str:

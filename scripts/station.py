@@ -219,7 +219,10 @@ def main() -> int:
                 "--camera",
                 str(args.camera),
                 "--markers",
-                "props/markers.json",
+                # Printed prop markers map to the running catalog's brand slugs.
+                "props/markers-chile.json"
+                if settings.demo_catalog == "chile"
+                else "props/markers.json",
                 "--device",
                 "cpu",
                 *agent_live_args(start_live=args.start_live),
