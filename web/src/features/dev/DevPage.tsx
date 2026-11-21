@@ -8,6 +8,7 @@ import {
     type ScreenView,
 } from "@/features/console";
 import { backendWsUrl } from "@/lib/config";
+import { demoKey } from "@/lib/demo";
 import { createStore, useStore } from "@/lib/store";
 import { TypedSocket } from "@/lib/ws/typed-socket";
 import { Badge } from "@/shared/ui/badge";
@@ -60,7 +61,8 @@ export function DevPage() {
     const [store] = useState(() => createStore(devReducer, initialDevState));
     const [socket] = useState(() => {
         const s: TypedSocket<DevOutbound> = new TypedSocket<DevOutbound>({
-            url: `${backendWsUrl}/ws/dev`,
+            // Demo surface: a socket can't send headers, so the key rides as ?key=.
+            url: `${backendWsUrl}/ws/dev?key=${encodeURIComponent(demoKey() ?? "")}`,
             schema: DevOutboundSchema,
             maxFrameBytes: MAX_FRAME_BYTES,
             onMessage: (message) => {
@@ -119,7 +121,7 @@ export function DevPage() {
                     <EmptyState
                         icon={<Bug />}
                         title="Consola dev desactivada en este entorno"
-                        description="El backend cerró /ws/dev (4404). Úsala en local con APP_ENV distinto de prod."
+                        description="El backend cerró /ws/dev (4404): falta la clave de demo o es producción."
                     />
                 </Card>
             </AppShell>

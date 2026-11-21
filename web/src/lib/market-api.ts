@@ -7,9 +7,11 @@ import {
 } from "@/contract";
 import { useEffect, useState } from "react";
 import { backendHttpUrl } from "./config";
+import { demoHeaders } from "./demo";
 
 /**
- * The demo market's HTTP inputs (`/advertiser`, `/clerk`). Phones reach them
+ * The demo market's HTTP inputs (`/demo/<key>/advertiser`, `/demo/<key>/clerk`), sent
+ * with the demo key (lib/demo.ts). Phones reach them
  * through a tunnel (ADR 0008 D3), so they use plain HTTP and poll the book.
  * Every response is validated against the generated contract.
  */
@@ -17,7 +19,7 @@ import { backendHttpUrl } from "./config";
 export async function fetchBook(signal?: AbortSignal, screenId = "demo-01"): Promise<ConsoleBook> {
     const response = await fetch(
         `${backendHttpUrl}/api/book?screen_id=${encodeURIComponent(screenId)}`,
-        signal ? { signal } : {},
+        signal ? { signal, headers: demoHeaders() } : { headers: demoHeaders() },
     );
     if (!response.ok) throw new Error(`book: HTTP ${response.status}`);
     return ConsoleBookSchema.parse(await response.json());
@@ -26,7 +28,7 @@ export async function fetchBook(signal?: AbortSignal, screenId = "demo-01"): Pro
 async function post(path: string, body: unknown): Promise<unknown> {
     const response = await fetch(`${backendHttpUrl}${path}`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...demoHeaders() },
         body: JSON.stringify(body),
     });
     if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);

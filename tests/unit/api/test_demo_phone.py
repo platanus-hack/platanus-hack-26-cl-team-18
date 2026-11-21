@@ -2,7 +2,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import httpx
-from scripts import demo_phone
+from scripts.demo import phone as demo_phone
 from starlette.applications import Starlette
 from starlette.testclient import TestClient
 

@@ -1,14 +1,25 @@
 import { cn } from "@/lib/cn";
+import { demoHref, demoKey } from "@/lib/demo";
 import { Inbox } from "lucide-react";
 import type { ReactNode } from "react";
 
-const NAV = [
+/** The real station. Demo tools appear only inside the hidden `/demo/<key>` surface. */
+const STATION_NAV = [
     { href: "/console", label: "Consola" },
-    { href: "/campaigns", label: "Campañas" },
-    { href: "/advertiser", label: "Pujas" },
-    { href: "/clerk?id=demo-01", label: "Stock" },
     { href: "/screen?id=demo-01", label: "Pantalla" },
 ];
+
+function navFor(key: string | null) {
+    if (key === null) return STATION_NAV;
+    return [
+        ...STATION_NAV,
+        { href: demoHref(key, null), label: "Demo" },
+        { href: demoHref(key, "campaigns"), label: "Campañas" },
+        { href: demoHref(key, "advertiser"), label: "Pujas" },
+        { href: demoHref(key, "clerk", "?id=demo-01"), label: "Stock" },
+        { href: demoHref(key, "dev", "?screen=demo-01"), label: "Dev / QA" },
+    ];
+}
 
 /** Relvo's app chrome, as a top bar: brand, then the tools. The player has no shell. */
 export function AppShell({
@@ -19,6 +30,7 @@ export function AppShell({
     width?: "wide" | "narrow";
 }) {
     const path = window.location.pathname;
+    const nav = navFor(demoKey(path));
     return (
         <div className="paper-theme">
             <header className="sticky top-0 z-(--z-overlay) border-b border-border bg-surface">
@@ -30,7 +42,7 @@ export function AppShell({
                         aria-label="Principal"
                         className="-mx-1 flex min-w-0 gap-1 overflow-x-auto"
                     >
-                        {NAV.map(({ href, label }) => {
+                        {nav.map(({ href, label }) => {
                             const current = path === href.split("?")[0];
                             return (
                                 <a

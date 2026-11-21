@@ -4,8 +4,8 @@ import asyncio
 import sys
 
 import pytest
-import scripts.live_demo as launcher
-from scripts.live_demo import provider_environment
+import scripts.station as launcher
+from scripts.station import provider_environment
 
 from app.bootstrap.container import build_container
 from app.config.settings import AppSettings

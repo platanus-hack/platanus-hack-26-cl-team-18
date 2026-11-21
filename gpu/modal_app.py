@@ -2,7 +2,7 @@
 
     modal secret create team18-gpu GPU_TOKEN=$(openssl rand -hex 16)
     cd gpu && modal deploy modal_app.py
-    uv run python -m scripts.bench_gpu --url wss://<workspace>--team18-gpu-serve.modal.run/infer
+    uv run python -m scripts.bench.gpu --url wss://<workspace>--team18-gpu-serve.modal.run/infer
 
 One warm container (no cold start in the demo) and one container max, so the
 service's own no-queue admission gate holds. Weights live on a Volume. Frames

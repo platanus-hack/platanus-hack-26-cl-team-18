@@ -45,7 +45,7 @@ Split the perception agent into **capture (local)** and **inference
 
 ## Choosing the provider (from results)
 
-Run `scripts/bench_gpu.py` against each candidate from the venue network:
+Run `scripts/bench/gpu.py` against each candidate from the venue network:
 300 frames, reporting p50/p95 of **round trip** (send → detections back).
 
 | Criterion | Requirement |

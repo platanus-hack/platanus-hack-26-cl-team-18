@@ -41,6 +41,10 @@ class AppSettings(BaseSettings):
 
     # `/dev` QA console (docs/dev-console-plan.md): `/ws/dev` and its `dev.*` stream.
     # Never in prod, whatever this says: the stream has no auth.
+    # The demo surface (app/api/demo_access.py): bids, stock, campaign drafts, `/dev`
+    # QA and `/dev/push`, reached from the hidden `/demo/<key>` web hub. Unset: off.
+    # Never served in prod; app_env=test needs no key.
+    demo_key: SecretStr | None = None
     dev_console: bool = True
     # Opt-in: relay the face-blurred keyframe the VLM gets to `/dev` (in memory, never
     # stored). Off by default; refused in prod.

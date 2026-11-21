@@ -8,7 +8,7 @@ model calls into first-display readiness.
 
 ## Hypotheses and results
 
-Controlled trials use `scripts/bench_sensing.py`: a 30 Hz synthetic source,
+Controlled trials use `scripts/bench/sensing.py`: a 30 Hz synthetic source,
 80 ms simulated detection, the real Python 3.12 tracker/snapshot/link, real
 backend WebSockets and Chromium's actual `player.displayed` report. They use
 stock copy, with keyframes and live providers disabled. These are individual
@@ -60,7 +60,7 @@ make web-check
 make test-sandbox
 make eval
 cd web && npm run build && cd ..
-uv run --with playwright python scripts/bench_sensing.py --detector-ms 80
+uv run --with playwright python scripts/bench/sensing.py --detector-ms 80
 ```
 
 `--edge-root /path/to/checkout/edge` compares the same probe against a baseline
@@ -140,7 +140,7 @@ behavior and TV latency still require a venue rehearsal.
 Reproduce the controlled comparison with:
 
 ```sh
-uv run python scripts/bench_outbound.py --out evals/results/outbound.json
+uv run python scripts/bench/outbound.py --out evals/results/outbound.json
 # Use --source-root /path/to/baseline/checkout with the same probe for comparison.
 make eval-pipeline ARGS="--cold --dwell 2"
 ```
@@ -185,7 +185,7 @@ prewarm work to complete rather than assuming the first provider request means
 the cache is ready.
 
 ```sh
-uv run python scripts/bench_voice_storage.py --out evals/results/voice-storage.json
+uv run python scripts/bench/voice_storage.py --out evals/results/voice-storage.json
 # Compare with --source-root /path/to/baseline using the identical probe.
 ```
 

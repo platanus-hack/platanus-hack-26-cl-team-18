@@ -101,9 +101,9 @@ The demo script in `docs/demo.md` decides what to build. In order: the live
 loop works end to end → **simulator/replay mode** (demo insurance) → the
 console shows coverage, the single-brand counterfactual, exclusion reasons and
 latency → the five beats: basket ad with group offer → **complete the basket**
-(held products) → **bidding war** (`/advertiser`) → QR redemption + moment
+(held products) → **bidding war** (`/demo/<key>/advertiser`) → QR redemption + moment
 receipt + "charged $0" → pre-generated bundle loops + voice-overs → backup
-moments (stock-out via `/clerk`, speech mode, context switch, queue) → polish
+moments (stock-out via `/demo/<key>/clerk`, speech mode, context switch, queue) → polish
 (thermal printer, warm video upgrade, distance-aware layouts). A feature that
 doesn't make a demo moment land better is backlog.
 
@@ -113,7 +113,7 @@ doesn't make a demo moment land better is backlog.
   (Docker, YOLO26 TensorRT, WSS, ≤ 2 frames in flight, never queued), with a
   hot-standby local detector and automatic failover (`FailoverDetector`,
   ADR 0007). The provider (serverless, VM or venue LAN box) is picked from
-  `scripts/bench_gpu.py` results: round trip p50 ≤ 80 ms, p95 ≤ 150 ms.
+  `scripts/bench/gpu.py` results: round trip p50 ≤ 80 ms, p95 ≤ 150 ms.
   Generation stays on hosted APIs.
 - **Devices:** one laptop (any; the GPU is remote) + wide-FOV UVC webcam
   (720p30 MJPG, manual exposure) + **USB speakerphone with hardware echo
@@ -153,7 +153,9 @@ doesn't make a demo moment land better is backlog.
   an async psycopg rewrite, Lottie/Pixi, a cloud backend for the live demo.
 - **Day-1 benchmark gate** (`docs/stack.md` §8): a component that fails is
   swapped alone and the swap is recorded in ADR 0006.
-- Live demo runs the backend on **localhost**; Render hosts the public URL.
+- Live demo runs the backend on **localhost** (`make station`); Render hosts the public URL.
+  The station is `/screen` + `/console`; demo tools (bids, stock, campaigns, `/dev`) sit
+  behind `DEMO_KEY` at `/demo/<key>` (`app/api/demo_access.py`, `web/src/lib/demo.ts`).
 - PostgreSQL via psycopg2. Migrations are plain SQL in `db/migrations/`.
 - Lint/format: ruff. Types: mypy / pyright. Tests: pytest.
 - Hosting: Render, managed with Terraform in `terraform/` (`make tf-check`,

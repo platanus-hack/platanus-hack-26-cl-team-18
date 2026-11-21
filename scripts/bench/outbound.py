@@ -1,6 +1,6 @@
 """Compare hub delivery and voice admission under controlled backpressure (no hardware/providers).
 
-uv run python scripts/bench_outbound.py --out evals/results/outbound.json
+uv run python scripts/bench/outbound.py --out evals/results/outbound.json
 Use --source-root to measure another checkout with the identical probe.
 """
 
@@ -17,7 +17,7 @@ from pathlib import Path
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source-root", type=Path, default=Path(__file__).resolve().parents[1])
+    parser.add_argument("--source-root", type=Path, default=Path(__file__).resolve().parents[2])
     parser.add_argument("--slow-ms", type=float, default=120)
     parser.add_argument("--runs", type=int, default=10)
     parser.add_argument("--voice-hold-ms", type=float, default=200)

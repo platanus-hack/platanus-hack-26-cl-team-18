@@ -1,6 +1,6 @@
 """Measure event-loop lag during controlled voice storage stalls; never calls live APIs.
 
-uv run python scripts/bench_voice_storage.py --source-root /path/to/checkout
+uv run python scripts/bench/voice_storage.py --source-root /path/to/checkout
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from pathlib import Path
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source-root", type=Path, default=Path(__file__).resolve().parents[1])
+    parser.add_argument("--source-root", type=Path, default=Path(__file__).resolve().parents[2])
     parser.add_argument("--delay-ms", type=float, default=150)
     parser.add_argument("--runs", type=int, default=10)
     parser.add_argument("--out", type=Path, default=Path("evals/results/voice-storage.json"))

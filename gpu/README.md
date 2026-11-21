@@ -112,7 +112,7 @@ the agent probes remote again after 10 s.
 ## Benchmark gate (docs/stack.md §8)
 
 ```bash
-uv run --project edge python scripts/bench_gpu.py --url wss://<host>/infer --frames 300 \
+uv run --project edge python scripts/bench/gpu.py --url wss://<host>/infer --frames 300 \
   --token "$GPU_TOKEN" [--image a_real_frame.jpg]
 ```
 

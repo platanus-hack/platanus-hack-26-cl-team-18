@@ -17,7 +17,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from scripts.rehearse_demo import demo_snapshot
+from scripts.demo.rehearse import demo_snapshot
 from scripts.replay_audience import paid_brands, snapshot_for
 
 from app.bootstrap.container import build_container

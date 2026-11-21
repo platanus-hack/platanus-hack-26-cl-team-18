@@ -9,9 +9,10 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Body, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from pydantic import Field
 
+from app.api.demo_access import require_demo_key
 from app.bootstrap.container import Container
 from app.contract.messages import (
     ConsoleAuction,
@@ -22,7 +23,7 @@ from app.contract.messages import (
     CreativeUpgraded,
 )
 
-router = APIRouter(prefix="/dev", tags=["dev"])
+router = APIRouter(prefix="/dev", tags=["dev"], dependencies=[Depends(require_demo_key)])
 
 Pushable = Annotated[
     CreativeReady

@@ -263,6 +263,8 @@ def main() -> int:
         f"Player: {origin}/screen?id={args.screen}\nConsole: {origin}/console?screen={args.screen}",
         flush=True,
     )
+    if settings.demo_key and settings.demo_key.get_secret_value():
+        print(f"Demo tools (private): {origin}/demo/<DEMO_KEY from .env>", flush=True)
     if not args.start_live:
         print(
             "STANDBY: camera, mic and ad generation wait for 'Iniciar en vivo' on the console",

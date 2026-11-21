@@ -19,10 +19,10 @@
     `edge/props/markers.json`), so "complete the basket" is recognized in
     about 7 ms and never depends on reading a label (ADR 0008 D2). Labels stay
     big and color-coded for the parallel VLM path.
-  - **Clerk tablet** on `/clerk` (stock toggles).
+  - **Clerk tablet** on `/demo/<key>/clerk` (stock toggles).
   - **"Checkout":** a USB thermal printer (if we have one) that prints the
     moment receipt on redemption.
-- **Judge controls:** open `/advertiser` on the presenter laptop for the bid
+- **Judge controls:** open `/demo/<key>/advertiser` on the presenter laptop for the bid
   sliders. Put the judge's phone on the same network for checkout.
 - **Backend on the laptop** (localhost) and a phone hotspot. Render hosts the
   public URL.
@@ -32,6 +32,18 @@
   judges will: every prop should read **PUBLISHED** (a held cup scores ~0.9,
   the floor is 0.25). Add `ARGS="--gpu-url wss://…/infer"` to probe the GPU
   service's YOLOE/TensorRT weights instead of the local ones.
+
+### Station and demo surface
+
+The station is two pages: `/screen` (the TV) and `/console` (with the "En vivo"
+switch), plus `/r/{code}` for the QR. Everything built to *show* the product
+(bidding war, clerk stock, campaign drafts, `/dev` QA) lives on a hidden hub,
+`/demo/<key>`, where `<key>` is `DEMO_KEY` from `.env`
+(`python -c "import secrets; print(secrets.token_urlsafe(16))"`). Every demo API
+call sends the key as `X-Demo-Key`; without it, or with `DEMO_KEY` unset, the
+backend answers 404, and production never serves it (`app/api/demo_access.py`).
+Share `/demo/<key>/advertiser` with the judges for the bidding war; never put the
+hub on a slide. Scripted scenes without a camera: `scripts/demo/rehearse.py`.
 
 ### The "En vivo" switch (start every round from standby)
 
@@ -56,7 +68,7 @@ The switch is enforced twice: the agents pause themselves (`--await-live`,
 standby at the socket (`/health` → `live.dropped_in_standby`). It works from
 the second laptop (ADR 0008 D7): `POST /api/live` is plain HTTP. Use
 `make demo-live ARGS="--start-live"` to skip standby. Tests, evals and
-`scripts/demo_replay.py` keep the old always-live default (`LIVE_STARTS_ON`).
+`scripts/demo/video_replay.py` keep the old always-live default (`LIVE_STARTS_ON`).
 Code: `app/realtime/live_switch.py`, `edge/agent/live.py`,
 `web/src/features/console/LivePanel.tsx`.
 
@@ -92,7 +104,7 @@ complementary products sold at that counter.
 | 0:00 | **1. Scene hook** | *"You're in line at a gas station with two friends. The screen above the register shows a car-insurance ad. Three hungry people, a coffee machine two meters away, and the screen has no idea."* Point at the static screen, then: *"Store screens are still blind. Watch ours."* | Recognition |
 | 0:20 | **2. Basket ad** | Start with two people looking and the gym bottle and two coffee cups visible. Let **Dúo post-entreno $5.990** appear, then bring in a third person. The same two brands switch to **Trío post-entreno $8.490**. Point to the live estimated coverage and single-brand comparison on the console. | The core insight: N people, several brands, one offer sized to the group |
 | 0:55 | **3. Complete the basket** | The judge faces the **Café Patio cup** marker toward the camera. The next creative opens with *"A tu Café Patio le falta Voltio"* and keeps the approved Trío price. The console shows the held Café Patio cup. | "The product in my hand changes the pitch" |
-| 1:25 | **4. Bidding war** | Let a judge raise **Rayo**'s bid from `/advertiser`. The room watches Rayo challenge Voltio for the slot. Competitor rule: they never share a basket. | "It's a real market, and I'm in it" |
+| 1:25 | **4. Bidding war** | Let a judge raise **Rayo**'s bid from `/demo/<key>/advertiser`. The room watches Rayo challenge Voltio for the slot. Competitor rule: they never share a basket. | "It's a real market, and I'm in it" |
 | 2:00 | **5. Close → receipt → $0** | The ad reaches **close**: QR + "valid 10 min". A judge scans and redeems, the **receipt prints**: *"Voltio $114 · Café Patio $86 · 7,4 s de atención"*. Everyone walks away; console: **"charged $0: nobody looked"**. Closing line: *"We don't sell screen slots, we sell moments. Brands pay only when people look, and the receipt proves the sale. We start with convenience-store counters."* | Proof, fairness, investable |
 
 **Backup moments** (swap one in if a beat fails, or use if time allows; never
@@ -100,7 +112,7 @@ add a sixth beat):
 
 | Moment | What happens |
 |---|---|
-| **Stock-out re-basket** | The clerk marks Voltio out of stock on `/clerk` and the active ad drops it. |
+| **Stock-out re-basket** | The clerk marks Voltio out of stock on `/demo/<key>/clerk` and the active ad drops it. |
 | **"It heard me"** (speech mode) | Someone says "uf, qué hambre"; the burger bid jumps, with a voice-over |
 | **Context switch** | The console toggles "hot afternoon"; cold-drink bids rise and the basket changes |
 | **Safety** | A judge holds a toy stroller; the beer brand's top bid is blocked (✗ minor-safe chip) |
@@ -141,7 +153,7 @@ Wi-Fi IPv4 address in the relay and backend terminals.
 
 ```bash
 # Relay terminal
-uv run python -m scripts.demo_phone --host "$DEMO_LAN_IP" --port 8022
+uv run python -m scripts.demo.phone --host "$DEMO_LAN_IP" --port 8022
 # Backend terminal
 APP_ENV=local PUBLIC_BASE_URL="http://$DEMO_LAN_IP:8022" uv run uvicorn app.main:app --host 127.0.0.1 --port 8018
 # Web terminal, from web/
@@ -159,10 +171,10 @@ For a repeatable rehearsal, use a separate screen ID and open
 `/screen?id=rehearsal` and `/console?screen=rehearsal`:
 
 ```bash
-uv run python -m scripts.rehearse_demo duo --screen rehearsal --seconds 5
-uv run python -m scripts.rehearse_demo trio --screen rehearsal --seconds 5
-uv run python -m scripts.rehearse_demo held --screen rehearsal --seconds 12
-uv run python -m scripts.rehearse_demo empty --screen rehearsal --seconds 4
+uv run python -m scripts.demo.rehearse duo --screen rehearsal --seconds 5
+uv run python -m scripts.demo.rehearse trio --screen rehearsal --seconds 5
+uv run python -m scripts.demo.rehearse held --screen rehearsal --seconds 12
+uv run python -m scripts.demo.rehearse empty --screen rehearsal --seconds 4
 ```
 
 Scan the QR during the close stage and tap **Canjear en caja**. The phone
@@ -178,7 +190,7 @@ With the backend and web player running, install vision from `edge/` with
 `make eval-video-fetch` from the repository root. Start the local viewer:
 
 ```bash
-uv run python -m scripts.demo_replay --backend http://127.0.0.1:8018
+uv run python -m scripts.demo.video_replay --backend http://127.0.0.1:8018
 ```
 
 Open [the side-by-side viewer](http://127.0.0.1:5189/). The launcher starts
@@ -213,7 +225,7 @@ slice with co-brand, minor-safety and no-fill scenes.
 8. **QR redemption fallback:** open the URL from the ad on the laptop and
    redeem in a separate browser tab.
 9. **Held product fallback:** use the `held` rehearsal scene above.
-10. **Bidding war controls:** keep the `/advertiser` sliders open on the
+10. **Bidding war controls:** keep the `/demo/<key>/advertiser` sliders open on the
     presenter laptop.
 11. **Two laptops** (ADR 0008 D7): the screen laptop runs the agent, the
     backend and the player; the console runs on a second laptop over the
@@ -293,7 +305,7 @@ order within each group.
 
 | **"Combo jurado" close** | The judges stand in front of the screen; it detects 5 and says *"¿Jurado de 5? Combo jurado: 5 Voltio + 5 Miga. Válido por 10 minutos."* | Memorable, funny, shows group offers live | Very low (a `5+` offer band and a voice line) |
 | **Shopper's privacy receipt** | The QR offer page also shows *"Todo lo que esta pantalla supo de ti: 1 adulto, con un café, miró 6 s. Nada guardado."* | Turns the creepiness question into trust, on the judge's own phone | Low |
-| **Winning brand's phone buzzes** | In the bidding war, the judge's `/advertiser` page vibrates on a win: *"Ganaste un momento: 3 personas, $114."* | Makes the market tactile | Very low (Vibration API) |
+| **Winning brand's phone buzzes** | In the bidding war, the judge's `/demo/<key>/advertiser` page vibrates on a win: *"Ganaste un momento: 3 personas, $114."* | Makes the market tactile | Very low (Vibration API) |
 | **Live A/B** | Two copy variants alternate between groups; the console shows attention per variant | Shows the system learning | Medium |
 
 ### 7.2 Visuals
@@ -312,7 +324,7 @@ order within each group.
 - **Set dressing:** a mini shelf with the fictional products, price tags, a
   counter cloth and a fake register, so it reads as a store.
 - **Fixed team roles:** narrator (never touches anything), operator
-  (console, resets, simulate buttons), clerk (`/clerk`, props), shopper
+  (console, resets, simulate buttons), clerk (`/demo/<key>/clerk`, props), shopper
   (walks in on cue).
 - **Audio setup:** voice-over volume set for a noisy hall, speakerphone aimed
   at the shoppers, no music under the narration.

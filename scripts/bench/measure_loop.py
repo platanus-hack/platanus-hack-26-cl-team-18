@@ -1,6 +1,6 @@
 """Measure the full loop on a running backend: perception → auction → creative → display → bill → redeem.
 
-    uv run python -m scripts.measure_loop --server http://127.0.0.1:8000 --cycles 12
+    uv run python -m scripts.bench.measure_loop --server http://127.0.0.1:8000 --cycles 12
 
 Acts as the agent (or rides along with a real one: --observe-only), as a player
 (?attention=1, reports player.displayed on arrival and playback.report on

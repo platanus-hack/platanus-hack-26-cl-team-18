@@ -3,7 +3,7 @@ import signal
 import sys
 import time
 
-from scripts.live_demo import ManagedProcess
+from scripts.station import ManagedProcess
 
 
 def test_terminated_component_is_restarted_and_only_owned_process_is_stopped(tmp_path):
@@ -65,7 +65,7 @@ def test_stop_cleans_owned_children_when_the_process_leader_has_exited(tmp_path)
 
 
 def test_the_station_starts_in_standby_unless_asked_to_start_live():
-    from scripts.live_demo import agent_live_args, live_switch_environment
+    from scripts.station import agent_live_args, live_switch_environment
 
     assert live_switch_environment({"A": "1"}, start_live=False) == {
         "A": "1",

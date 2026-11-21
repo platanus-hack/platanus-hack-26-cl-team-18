@@ -126,7 +126,7 @@ reporting p50/p95. Pass criteria:
 
 | Check | Pass |
 |---|---|
-| Remote GPU detector round trip (`scripts/bench_gpu.py`, 300 frames, from the venue uplink) | p50 ≤ 80 ms, p95 ≤ 150 ms. This picks the provider (ADR 0007) |
+| Remote GPU detector round trip (`scripts/bench/gpu.py`, 300 frames, from the venue uplink) | p50 ≤ 80 ms, p95 ≤ 150 ms. This picks the provider (ADR 0007) |
 | Local fallback detector per frame | ≤ 45 ms |
 | Haiku 5.5 keyframe tagging (512 px, structured) | p50 ≤ 1.2 s |
 | Haiku 5.5 copy | p50 ≤ 1.0 s |

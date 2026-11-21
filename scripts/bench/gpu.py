@@ -4,8 +4,8 @@ Sends frames to a running `gpu/` service one at a time and reports the
 round trip (send → detections back) p50/p95, plus the server's own time, so
 network and inference can be told apart. Exit code 0 = pass, 1 = fail.
 
-    uv run --project edge python scripts/bench_gpu.py --url ws://127.0.0.1:8080/infer --frames 200
-    uv run --project edge python scripts/bench_gpu.py --url wss://host/infer --token "$GPU_TOKEN" \\
+    uv run --project edge python scripts/bench/gpu.py --url ws://127.0.0.1:8080/infer --frames 200
+    uv run --project edge python scripts/bench/gpu.py --url wss://host/infer --token "$GPU_TOKEN" \\
         --image some_frame.jpg --frames 300
 
 Frames: `--image` (any JPEG/PNG; resized like the agent does, 640 px long side

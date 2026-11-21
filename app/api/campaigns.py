@@ -1,15 +1,21 @@
-"""Read-only campaign drafting from the approved catalog; no activation or budget writes."""
+"""Read-only campaign drafting from the approved catalog; no activation or budget writes.
+
+Demo surface: behind the demo key (app/api/demo_access.py).
+"""
 
 from typing import Annotated
 
 import anyio
-from fastapi import APIRouter, Body, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 
+from app.api.demo_access import require_demo_key
 from app.bootstrap.container import Container
 from app.contract.messages import CampaignCatalog, CampaignGenerate, CampaignGenerated
 from app.modules.creative.application.campaigns import CampaignGenerator
 
-router = APIRouter(prefix="/api/campaigns", tags=["campaigns"])
+router = APIRouter(
+    prefix="/api/campaigns", tags=["campaigns"], dependencies=[Depends(require_demo_key)]
+)
 
 
 def _generator(request: Request) -> CampaignGenerator:

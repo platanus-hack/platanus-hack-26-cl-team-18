@@ -4,7 +4,8 @@
                          `live.status` out after the agent's `agent.hello`)
 - `/ws/screen/{screen_id}` player <-> backend (creatives out, playback reports in)
 - `/ws/console`          backend -> operator console
-- `/ws/dev`              backend -> `/dev` QA console: console messages + `dev.*` (never prod)
+- `/ws/dev`              backend -> `/dev` QA console: console messages + `dev.*` (never prod;
+                         demo key as `?key=`, app/api/demo_access.py)
 
 An invalid frame is answered with `system.error` on the same socket; the
 socket stays open (a bad frame must not take the screen down).
@@ -21,6 +22,7 @@ import anyio
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 from pydantic import ValidationError
 
+from app.api.demo_access import demo_allowed
 from app.bootstrap.container import Container
 from app.contract.messages import (
     AGENT_INBOUND,
@@ -275,7 +277,10 @@ async def console_socket(ws: WebSocket) -> None:
 async def dev_socket(ws: WebSocket) -> None:
     c = _container(ws)
     await ws.accept()
-    if not c.settings.dev_console_enabled:
+    # Demo surface (app/api/demo_access.py): a socket can't send headers, so `?key=`.
+    if not c.settings.dev_console_enabled or not demo_allowed(
+        c.settings, ws.query_params.get("key")
+    ):
         await ws.close(code=DEV_DISABLED, reason="dev console disabled")
         return
     c.hub.add_dev(ws)

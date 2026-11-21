@@ -1,7 +1,7 @@
 """Controlled edge → backend → Chromium latency probe (no camera or live providers).
 
 Build web first, then run:
-  uv run --with playwright python scripts/bench_sensing.py --detector-ms 80
+  uv run --with playwright python scripts/bench/sensing.py --detector-ms 80
 An alternate --edge-root permits before/after comparisons against a checkout.
 The worker uses Python 3.12 and the real pipeline; only detection is simulated.
 No frames, audio, transcripts or personal observations are saved.
@@ -16,7 +16,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def worker(args: argparse.Namespace) -> None:

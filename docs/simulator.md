@@ -82,7 +82,7 @@ The approved seed catalog is shared across screen runtimes. Audience moments,
 stock, swap holds and current creatives belong to each screen; campaign identities,
 budgets, delivery and redemptions belong to the market. For example, open
 `/screen?id=north` and `/screen?id=south`, and send observations with the matching
-`screen_id`. A reconnect receives that screen's last creative. `/clerk?id=north`
+`screen_id`. A reconnect receives that screen's last creative. `/demo/<key>/clerk?id=north`
 reads and writes north's stock, while budgets remain shared.
 
 Run `make live-preflight` to inspect configuration without spending provider
@@ -114,9 +114,9 @@ potentially billed request automatically. No generation runs in the hot path.
 
 With the backend and `npm run dev` running, open these pages:
 
-- [/advertiser?brand=Rayo](http://127.0.0.1:5173/advertiser?brand=Rayo): one
+- [/demo/<key>/advertiser?brand=Rayo](http://127.0.0.1:5173/demo/<key>/advertiser?brand=Rayo): one
   brand's bid slider (×0.2–5.0). Leave out `brand` to get a picker.
-- [/clerk?id=demo-01](http://127.0.0.1:5173/clerk?id=demo-01): stock toggles.
+- [/demo/<key>/clerk?id=demo-01](http://127.0.0.1:5173/demo/<key>/clerk?id=demo-01): stock toggles.
 
 Each change re-auctions the moment on screen:
 - A bid flip waits for the current teaser (3 s) and needs a 2 % margin.

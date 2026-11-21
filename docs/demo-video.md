@@ -13,7 +13,7 @@ provider credits. Run it before every recording session.
 - **Props:** a gym bottle, two coffee cups, the printed
   [Café Patio marker](../edge/props/cafe-patio-marker.svg) taped to one cup, and
   a phone for the QR.
-- **Cast:** three people (A, B, C) and one presenter on the `/advertiser`
+- **Cast:** three people (A, B, C) and one presenter on the `/demo/<key>/advertiser`
   laptop.
 - **Cameras:** cam 1 is wide and shows the counter, people and TV. Cam 2 is a
   screen capture of `/console?screen=demo-01`. Cut between them; the console is
@@ -58,7 +58,7 @@ What changes on screen, and why:
    `make eval-beats REC=…` shows which beats landed in order, and
    `make eval-rehearsal REC=…` checks latency and invariants. Keep the best
    take: it is the real-camera regression.
-5. Backup takes: stock-out via `/clerk` (`stock-out` scenario) and speech mode
+5. Backup takes: stock-out via `/demo/<key>/clerk` (`stock-out` scenario) and speech mode
    (`speech-camera-mix`), in case a beat fails on camera.
 
 ## Known limits (say them if asked)

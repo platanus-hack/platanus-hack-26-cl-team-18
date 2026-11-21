@@ -11,8 +11,9 @@ from decimal import Decimal
 from typing import Annotated
 
 import anyio
-from fastapi import APIRouter, Body, HTTPException, Query, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 
+from app.api.demo_access import require_demo_key
 from app.bootstrap.container import Container
 from app.bootstrap.demo import DemoControls, UnknownBrand
 from app.contract.messages import AdvertiserAutoBid, AdvertiserBidMultiplier, ConsoleBook, StockSet
@@ -21,7 +22,7 @@ from app.modules.campaigns.application.live_book import (
     UnknownCampaign,
 )
 
-router = APIRouter(prefix="/api", tags=["demo"])
+router = APIRouter(prefix="/api", tags=["demo"], dependencies=[Depends(require_demo_key)])
 
 
 def _controls(request: Request) -> DemoControls:

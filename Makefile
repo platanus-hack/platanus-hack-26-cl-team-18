@@ -6,12 +6,19 @@ TF  := scripts/tf.sh $(ENV)
 TF_ROOTS := terraform/modules/render-app terraform/modules/render-static-site terraform/envs/prod
 LOCAL_DATABASE_URL := postgresql://team18:team18@localhost:5432/team18
 
-.PHONY: help install edge-install edge-check eval-speech-robustness edge-yoloe edge-probe-objects test-live test-sandbox dev web-install web-dev web-check contract contract-check lint format typecheck test check migrate migrate-status db-up db-down db-reset \
+.PHONY: help help-all station demo-live install edge-install edge-check eval-speech-robustness edge-yoloe edge-probe-objects test-live test-sandbox dev web-install web-dev web-check contract contract-check lint format typecheck test check migrate migrate-status db-up db-down db-reset \
         live-preflight bundle-loops bundle-loops-local \
         eval eval-baseline eval-creative eval-creative-baseline eval-campaigns eval-replay eval-perception eval-record eval-rehearsal eval-beats eval-video-fetch eval-video eval-pipeline eval-demo-video demo-warmup eval-browser \
         tf-init tf-fmt tf-fmt-check tf-validate tf-test tf-check tf-plan tf-apply tf-output tf-lock
 
-help: ## Show this help
+# `make help` lists only what runs the real station; `make help-all` lists every tool
+# (evals, demo, benches, Terraform). Demo pages live behind DEMO_KEY: /demo/<key>.
+STATION_TARGETS := install edge-install web-install edge-yoloe db-up migrate live-preflight station dev web-dev check
+
+help: ## The real station: install, preflight, run (make help-all for every tool)
+	@awk -v keep=" $(STATION_TARGETS) help-all " 'BEGIN { FS = ":.*## " } /^[a-zA-Z0-9_-]+:.*## / && index(keep, " " $$1 " ") { printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
+
+help-all: ## Every target: evals, demo tools, benches, Terraform
 	@awk 'BEGIN { FS = ":.*## " } /^[a-zA-Z0-9_-]+:.*## / { printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 
 # ------------------------------------------------------------------ app
@@ -69,8 +76,10 @@ eval-speech-robustness: ## Real speech x venue noise through VAD/mic path; ARGS=
 eval-demo-video: ## The demo video (docs/demo.md §3) beat by beat: complete ads, redeem, receipt, $0
 	uv run python -m evals demo-video
 
-demo-live: ## Supervised camera → backend → player on :5188; paid providers OFF by default
-	uv run python -m scripts.live_demo $(ARGS)
+station: ## Run the station: camera + backend + player/console on :5188, in standby (paid AI off unless ARGS="--paid-providers")
+	uv run python -m scripts.station $(ARGS)
+
+demo-live: station # old name, kept for muscle memory
 
 bundle-loops-local: ## Free: compose a loop per approved bundle/brand from campaign footage (no fal)
 	uv run --with imageio-ffmpeg python -m scripts.build_bundle_loops $(ARGS)

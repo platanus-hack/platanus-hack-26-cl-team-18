@@ -8,6 +8,7 @@ import {
 } from "@/contract";
 import { CreativeView } from "@/features/screen";
 import { assetUrl, backendHttpUrl } from "@/lib/config";
+import { demoHeaders } from "@/lib/demo";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { AppShell, PageHeader } from "@/shared/ui/page";
@@ -124,11 +125,11 @@ async function readJson(
         body
             ? {
                   method: "POST",
-                  headers: { "content-type": "application/json" },
+                  headers: { "content-type": "application/json", ...demoHeaders() },
                   body: JSON.stringify(body),
                   signal,
               }
-            : { signal },
+            : { signal, headers: demoHeaders() },
     );
     const data: unknown = await response.json();
     if (!response.ok) {

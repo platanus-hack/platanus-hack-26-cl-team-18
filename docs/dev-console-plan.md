@@ -7,7 +7,7 @@ Status: implemented (phases 0–2 and the keyframe flag; `dev.auction_candidates
 ```bash
 make dev                                   # backend on :8000 (DEV_CONSOLE=true by default, never in prod)
 make web-dev                               # Vite on :5173
-open "http://localhost:5173/dev?screen=demo-01"
+open "http://localhost:5173/demo/<key>/dev?screen=demo-01"
 # YOLO boxes: start the agent with --dev-stream (or EDGE_DEV_STREAM=1)
 cd edge && uv run python -m agent.vision --screen demo-01 --dev-stream
 # Optional: show the face-blurred VLM keyframe under the boxes (local only)
@@ -43,7 +43,7 @@ the demo console: `/console` stays the curated money shot for judges, and
 | Piece | Where | What it covers | Gap |
 |---|---|---|---|
 | `/console` | `web/src/features/console/` | Moment (segments, sources, held products, minor flag), bundle auction (bids, exclusions, VCG prices, coverage, single-brand counterfactual), latency (p50/p95, trace steps, GPU timing), receipts, market book, live input status, degradation chips | Only the *latest* moment and auction. No boxes, no VLM detail, no creative build, no on-air view, no history, no raw event log |
-| `/campaigns` | `web/src/features/campaigns/` | Cold-path studio: generate a bundle creative, see `quality_score`, `checks`, `compose_ms` | Offline only; nothing about live creatives |
+| `/demo/<key>/campaigns` | `web/src/features/campaigns/` | Cold-path studio: generate a bundle creative, see `quality_score`, `checks`, `compose_ms` | Offline only; nothing about live creatives |
 | `recognition.snapshot` | `app/contract/messages.py`, `app/api/recognition.py` | Per-detection boxes, tracks, VLM attributes with evidence | Emitted only by `edge/agent/vision/replay.py`, not by the live pipeline. No UI reads it. `GET /recognition/{screen}` is poll-only |
 | `audience.keyframe` | `app/api/ws.py`, `AudienceClassifier.observe_keyframe` | Face-blurred JPEG goes to the VLM | `KeyframeTags` (segments, held products, minor flag, `reasoning`, `model_version`) are merged into the moment and never shown on their own. ACL drops (unknown category or brand) are silent |
 | `WarmWorker` | `app/realtime/warm_worker.py` | VLM tags, Claude topics and copy, ElevenLabs voice, under per-provider limits | Only aggregate `WarmStats`. No per-job start, end, outcome or latency |
@@ -52,7 +52,7 @@ the demo console: `/console` stays the curated money shot for judges, and
 
 ## 3. Route and isolation
 
-- **`/dev?screen=demo-01`**: a new lazy route chunk in `web/src/app/App.tsx`,
+- **`/demo/<key>/dev?screen=demo-01`**: a new lazy route chunk in `web/src/app/App.tsx`,
   in a new `web/src/features/dev/` feature. The kiosk player never downloads
   it, the same as the console today.
 - **New socket `/ws/dev`** (backend), **closed with 4404 when `app_env == "prod"`**,
@@ -226,7 +226,7 @@ Each phase ships on its own and is useful alone.
 
 | # | Scope | Backend | Web | Done when |
 |---|---|---|---|---|
-| **0** | Skeleton | `/ws/dev` + `Hub._devs` + prod gate; `DevOutbound` union (empty plus relayed console) | `features/dev/` route, reducer composing console state, top bar, panels reused from console, **on-air mirror**, event log | `/dev?screen=demo-01` shows the same moment/auction as `/console` plus the mirrored ad and a raw log, in replay mode |
+| **0** | Skeleton | `/ws/dev` + `Hub._devs` + prod gate; `DevOutbound` union (empty plus relayed console) | `features/dev/` route, reducer composing console state, top bar, panels reused from console, **on-air mirror**, event log | `/demo/<key>/dev?screen=demo-01` shows the same moment/auction as `/console` plus the mirrored ad and a raw log, in replay mode |
 | **1** | Generation trace | `dev.job` (WarmWorker observer), `dev.creative`, `dev.player` | Build trace panel, timeline (hot + warm) | In a replay, each creative shows its brief, copy source and guard verdict, and the timeline shows the AI copy and voice bars landing after `displayed_at` |
 | **2** | Perception | `dev.perception` from edge (`publisher.py`, rate limiter, `EDGE_DEV_STREAM`), relay in `ws.py`; `dev.vlm`, `dev.speech` | Box canvas, track table, VLM card with kept/dropped, speech card | Live camera: boxes track people at ≥ 4 Hz with < 300 ms lag; holding the Café Patio marker shows a held object *and* a VLM `held_products` row |
 | **3** | Depth (optional) | Keyframe preview flag (§5), `dev.auction_candidates` | Keyframe underlay, auction history strip, session export | Rehearsal bug reproduced from an exported session as an eval scenario |

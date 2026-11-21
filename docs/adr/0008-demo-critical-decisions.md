@@ -239,3 +239,12 @@ observed tracker confirmation and holds; camera exposure, device buffering and
 clock synchronization still require a hardware rehearsal. The <300 ms cache
 budget applies after sensing confirmation; scene-to-visible retains the
 1.5 s p50 / 2.5 s p95 targets. No model result gates first visual readiness.
+
+
+## Amendment: the demo surface sits behind a key (D3)
+
+The station's public pages are `/screen`, `/console` and `/r/{code}`. The judge
+and operator tools (D3's bidding war, the clerk tablet, campaign drafts, `/dev`)
+moved under a hidden hub, `/demo/<DEMO_KEY>/…`, and their API calls carry the
+key as `X-Demo-Key` (404 without it, never in prod). The tunnel still exposes the
+bidding war and redemption: share `/demo/<key>/advertiser` with the judges.
