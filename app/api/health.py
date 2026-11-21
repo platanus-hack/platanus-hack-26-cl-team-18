@@ -21,6 +21,11 @@ def health(request: Request) -> dict[str, Any]:
         "contract_version": CONTRACT_VERSION,
         "ads": live_readiness(c),
         "screens_connected": c.hub.connected_screens(),
+        "inputs": c.input_activity.snapshot(
+            at=c.clock.now_utc(),
+            speech_screens=c.settings.speech_mode_screens,
+            players=c.hub.connected_screens(),
+        ),
         "consoles_connected": c.hub.console_count(),
         "warm": {
             "submitted": c.warm.stats.submitted,

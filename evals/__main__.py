@@ -73,6 +73,7 @@ def main(argv: list[str] | None = None) -> int:
     creative.add_argument("--record", action="store_true", help="live: overwrite recordings.json")
     creative.add_argument("--update-baseline", dest="creative_baseline", action="store_true")
     sub.add_parser("campaigns", help="campaign catalog, media, safety, quality and latency")
+    sub.add_parser("speech", help="speech event → auction → player regression suite")
 
     pipeline = sub.add_parser(
         "pipeline", help="end-to-end ad pipeline journeys: stage waterfall + bottleneck"
@@ -101,6 +102,29 @@ def main(argv: list[str] | None = None) -> int:
         from evals.campaigns import main as campaign_eval
 
         return campaign_eval(args.out)
+    if command == "speech":
+        from evals.speech import run_speech_scenarios
+
+        runs = run_speech_scenarios()
+        decisions = [d for run in runs for d in run.decisions]
+        checks = [c for run in runs for c in run.checks]
+        violations = m.invariant_violations(decisions)
+        failures = [
+            f"{c.source} step {c.step}: {c.name}: {c.detail}" for c in checks if not c.passed
+        ]
+        args.update_baseline = False
+        return _finish(
+            args,
+            "speech",
+            {
+                "scenario_checks_failed": len(failures),
+                "invariant_violations": len(violations),
+                **m.latency_kpis(decisions),
+            },
+            [_section(run, "Speech → player") for run in runs],
+            violations,
+            failures,
+        )
     if command == "suite":
         return _run_suite(args)
     if command == "pipeline":

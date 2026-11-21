@@ -126,6 +126,8 @@ async def agent_socket(ws: WebSocket) -> None:
                 received_at = c.clock.now_utc()
                 if not gate.admit((message.type, message.screen_id), message.seq):
                     continue  # duplicate or stale: drop, never queue
+                if isinstance(message, (AudienceSnapshot, AudienceUtterance)):
+                    c.input_activity.observe(message, received_at)
                 if isinstance(message, RecognitionSnapshot):
                     if not c.recognition.put(message, Received(received_at=received_at)):
                         continue  # stale session or sequence, even across connections

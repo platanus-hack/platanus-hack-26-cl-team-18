@@ -169,6 +169,13 @@ def start_sandbox(tmp: Path, *, fake_env: dict[str, str] | None = None) -> Sandb
         ],
         env={
             "APP_ENV": "local",
+            # Explicitly override .env too: this sandbox must never use a real AI key.
+            "ANTHROPIC_API_KEY": "",
+            "FAL_KEY": "",
+            "AUDIENCE_AI": "false",
+            "CREATIVE_AI_COPY": "false",
+            "VLM_ENABLED": "false",
+            "VOICEOVER_PREWARM": "false",
             "DEMO_SIMULATOR": "true",
             "SPEECH_MODE_SCREENS": '["demo-01"]',
             "ELEVENLABS_API_KEY": SANDBOX_KEY,
@@ -182,6 +189,11 @@ def start_sandbox(tmp: Path, *, fake_env: dict[str, str] | None = None) -> Sandb
         logs=tmp,
     )
     wait_http(f"http://127.0.0.1:{backend_port}/health", backend)
+    providers = httpx.get(f"http://127.0.0.1:{backend_port}/health", timeout=2).json()["ads"][
+        "providers"
+    ]
+    assert not providers["audience_tags"]["configured"]
+    assert not providers["ai_copy"]["configured"]
     return Sandbox(
         fake_url=f"http://127.0.0.1:{fake_port}",
         backend_http=f"http://127.0.0.1:{backend_port}",

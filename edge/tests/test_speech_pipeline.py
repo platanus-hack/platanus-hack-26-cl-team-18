@@ -83,6 +83,18 @@ def test_committed_without_keyterms_is_still_sent_for_topic_extraction() -> None
     assert len(sent) == 1 and sent[0].keyterms_hit == []
 
 
+@pytest.mark.parametrize("phrase", ["quiero un café", "Quiero un cafe.", "un cafecito", "un CAFÉ"])
+def test_coffee_request_emits_a_canonical_intent_before_the_final_transcript(phrase: str) -> None:
+    pipeline, _, sent = make()
+    pipeline.on_event(PartialTranscript(phrase))
+    assert len(sent) == 1 and sent[0].keyterms_hit == ["café"]
+    assert sent[0].screen_id == "demo-01"
+    pipeline.on_event(PartialTranscript(phrase))
+    assert len(sent) == 1
+    pipeline.on_event(CommittedTranscript(phrase, "es"))
+    assert sent[-1].keyterms_hit == ["café"]
+
+
 def test_empty_commit_and_our_own_voiceover_are_dropped() -> None:
     guard = EchoGuard()
     guard.announce(

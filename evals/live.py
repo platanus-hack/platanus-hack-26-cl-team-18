@@ -86,12 +86,23 @@ def live_backend(
     (studio, guard, cache, voice-over service, warm worker) runs unmodified.
     """
     with tempfile.TemporaryDirectory(prefix="evals-media-") as tmp:
+        options = {
+            "_env_file": None,
+            "voiceovers_enabled": voice_synthesizer is not None,
+            "voiceover_prewarm": False,
+            **settings_overrides,
+            # Offline evals use explicitly injected adapters, never ambient developer keys.
+            "anthropic_api_key": None,
+            "elevenlabs_api_key": None,
+            "fal_key": None,
+            "vlm_enabled": False,
+        }
         settings = AppSettings(
             app_env="test",
             demo_simulator=True,
             media_dir=media_dir or Path(tmp) / "media",
             elevenlabs_budget_file=Path(tmp) / "elevenlabs-budget.json",
-            **settings_overrides,
+            **options,
         )
         container = build_container(
             settings, copywriter=copywriter, voice_synthesizer=voice_synthesizer

@@ -128,3 +128,50 @@ shows "Charged $0: nobody looked" instead.
 The replay scenes carry anonymous tracklets, so plays are billed. Set
 `DATABASE_URL` (after `make db-up`) to also record auctions and charges in
 Postgres.
+
+## Real camera and microphone: check the player origin
+
+Use `make demo-live` for one supervised station on ports 8000/5188. It starts
+the backend, web and camera with one shared URL and screen id, and restarts
+only processes it owns if they stop. Ctrl-C stops that station's children.
+Paid providers are **off by default**, even when keys are in `.env`. Local
+perception, auctions and approved stock ads remain available without API spend.
+Only when explicitly authorized, pass
+`ARGS="--paid-providers --speech --silero-model path/to/model.onnx"` for opted-in
+speech; it loads the speech key from the root `.env`. Logs contain provider/status
+metadata, not audio or transcripts, and live under gitignored `var/local-demo/`.
+Occupied ports fail before starting; it never kills an unrelated station.
+
+All processes must use the same backend and screen id. For a player on `:5188`,
+explicitly proxy it to the live backend rather than an older replay server:
+the manual commands below enable configured providers and are for an explicitly
+authorized live rehearsal. Use `make demo-live` for a rehearsal without paid AI.
+
+```sh
+SPEECH_MODE_SCREENS='["demo-01"]' make dev
+BACKEND_URL=http://127.0.0.1:8000 npm --prefix web run dev -- --host 127.0.0.1 --port 5188
+# In edge/, with vision/audio extras and PortAudio installed:
+uv run python -m agent.vision --screen demo-01 --backend ws://127.0.0.1:8000/ws/agent --camera 0 --markers props/markers.json
+# Speech needs the existing opt-in/retention disclosure (ADR 0005), a key in
+# edge/.env, and a downloaded Silero model. Only enable for an opted-in screen:
+uv run python -m agent.speech --screen demo-01 --backend ws://127.0.0.1:8000/ws/agent --speech-mode --silero-model /path/to/silero_vad.onnx
+```
+
+Open `http://127.0.0.1:5188/screen?id=demo-01` and `/console?screen=demo-01`.
+The console distinguishes recent camera snapshots, speech enabled/received,
+and a connected player. A healthy server alone does not prove the loop works.
+Speech received means an utterance arrived, not that the room is speaking now.
+Diagnostics retain timestamps only, never audio, transcripts or keyterms.
+
+```sh
+make live-preflight ARGS="--server http://127.0.0.1:5188 --require-inputs --require-speech"
+make eval-speech
+```
+
+Target the **player's origin** so preflight checks the browser's actual proxy.
+It fails if that backend lacks fresh camera data, a matching player, or an
+opted-in speech event. `make eval-speech` runs speech facts through real sockets,
+auctions and creatives, including copy changes with the same winning brand.
+Identical requests preserve the current ad; changed intent refreshes its message
+under the normal swap timing. Speech regressions run separately from the fixed
+economic benchmark to preserve its traffic mix and baseline ratios.

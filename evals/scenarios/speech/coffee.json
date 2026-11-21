@@ -1,0 +1,12 @@
+{
+  "name": "speech-coffee",
+  "beat": "A coffee request changes the ad on the same screen",
+  "description": "Canonical speech facts must reach the player, survive camera heartbeats, and never invent an audience.",
+  "steps": [
+    {"scene": "fitness", "expect": {"brands": ["Voltio"]}},
+    {"scene": "fitness", "speech": ["café"], "expect": {"brands": ["Voltio", "Café Patio"]}},
+    {"scene": "fitness", "expect": {"no_change": true}},
+    {"scene": "empty", "expect": {"brands": []}},
+    {"scene": "empty", "speech": ["café"], "expect": {"no_change": true}}
+  ]
+}

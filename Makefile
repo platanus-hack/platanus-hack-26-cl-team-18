@@ -54,6 +54,12 @@ contract-check: ## Fail if the generated TS contract is stale
 live-preflight: ## Report live-loop providers and missing media (ARGS="--require-providers" to gate)
 	uv run python -m scripts.live_preflight $(ARGS)
 
+eval-speech: ## Speech facts → live auction → matching player, no provider credits
+	uv run python -m evals speech
+
+demo-live: ## Supervised camera → backend → player on :5188; paid providers OFF by default
+	uv run python -m scripts.live_demo $(ARGS)
+
 bundle-loops: ## Generate cold H.264 loops (requires ARGS="--budget-usd N --cost-per-clip-usd N")
 	uv run python -m scripts.generate_loops $(ARGS)
 

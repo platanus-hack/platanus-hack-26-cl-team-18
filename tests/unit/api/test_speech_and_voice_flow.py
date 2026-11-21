@@ -118,6 +118,28 @@ def test_it_heard_me_speech_flips_the_auction_to_a_co_brand(speech_app) -> None:
         assert [src.value for src in coffee.sources] == ["speech"]
 
 
+def test_coffee_speech_changes_only_the_matching_screen(speech_app) -> None:  # type: ignore[no-untyped-def]
+    client, clock = speech_app
+    with (
+        client.websocket_connect("/ws/screen/demo-01") as player,
+        client.websocket_connect("/ws/screen/other") as other,
+        client.websocket_connect("/ws/agent") as agent,
+    ):
+        creative(player)
+        creative(other)
+        for screen, socket in (("demo-01", player), ("other", other)):
+            snapshot = snapshot_for("fitness", 1, clock.now_utc()).model_copy(
+                update={"screen_id": screen}
+            )
+            agent.send_text(snapshot.model_dump_json())
+            assert paid_brands(creative(socket)) == ("Voltio",)
+        clock.advance(timedelta(milliseconds=500))
+        agent.send_text(utterance(1, "café"))
+        assert set(paid_brands(creative(player))) == {"Voltio", "Café Patio"}
+        with client.websocket_connect("/ws/screen/other") as reconnect:
+            assert paid_brands(creative(reconnect)) == ("Voltio",)
+
+
 def test_speech_expires_and_the_screen_reverts(tmp_path: Path) -> None:
     app, clock = app_for(tmp_path, speech_topic_ttl_s=5)
     with (
@@ -133,6 +155,28 @@ def test_speech_expires_and_the_screen_reverts(tmp_path: Path) -> None:
         now = clock.advance(timedelta(seconds=6))
         agent.send_text(snapshot_for("fitness", 2, now).model_dump_json())
         assert paid_brands(creative(player)) == ("Voltio",)
+
+
+def test_coffee_can_change_the_ad_repeatedly_after_each_intent_expires(tmp_path: Path) -> None:
+    app, clock = app_for(tmp_path, speech_topic_ttl_s=2)
+    with (
+        TestClient(app) as client,
+        client.websocket_connect("/ws/screen/demo-01") as player,
+        client.websocket_connect("/ws/agent") as agent,
+    ):
+        creative(player)
+        agent.send_text(snapshot_for("fitness", 1, clock.now_utc()).model_dump_json())
+        assert paid_brands(creative(player)) == ("Voltio",)
+        ids = set()
+        for seq in range(1, 6):
+            agent.send_text(utterance(seq, "café"))
+            changed = creative(player)
+            assert set(paid_brands(changed)) == {"Voltio", "Café Patio"}
+            assert changed.creative_id not in ids
+            ids.add(changed.creative_id)
+            now = clock.advance(timedelta(seconds=3))
+            agent.send_text(snapshot_for("fitness", seq + 1, now).model_dump_json())
+            assert paid_brands(creative(player)) == ("Voltio",)
 
 
 def test_speech_mode_off_ignores_utterances(tmp_path: Path) -> None:

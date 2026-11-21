@@ -39,6 +39,7 @@ from app.modules.creative.infrastructure.media_store import FileMediaStore
 from app.modules.delivery.application.ports.ledger import ChargeLedger
 from app.modules.delivery.infrastructure.ledger import InMemoryChargeLedger, PostgresChargeLedger
 from app.realtime.hub import ConnectionHub
+from app.realtime.input_activity import InputActivity
 from app.realtime.router import InboundRouter
 from app.realtime.scheduler import Scheduler, thread_timer
 from app.realtime.warm_worker import WarmWorker
@@ -68,6 +69,7 @@ class Container:
     copywriter: CopyWriter | None = None
     scheduler: Scheduler = thread_timer
     recognition: RecognitionStore = field(default_factory=RecognitionStore)
+    input_activity: InputActivity = field(default_factory=InputActivity)
     # Warm, opt-in VLM enrichment of recognition tracklets (never in prod).
     vlm: RecognitionVlm | None = None
     # Claude vision behind AudienceTagger: keyframes -> IAB segments (AUDIENCE_AI, warm).
@@ -235,6 +237,8 @@ def build_voiceovers(container: Container, synthesizer: VoiceSynthesizer | None 
     """
     settings = container.settings
     if synthesizer is None:
+        if settings.app_env == "test":
+            return  # tests inject a synthesizer; ambient credentials must never spend
         if not settings.voiceovers_configured or settings.elevenlabs_api_key is None:
             return
         adapter = ElevenLabsVoiceSynthesizer(
@@ -260,7 +264,7 @@ def build_voiceovers(container: Container, synthesizer: VoiceSynthesizer | None 
 def build_recognition_vlm(container: Container) -> None:
     """Opt-in VLM enrichment of head-redacted tracklet crops; absent config means off."""
     settings = container.settings
-    if not settings.vlm_enabled or settings.app_env == "prod":
+    if not settings.vlm_enabled or settings.app_env in {"test", "prod"}:
         return
     try:
         provider = build_llm_provider()

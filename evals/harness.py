@@ -15,7 +15,13 @@ from pathlib import Path
 from websockets.sync.client import ClientConnection
 
 from app.bootstrap.demo import DEMO_SCREEN
-from app.contract.messages import AudienceSnapshot, ConsoleAuction, ConsoleMoment, CreativeReady
+from app.contract.messages import (
+    AudienceSnapshot,
+    AudienceUtterance,
+    ConsoleAuction,
+    ConsoleMoment,
+    CreativeReady,
+)
 from evals.live import CONSOLE_MESSAGES, PLAYER_MESSAGES, LiveBackend, live_backend
 from evals.metrics import Decision
 from evals.scenario import Expect, Scenario, Scene
@@ -157,12 +163,26 @@ def _decision(source: str, step: int, minor: bool, session: _Session, seen: Obse
 def run_scenario(scenario: Scenario) -> RunRecord:
     record = RunRecord(source=scenario.name)
     started = time.perf_counter()
-    with live_backend() as backend:
+    with live_backend(speech_mode_screens=[DEMO_SCREEN]) as backend:
         session = _Session(backend)
         record.initial = session.initial
         try:
             for index, step in enumerate(scenario.steps):
-                sent = session.send(session.next_snapshot(step.scene, step.measured_offset))
+                if step.speech is None:
+                    sent = session.send(session.next_snapshot(step.scene, step.measured_offset))
+                else:
+                    session.seq += 1
+                    sent = time.perf_counter()
+                    session.agent.send(
+                        AudienceUtterance(
+                            screen_id=DEMO_SCREEN,
+                            seq=session.seq,
+                            measured_at=datetime.now(UTC),
+                            text="",
+                            language="es",
+                            keyterms_hit=list(step.speech),
+                        ).model_dump_json()
+                    )
                 seen = session.observe(sent, quiet=step.expect.no_change)
                 check = partial(Check, source=scenario.name, step=index)
                 if step.expect.no_change:

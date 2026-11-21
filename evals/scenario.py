@@ -61,6 +61,8 @@ class Step:
     expect: Expect
     measured_offset: timedelta = timedelta(0)  # negative = stale, positive = device clock ahead
     note: str = ""
+    # Event-only step against the latest camera scene. Canonical topics, never transcripts.
+    speech: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -105,6 +107,7 @@ def parse_scenario(raw: dict[str, Any], scenes: dict[str, Scene]) -> Scenario:
             expect=_expect(body.get("expect", {})),
             measured_offset=timedelta(seconds=float(body.get("measured_offset_s", 0))),
             note=body.get("note", ""),
+            speech=tuple(body["speech"]) if "speech" in body else None,
         )
         steps.append(step)
         # `hold: n` repeats the scene n times and expects the screen to stay put:

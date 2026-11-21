@@ -542,6 +542,7 @@ def register_demo(
                 and current_brief is not None
                 and (
                     current_brief.offer != new_brief.offer
+                    or current_brief.angle.angle != new_brief.angle.angle
                     or (
                         new_brief.offer is not None
                         and current_brief.addressed_party != new_brief.addressed_party

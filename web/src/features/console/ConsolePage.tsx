@@ -8,6 +8,7 @@ import { WorkspaceHeader } from "@/shared/ui/WorkspaceHeader";
 import { Monitor } from "lucide-react";
 import { useEffect, useState } from "react";
 import { consoleReducer, initialConsoleState, type ScreenView } from "./console-state";
+import { LiveInputStatus } from "./LiveInputStatus";
 import { coBrandLift, percentile, serverDecisionMs, traceSteps } from "./metrics";
 
 const CONNECTION: Record<ConnectionState["status"], { tone: Tone; label: string }> = {
@@ -89,6 +90,7 @@ export function ConsolePage() {
                         <StatusBadge tone={tone} label={label} />
                     </div>
                 </header>
+                <LiveInputStatus screen={screenFilter ?? "demo-01"} />
                 {shownScreens.length === 0 ? (
                     <Panel title="Waiting for screens">
                         <div className="flex flex-col items-center gap-4 py-14 text-center">

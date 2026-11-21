@@ -24,6 +24,7 @@ from app.bootstrap.container import build_container
 from app.config.settings import AppSettings
 from app.contract.messages import (
     CONSOLE_OUTBOUND,
+    AudienceSnapshot,
     ConsoleAuction,
     ConsoleBook,
     ConsoleLatency,
@@ -490,7 +491,17 @@ def test_a_glance_under_one_second_is_charged_zero_explicitly(loop: Loop) -> Non
         update={"tracklets": [away.tracklets[0].model_copy(update={"looking": False})]}
     )
     loop.clock.advance(timedelta(seconds=0.6))
+    observed = threading.Event()
+
+    def processed(snapshot: AudienceSnapshot, _received: object) -> None:
+        if snapshot.seq == away.seq:
+            observed.set()
+
+    # Agent and player have independent sockets. Advance the fake world only
+    # after the look-away reading has reached delivery, rather than racing it.
+    loop.container.router.on(AudienceSnapshot, processed)
     loop.agent.send_text(away.model_dump_json())
+    assert observed.wait(2), "look-away observation was not processed"
     loop.clock.advance(timedelta(seconds=4))
     played(loop, creative, seconds=4)
     receipt = loop.next_of(ConsoleReceipt)
