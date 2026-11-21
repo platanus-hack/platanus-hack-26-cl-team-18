@@ -13,8 +13,10 @@ segments than the line has sentences, closes after the speech, ends within
 1.3 s of the last voiced frame, and never opens on noise alone.
 
 Live tier (`--live`, spends a few cents of realtime STT): the same degraded
-clips go through `ScribeRealtime` + `SpeechPipeline`, and each final request
-must carry exactly the line's expected keyterms. That is the recognizer's
+clips, with the room still talking for 4 s after the line, go through
+`ScribeRealtime` + `SpeechPipeline`. In every condition, babble included, the
+final request must carry exactly the line's keyterms, arrive within 3 s of
+the end of speech, and alcohol must never be requested early. That is the recognizer's
 accuracy under noise, measured on our own path, not a vendor benchmark.
 
 All audio is synthetic (TTS fixtures + generated noise). No microphone audio
@@ -64,12 +66,15 @@ class Line:
     fixture: str
     sentences: int  # upper bound on gate segments for this line
     keyterms: tuple[str, ...]  # expected final wanted intents (live tier)
+    # Intents actually said, even if later corrected ("una cerveza, mejor un café"):
+    # an early partial may show them. Anything else early is a hallucination.
+    spoken: tuple[str, ...] = ()
 
 
 LINES: tuple[Line, ...] = (
     Line("hunger_coffee", "live_line_pcm16k.raw", 2, ("hambre", "café")),
     Line("hunger_coffee_gym", "bench_line_pcm16k.raw", 2, ("hambre", "café", "gym")),
-    Line("correction", "correction_line_pcm16k.raw", 2, ("café",)),
+    Line("correction", "correction_line_pcm16k.raw", 2, ("café",), ("cerveza",)),
 )
 
 
@@ -113,7 +118,8 @@ class Condition:
 
 def _hum(n: int) -> np.ndarray:
     t = np.arange(n) / SAMPLE_RATE
-    return sum(np.sin(2 * np.pi * 50 * k * t) / k for k in (1, 2, 3)) * 0.03 * 32768
+    harmonics = np.stack([np.sin(2 * np.pi * 50 * k * t) / k for k in (1, 2, 3)])
+    return harmonics.sum(axis=0) * 0.03 * 32768
 
 
 CONDITIONS: tuple[Condition, ...] = (
@@ -366,8 +372,29 @@ class LiveResult:
     expected: tuple[str, ...]
     heard: tuple[str, ...]
     first_hit_ms: float | None  # from speech onset; negative = fired before anyone spoke
+    final_ms: float | None  # speech end -> the complete final request (no end-of-clip flush)
     false_early: tuple[str, ...]  # keyterms emitted before onset or outside the line's intents
-    passed: bool
+    passed: bool  # right final intents, final within MAX_FINAL_MS, no early alcohol
+
+    @property
+    def clean(self) -> bool:
+        return self.passed and not self.false_early
+
+
+MAX_FINAL_MS = 3000.0
+RESTRICTED = frozenset({"cerveza"})
+
+
+def _final_request(messages: list, keyterms: object) -> tuple[str, ...]:  # type: ignore[type-arg]
+    """Merge one viewer's finals across segments: later rejections win."""
+    heard: dict[str, None] = {}
+    for message in messages:
+        if message.is_final and message.text:
+            meaning = keyterms.understand(message.text)  # type: ignore[attr-defined]
+            for rejected in meaning.rejected:
+                heard.pop(rejected, None)
+            heard.update(dict.fromkeys(meaning.wanted))
+    return tuple(sorted(heard))
 
 
 async def _live_clip(
@@ -379,8 +406,10 @@ async def _live_clip(
     from agent.speech.scribe import ScribeConfig, ScribeRealtime
 
     rng = np.random.default_rng(zlib.crc32(f"{line.name}|{cond.name}".encode()))
-    lead_s = 1.0
-    clean = scene(load_pcm(line.fixture), lead_s=lead_s, tail_s=1.5)
+    lead_s, tail_s = 1.0, 4.0  # the room keeps talking after the shopper stops
+    speech = load_pcm(line.fixture)
+    end_s = lead_s + len(speech) / SAMPLE_RATE
+    clean = scene(speech, lead_s=lead_s, tail_s=tail_s)
     frames = to_frames(cond.degrade(clean, clean, rng))
     sent: list[AudienceUtterance] = []
     pipeline: SpeechPipeline | None = None
@@ -401,6 +430,8 @@ async def _live_clip(
     task = asyncio.create_task(scribe.run())
     started = loop.time()
     first_hit: float | None = None
+    final_at: float | None = None
+    expected = tuple(sorted(line.keyterms))
     false_early: dict[str, None] = {}
     seen = 0
     try:
@@ -409,10 +440,17 @@ async def _live_clip(
             now_s = loop.time() - started
             for message in sent[seen:]:
                 for term in message.keyterms_hit:
-                    if now_s < lead_s or term not in line.keyterms:
+                    if now_s < lead_s or term not in (*line.keyterms, *line.spoken):
                         false_early[term] = None
                 if message.keyterms_hit and first_hit is None:
                     first_hit = (now_s - lead_s) * 1000
+            if (
+                seen != len(sent)
+                and final_at is None
+                and now_s > end_s
+                and _final_request(sent, DEFAULT_KEYTERMS) == expected
+            ):
+                final_at = (now_s - end_s) * 1000
             seen = len(sent)
             await asyncio.sleep(FRAME_S)
         pipeline.finish()
@@ -426,23 +464,19 @@ async def _live_clip(
     finally:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
-    # Merge the final request across this clip's segments, like one viewer's turn.
-    heard: dict[str, None] = {}
-    for message in sent:
-        if message.is_final and message.text:
-            meaning = DEFAULT_KEYTERMS.understand(message.text)
-            for rejected in meaning.rejected:
-                heard.pop(rejected, None)
-            heard.update(dict.fromkeys(meaning.wanted))
-    got = tuple(sorted(heard))
+    got = _final_request(sent, DEFAULT_KEYTERMS)
     return LiveResult(
         line.name,
         cond.name,
         line.keyterms,
         got,
         None if first_hit is None else round(first_hit),
+        None if final_at is None else round(final_at),
         tuple(false_early),
-        got == tuple(sorted(line.keyterms)) and not false_early,
+        got == expected
+        and final_at is not None
+        and final_at <= MAX_FINAL_MS
+        and not RESTRICTED.intersection(false_early),
     )
 
 
@@ -503,15 +537,20 @@ def main(argv: list[str] | None = None) -> int:
             print("--live needs ELEVENLABS_API_KEY", file=sys.stderr)
             return 2
         live = asyncio.run(run_live(key, args.silero_model))
-        print(f"\n{'line':18} {'condition':20} {'expected':24} {'heard':24} {'hit ms':>7} false")
+        print(f"\n{'line':18} {'condition':20} {'heard':20} {'hit ms':>7} {'final ms':>8} early")
         for lr in live:
+            mark = "ok" if lr.clean else ("warn" if lr.passed else "FAIL")
             print(
-                f"{lr.line:18} {lr.condition:20} {','.join(lr.expected):24} "
-                f"{','.join(lr.heard) or '-':24} {lr.first_hit_ms or '-':>7} "
-                f"{','.join(lr.false_early) or '-':6} "
-                f"{'ok' if lr.passed else 'FAIL'}"
+                f"{lr.line:18} {lr.condition:20} {','.join(lr.heard) or '-':20} "
+                f"{lr.first_hit_ms if lr.first_hit_ms is not None else '-':>7} "
+                f"{lr.final_ms if lr.final_ms is not None else '-':>8} "
+                f"{','.join(lr.false_early) or '-':10} {mark}"
             )
-        print(f"\nlive: {sum(lr.passed for lr in live)}/{len(live)} pass")
+        print(
+            f"\nlive: {sum(lr.passed for lr in live)}/{len(live)} pass "
+            f"({sum(lr.clean for lr in live)} with no early mistakes; gates: right final "
+            f"intents, final <= {MAX_FINAL_MS:.0f} ms after speech, never early alcohol)"
+        )
 
     if args.json:
         args.json.write_text(
@@ -521,7 +560,7 @@ def main(argv: list[str] | None = None) -> int:
                 ensure_ascii=False,
             )
         )
-    live_fail = [lr for lr in live if not lr.passed and lr.condition != "crowd_babble_snr10"]
+    live_fail = [lr for lr in live if not lr.passed]
     return 1 if gate_fail or live_fail else 0
 
 

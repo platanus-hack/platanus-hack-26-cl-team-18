@@ -25,6 +25,7 @@ class FakeScribe:
     session_delay_s: float = 0.0
     withhold_commits: set[int] = field(default_factory=set)
     supplemental_commits: bool = False
+    word_logprob: float = -0.5
     chunks: list[dict] = field(default_factory=list)  # type: ignore[type-arg]
     audio_bytes: int = 0
     sessions: int = 0
@@ -91,7 +92,10 @@ class FakeScribe:
                         {
                             "message_type": "committed_transcript_with_timestamps",
                             "text": text,
-                            "words": [],
+                            "words": [
+                                {"text": w, "type": "word", "logprob": self.word_logprob}
+                                for w in text.split()
+                            ],
                         }
                     )
                 )

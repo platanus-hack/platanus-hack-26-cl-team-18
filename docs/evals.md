@@ -511,6 +511,40 @@ stale audio, missing final transcripts, supplemental timestamp events, empty
 commits, stream discontinuities and final-source flushes. `make test-sandbox`
 then runs the real agent and backend processes against a local provider server.
 
+### Speech robustness (`make eval-speech-robustness`)
+
+`edge/agent/speech/robustness.py` mixes the authored TTS fixtures with venue
+conditions (far talker -24 dB, clipped hot mic, DC offset, white noise at
+20/10 dB SNR, mains hum, crowd babble, a two-part request, a 48 kHz stereo
+speakerphone) and streams them through the shipped `SpeechGate` with Silero
+and the adaptive energy fallback. **Gates:** >= 97 % of voiced frames streamed,
+no more segments than sentences, gate closed after speech, end lag <= 1.3 s,
+zero opens on stationary noise alone. Babble is reported, not gated (a VAD is
+meant to fire on speech). The offline tier also runs inside `make edge-check`.
+
+`ARGS="--live"` sends the same clips through real Scribe + `SpeechPipeline`,
+with the room still talking for 4 s after the line. **Gates, babble included:**
+the final request carries exactly the line's intents, it arrives <= 3 s after
+the end of speech (no end-of-clip flush), and alcohol is never requested
+early. Early non-alcohol mistakes are reported as `warn`.
+
+What the live tier found, and the defence each finding drove (all in
+`edge/agent/speech/pipeline.py` / `scribe.py`, measured 45/45 over 3 runs):
+
+| Finding (10 dB babble unless noted) | Defence |
+|---|---|
+| Keyterm biasing makes Scribe invent our bias words: "Shop" (cerveza), "Sopaipilla" | Partial stabilization: a meaning counts after 2 agreeing partials |
+| A 2-partial hallucination can still slip through | Alcohol is final-only: a partial never requests it (rejecting it early is fine) |
+| The VAD never hears silence in a crowd, so finals waited for the 15 s cap | Settled-turn commit: longest partial unchanged for ~1.2 s, >= 2 words, no dangling "no/sin/quiero/y" |
+| Babble-only segments finalize as "Un café", "Creo", "Hola, soy" | `include_timestamps`: finals with mean word logprob < -1.3 request nothing (real speech measured >= -0.95) |
+| `turn_probability` hovers 0.4-0.5 after a finished request at 10 dB | Not used for commits |
+| `filter_background_audio` still produced "Un café" / "Bricksoma" | Not enabled (no measured gain) |
+
+Measured: final 0.5-1.8 s after speech in clean/noise/far/clipped, 1.5-2.3 s
+in continuous babble. Accepted residual: under heavy babble a food term
+(comida/hambre) can flash early; a third agreeing partial would fix it at
+~300 ms extra latency for every shopper.
+
 Remaining release evidence requires a separately authorized paid rehearsal on
 actual hardware: short single words, long pauses, nearby speech, TV overlap,
 clipping/noise, and reconnects. Measure WER, request meaning, wrong-ad rate,

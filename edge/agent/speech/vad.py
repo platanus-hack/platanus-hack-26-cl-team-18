@@ -266,6 +266,20 @@ class SpeechGate:
             max(self._hangover_frames, 38) if incomplete else self._hangover_frames
         )
 
+    def end_segment(self) -> bool:
+        """Close the open segment now (the caller commits it); keep listening.
+
+        For when the VAD can't hear the end of a turn because the room never
+        goes quiet. Already-streamed audio is not replayed as pre-roll.
+        """
+        if not self._open:
+            return False
+        self._open = False
+        self._voiced_run = self._silent_run = self._segment_frames = 0
+        self._preroll.clear()
+        self._extended_hangover = self._hangover_frames
+        return True
+
     @property
     def is_open(self) -> bool:
         return self._open

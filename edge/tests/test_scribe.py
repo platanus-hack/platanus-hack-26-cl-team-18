@@ -363,3 +363,67 @@ def test_repeated_empty_commits_do_not_open_sessions_or_throttle_the_provider():
     client.commit()
     assert len(client._outbox) == count
     assert client.stats.commits == 1
+
+
+def test_commit_confidence_is_the_mean_word_logprob() -> None:
+    event = parse_event(
+        json.dumps(
+            {
+                "message_type": "committed_transcript_with_timestamps",
+                "text": "un café",
+                "words": [
+                    {"text": "un", "type": "word", "logprob": -1.0},
+                    {"text": " ", "type": "spacing", "logprob": 0.0},
+                    {"text": "café", "type": "word", "logprob": -2.0},
+                    {"text": "x", "type": "word", "logprob": "bad"},
+                ],
+            }
+        )
+    )
+    assert isinstance(event, CommittedTranscript) and event.confidence == -1.5
+
+
+def test_timestamps_are_requested_by_default() -> None:
+    assert "include_timestamps=true" in ScribeConfig(api_key="k").connect_url()
+    assert (
+        "include_timestamps"
+        not in ScribeConfig(api_key="k", include_timestamps=False).connect_url()
+    )
+
+
+async def test_one_final_carries_the_confidence_of_its_timestamped_twin() -> None:
+    fake = FakeScribe(supplemental_commits=True, word_logprob=-0.4)
+    events: list[ScribeEvent] = []
+    client = ScribeRealtime(config(await fake.start()), events.append, idle_close_s=None)
+    task = asyncio.create_task(client.run())
+    try:
+        await client.wait_connected(2)
+        client.send_audio(VOICE * 4)
+        client.commit()
+        await wait_for(lambda: any(isinstance(e, CommittedTranscript) for e in events))
+        await asyncio.sleep(0.05)
+        finals = [e for e in events if isinstance(e, CommittedTranscript)]
+        assert len(finals) == 1 and finals[0].confidence == pytest.approx(-0.4)
+        assert not finals[0].supplemental
+    finally:
+        task.cancel()
+        await fake.stop()
+
+
+async def test_a_missing_twin_delays_the_final_by_at_most_the_wait() -> None:
+    fake = FakeScribe()  # never sends the timestamped commit
+    events: list[ScribeEvent] = []
+    client = ScribeRealtime(
+        config(await fake.start()), events.append, idle_close_s=None, confidence_wait_s=0.05
+    )
+    task = asyncio.create_task(client.run())
+    try:
+        await client.wait_connected(2)
+        client.send_audio(VOICE * 4)
+        client.commit()
+        await wait_for(lambda: any(isinstance(e, CommittedTranscript) for e in events))
+        final = next(e for e in events if isinstance(e, CommittedTranscript))
+        assert final.confidence is None
+    finally:
+        task.cancel()
+        await fake.stop()

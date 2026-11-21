@@ -17,6 +17,29 @@ hallucinations flicker. So a partial's meaning is acted on only once
 `partial_stability` consecutive partials agree (AWS Transcribe calls this
 partial-results stabilization). It costs one partial interval (~300 ms) on the
 early hit; the commit stays authoritative and is never delayed.
+
+Settled-turn commit: in a crowd the VAD never hears silence, so a segment
+would only commit at the 15 s cap, and final-only intents would wait that
+long. Babble doesn't add words, though: once the longest partial stops
+growing for `settle_frames` of streamed audio (~1.2 s), has at least two
+words, and doesn't end on a dangling word ("no", "sin", "quiero", "y"), the
+segment is committed and the gate keeps listening. Every keyterm hallucination
+measured in babble was one word ("Shop", "Sopaipilla"); a real request
+("una chela") has two, so a lone hallucination never becomes a final. A quiet room never gets here: its VAD closes at 320 ms.
+(Scribe's `turn_probability` was measured too noisy at 10 dB SNR to rely on.)
+
+Low-confidence finals: Scribe's per-word logprob (mean over the segment)
+separates real speech from babble hallucinations. Measured live: real speech
+-0.30..-1.15 per word (segment means <= -0.95) in every condition, babble
+inventions ("Un café", "Creo", "Hola, soy", "Bricksoma") -1.48..-2.92. A final
+below `min_confidence` is treated as an empty commit: it retracts any
+provisional partial and requests nothing. No confidence (no timestamped twin)
+means the final counts as before.
+
+Age-restricted intents are final-only (product invariant 2): a partial whose
+meaning *wants* alcohol is not sent at all, because stabilization still lets
+a babble hallucination through now and then and the backend re-reads the
+partial's text. Rejecting beer early stays allowed: it can only make an ad safer.
 """
 
 from __future__ import annotations
@@ -43,6 +66,12 @@ from agent.speech.vad import GateEvent, SpeechGate
 
 logger = logging.getLogger(__name__)
 
+# A turn ending on one of these is not finished: wait, never commit it early.
+_DANGLING = frozenset(
+    {"y", "o", "pero", "sin", "no", "ni", "quiero", "necesito", "un", "una", "con"}
+    | {"and", "without", "want"}
+)
+
 type Clock = Callable[[], datetime]
 type Emit = Callable[[AudienceUtterance], None]
 
@@ -61,6 +90,9 @@ class PipelineStats:
     committed_utterances: int = 0
     echoes_dropped: int = 0
     unstable_partials: int = 0
+    held_restricted_partials: int = 0
+    settled_commits: int = 0
+    low_confidence_finals: int = 0
     empty_commits: int = 0
     degraded: bool = False
 
@@ -77,6 +109,9 @@ class SpeechPipeline:
         echo_guard: EchoGuard | None = None,
         language: str = "es",
         partial_stability: int = 2,
+        final_only_intents: frozenset[str] = frozenset({"cerveza"}),
+        settle_frames: int | None = 38,  # ~1.2 s of streamed audio; None disables
+        min_confidence: float | None = -1.3,  # mean word logprob; None disables
         clock: Clock = lambda: datetime.now(UTC),
     ) -> None:
         if partial_stability < 1:
@@ -95,6 +130,17 @@ class SpeechPipeline:
         self._seq = 0
         self._last_meaning: tuple[tuple[str, ...], tuple[str, ...]] = ((), ())
         self._stability = partial_stability
+        self._final_only = final_only_intents
+        if settle_frames is not None and settle_frames < 1:
+            raise ValueError("settle_frames must be positive")
+        self._settle_frames = settle_frames
+        self._min_confidence = min_confidence
+        self._longest = ""
+        self._since_growth = 0
+        self._dangling = False
+        # After a settled commit, late partials still describe the committed
+        # segment; they must not arm the settle timer for the crowd that follows.
+        self._awaiting_settled_final = False
         self._candidate: tuple[tuple[str, ...], tuple[str, ...]] | None = None
         self._candidate_seen = 0
         self.stats = PipelineStats()
@@ -105,10 +151,28 @@ class SpeechPipeline:
         for out in self._gate.feed(frame):
             if out.event is GateEvent.SPEECH_START:
                 self.stats.segments += 1
+                self._forget_growth()
             elif out.event is GateEvent.AUDIO:
                 self._transcriber.send_audio(out.audio)
             elif out.event is GateEvent.SPEECH_END:
                 self._transcriber.commit()
+                self._forget_growth()
+        if self._settle_frames is None or not self._gate.is_open or not self._longest:
+            return
+        self._since_growth += 1
+        if (
+            self._since_growth >= self._settle_frames
+            and not self._dangling
+            and len(self._longest.split()) >= 2
+        ):
+            if self._gate.end_segment():
+                self._transcriber.commit()
+                self.stats.settled_commits += 1
+                self._awaiting_settled_final = True
+            self._forget_growth()
+
+    def _forget_growth(self) -> None:
+        self._longest, self._since_growth, self._dangling = "", 0, False
 
     # ------------------------------------------------------------ transcript side
 
@@ -118,13 +182,27 @@ class SpeechPipeline:
         elif isinstance(event, StreamReset):
             self._gate.reset()
             self._forget_candidate()
+            self._forget_growth()
+            self._awaiting_settled_final = False
             self._tracker.on_committed("")
             if self._last_meaning != ((), ()):
                 self._send("", (), self._clock(), self._language)
             self._last_meaning = ((), ())
             self._utterance += 1
         elif isinstance(event, CommittedTranscript):
-            self._on_committed(event.text, event.language_code)
+            if self._awaiting_settled_final:
+                self._awaiting_settled_final = False
+                self._forget_growth()
+            text = event.text
+            if (
+                self._min_confidence is not None
+                and event.confidence is not None
+                and event.confidence < self._min_confidence
+                and text.strip()
+            ):
+                self.stats.low_confidence_finals += 1
+                text = ""  # an invention of the recognizer: request nothing
+            self._on_committed(text, event.language_code)
         elif isinstance(event, ScribeError) and event.error_class is ErrorClass.FATAL:
             self.stats.degraded = True
 
@@ -135,31 +213,20 @@ class SpeechPipeline:
             self._gate.reset()
 
     def _on_partial(self, text: str, turn_probability: float | None = None) -> None:
-        words = normalize(text).split()
+        norm = normalize(text)
+        words = norm.split()
+        if self._awaiting_settled_final:
+            pass  # a late partial of the segment we already committed
+        elif len(norm) > len(self._longest):
+            self._longest, self._since_growth = norm, 0
+        self._dangling = bool(words) and words[-1] in _DANGLING
         self._gate.hold_incomplete_turn(
-            (turn_probability is not None and turn_probability < 0.5)
-            or (
-                bool(words)
-                and words[-1]
-                in {
-                    "y",
-                    "o",
-                    "pero",
-                    "sin",
-                    "no",
-                    "ni",
-                    "quiero",
-                    "necesito",
-                    "un",
-                    "una",
-                    "con",
-                    "and",
-                    "without",
-                    "want",
-                }
-            )
+            (turn_probability is not None and turn_probability < 0.5) or self._dangling
         )
         now = self._clock()
+        self._act_on_partial(text, now)
+
+    def _act_on_partial(self, text: str, now: datetime) -> None:
         if self._echo.is_echo(text, now):
             self.stats.echoes_dropped += 1
             return
@@ -172,6 +239,9 @@ class SpeechPipeline:
         if current != self._last_meaning and self._candidate_seen < self._stability:
             self.stats.unstable_partials += 1
             return
+        if self._final_only.intersection(meaning.wanted):
+            self.stats.held_restricted_partials += 1
+            return  # the committed transcript decides; never the partial
         if current != self._last_meaning:
             self._last_meaning = current
             self.stats.early_utterances += 1

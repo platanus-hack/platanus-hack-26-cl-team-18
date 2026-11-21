@@ -150,7 +150,7 @@ class PcmConverter:
         data = self._odd + data
         whole = len(data) // width * width
         self._odd = data[whole:]
-        samples = np.frombuffer(data[:whole], dtype=np.int16)
+        samples = np.frombuffer(data[:whole], dtype=np.int16).astype(np.float64)
         if self._channels > 1:
             samples = samples.reshape(-1, self._channels).mean(axis=1)
         return self._resampler.process(samples).tobytes()

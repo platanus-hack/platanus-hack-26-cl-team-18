@@ -15,6 +15,10 @@ Design:
 - **Errors are classified**: fatal ones (bad key, quota, terms) stop the
   client and mark speech degraded; transient ones reconnect with backoff;
   protocol bugs are logged once.
+- **Confidence**: with `include_timestamps`, Scribe follows each commit
+  ~20 ms later with a timestamped twin carrying per-word `logprob`. The client
+  holds the plain commit up to `confidence_wait_s` and emits ONE final with
+  `confidence` = mean word logprob (or `None` if the twin never came).
 - **Privacy**: transcript text is handed to the caller and never logged here.
 """
 
@@ -22,8 +26,10 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import dataclasses
 import json
 import logging
+import math
 import random
 import time
 from collections import deque
@@ -59,6 +65,8 @@ class ScribeConfig:
     url: str = DEFAULT_URL
     # manual (our VAD commits), vad (server VAD), turn_prediction (scribe_v3_live only)
     commit_strategy: str = "manual"
+    # Per-word logprob on each commit: lets the pipeline drop babble hallucinations.
+    include_timestamps: bool = True
     # Additional documented query parameters (benchmarks, model-specific options).
     extra_params: tuple[tuple[str, str], ...] = ()
 
@@ -75,6 +83,8 @@ class ScribeConfig:
             ("language_code", self.language_code),
             ("commit_strategy", self.commit_strategy),
         ]
+        if self.include_timestamps:
+            params.append(("include_timestamps", "true"))
         params += [("keyterms", term) for term in self.keyterms]
         params += list(self.extra_params)
         return f"{self.url}?{urlencode(params)}"
@@ -102,6 +112,8 @@ class CommittedTranscript:
     text: str
     language_code: str | None = None
     supplemental: bool = False
+    # Mean per-word logprob from the timestamped commit; None when unavailable.
+    confidence: float | None = None
 
 
 class ErrorClass(StrEnum):
@@ -171,11 +183,27 @@ def parse_event(raw: str | bytes) -> ScribeEvent | None:
             text=str(data.get("text", "")),
             language_code=lang if isinstance(lang, str) else None,
             supplemental=kind == "committed_transcript_with_timestamps",
+            confidence=_mean_logprob(data.get("words")),
         )
     if isinstance(kind, str) and (kind in _ERROR_CLASS or "error" in data):
         detail = data.get("error") or data.get("message") or ""
         return ScribeError(kind, str(detail)[:300], _ERROR_CLASS.get(kind, ErrorClass.TRANSIENT))
     return None
+
+
+def _mean_logprob(words: object) -> float | None:
+    if not isinstance(words, list):
+        return None
+    values = [
+        float(w["logprob"])
+        for w in words
+        if isinstance(w, dict)
+        and w.get("type", "word") == "word"
+        and isinstance(w.get("logprob"), (int, float))
+        and not isinstance(w.get("logprob"), bool)
+        and math.isfinite(w["logprob"])
+    ]
+    return sum(values) / len(values) if values else None
 
 
 def audio_chunk(pcm: bytes, *, commit: bool = False) -> str:
@@ -245,6 +273,7 @@ class ScribeRealtime:
         max_buffer_bytes: int = 10 * SAMPLE_RATE * 2,  # 10 s
         max_audio_age_s: float = 2.0,
         response_timeout_s: float = 10.0,
+        confidence_wait_s: float = 0.3,
     ) -> None:
         self._config = config
         self._on_event = on_event
@@ -258,6 +287,7 @@ class ScribeRealtime:
         if max_buffer_bytes < MIN_CHUNK_BYTES or max_audio_age_s <= 0 or response_timeout_s <= 0:
             raise ValueError("audio buffer and response limits must be positive")
         self._max_age = max_audio_age_s
+        self._confidence_wait = confidence_wait_s
         self._response_timeout = response_timeout_s
         self._commits_pending: deque[float] = deque()
         self._queued_bytes = 0
@@ -446,33 +476,67 @@ class ScribeRealtime:
 
     async def _read(self, socket: _Socket) -> bool:
         generation = self._generation
-        while True:
-            raw = await socket.recv()
-            if generation != self._generation:
+        held: CommittedTranscript | None = None  # plain commit awaiting its confidence
+
+        def release() -> None:
+            nonlocal held
+            if held is not None and generation == self._generation:
+                self._on_event(held)
+            held = None
+
+        try:
+            while True:
+                if held is None:
+                    raw = await socket.recv()
+                else:
+                    try:
+                        raw = await asyncio.wait_for(socket.recv(), self._confidence_wait)
+                    except TimeoutError:
+                        release()  # no twin: the final must not wait any longer
+                        continue
+                if generation != self._generation:
+                    return False
+                event = parse_event(raw)
+                if event is None:
+                    continue
+                if isinstance(event, CommittedTranscript):
+                    if event.supplemental:
+                        if held is not None:
+                            held = dataclasses.replace(held, confidence=event.confidence)
+                            release()
+                        continue  # enrichment of the same commit, never a new utterance
+                    release()
+                    if self._commits_pending:
+                        self._commits_pending.popleft()
+                    if self._config.include_timestamps:
+                        held = event
+                        continue
+                    self._on_event(event)
+                    continue
+                release()
+                if not self._dispatch(event):
+                    return False
+        finally:
+            release()
+
+    def _dispatch(self, event: ScribeEvent) -> bool:
+        """Deliver one non-commit event; False ends the session."""
+        if isinstance(event, SessionStarted):
+            self._connected.set()
+        elif isinstance(event, ScribeError):
+            if event.error_class is ErrorClass.FATAL:
+                self._fatal = event
+                logger.error("scribe fatal error: %s", event.kind)
+                self._on_event(event)
                 return False
-            event = parse_event(raw)
-            if event is None:
-                continue
-            if isinstance(event, SessionStarted):
-                self._connected.set()
-            elif isinstance(event, CommittedTranscript):
-                if event.supplemental:
-                    continue  # enrichment follows the same stable commit, not a new utterance
-                if self._commits_pending:
-                    self._commits_pending.popleft()
-            elif isinstance(event, ScribeError):
-                if event.error_class is ErrorClass.FATAL:
-                    self._fatal = event
-                    logger.error("scribe fatal error: %s", event.kind)
-                    self._on_event(event)
-                    return False
-                if event.error_class is ErrorClass.TRANSIENT:
-                    self.stats.transient_errors += 1
-                    logger.warning("scribe transient error: %s", event.kind)
-                    self._on_event(event)
-                    return False
-                logger.info("scribe notice: %s", event.kind)
-            self._on_event(event)
+            if event.error_class is ErrorClass.TRANSIENT:
+                self.stats.transient_errors += 1
+                logger.warning("scribe transient error: %s", event.kind)
+                self._on_event(event)
+                return False
+            logger.info("scribe notice: %s", event.kind)
+        self._on_event(event)
+        return True
 
     async def _sleep(self, attempt: int, why: str) -> None:
         ceiling = self._backoff[min(attempt, len(self._backoff) - 1)]

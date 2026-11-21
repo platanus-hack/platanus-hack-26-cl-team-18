@@ -86,3 +86,13 @@ def test_echo_guard_drops_our_own_line_heard_late() -> None:
 def test_echo_guard_rejects_inverted_windows() -> None:
     with pytest.raises(ValueError):
         EchoGuard().announce(AudioWindow(T0, T0 - timedelta(seconds=1), "x"))
+
+
+def test_end_segment_closes_without_replaying_streamed_audio() -> None:
+    gate = SpeechGate(EnergyVad(), start_frames=2, preroll_frames=4)
+    run(gate, [tone()] * 6)
+    assert gate.is_open and gate.end_segment() and not gate.is_open
+    assert not gate.end_segment()  # idempotent
+    events = run(gate, [tone()] * 2)
+    assert events[0][0] is GateEvent.SPEECH_START
+    assert events[1] == (GateEvent.AUDIO, 2 * FRAME_BYTES)  # fresh pre-roll only

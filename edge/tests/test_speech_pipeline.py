@@ -40,9 +40,16 @@ class RecordingTranscriber:
         self.commits += 1
 
 
-def make(echo: EchoGuard | None = None, *, stability: int = 1):  # type: ignore[no-untyped-def]
+def make(  # type: ignore[no-untyped-def]
+    echo: EchoGuard | None = None,
+    *,
+    stability: int = 1,
+    final_only: frozenset[str] | None = None,
+):
     """Meaning/retraction tests act on every partial (`stability=1`) on purpose;
-    stabilization itself is covered by the `test_stabilized_*` tests below."""
+    stabilization is covered by `test_stabilized_*`. `final_only=frozenset()`
+    lets a mechanism test use beer as its provisional partial; production keeps
+    alcohol final-only (`test_alcohol_*`)."""
     sent: list[AudienceUtterance] = []
     transcriber = RecordingTranscriber()
     pipeline = SpeechPipeline(
@@ -53,6 +60,7 @@ def make(echo: EchoGuard | None = None, *, stability: int = 1):  # type: ignore[
         emit=sent.append,
         echo_guard=echo,
         partial_stability=stability,
+        **({} if final_only is None else {"final_only_intents": final_only}),
         clock=lambda: T0,
     )
     return pipeline, transcriber, sent
@@ -88,7 +96,7 @@ def test_committed_without_keyterms_is_still_sent_for_topic_extraction() -> None
 
 
 def test_partial_updates_carry_the_complete_current_request_not_just_new_words() -> None:
-    pipeline, _, sent = make()
+    pipeline, _, sent = make(final_only=frozenset())
     pipeline.on_event(PartialTranscript("un café"))
     pipeline.on_event(PartialTranscript("un café después del gimnasio"))
     assert [u.keyterms_hit for u in sent] == [["café"], ["café", "gym"]]
@@ -180,7 +188,7 @@ def anyio_backend() -> str:
 
 
 def test_partial_correction_retracts_beer_and_keeps_one_anonymous_request_id():
-    pipeline, _, sent = make()
+    pipeline, _, sent = make(final_only=frozenset())
     pipeline.on_event(PartialTranscript("quiero cerveza"))
     pipeline.on_event(PartialTranscript("no quiero cerveza"))
     pipeline.on_event(CommittedTranscript("no quiero cerveza, quiero café"))
@@ -193,7 +201,7 @@ def test_partial_correction_retracts_beer_and_keeps_one_anonymous_request_id():
 
 
 def test_empty_commit_retracts_a_provisional_partial():
-    pipeline, _, sent = make()
+    pipeline, _, sent = make(final_only=frozenset())
     pipeline.on_event(PartialTranscript("quiero cerveza"))
     pipeline.on_event(CommittedTranscript(""))
     assert len(sent) == 2
@@ -220,7 +228,7 @@ def test_incomplete_phrase_survives_a_pause_then_commits_when_complete():
 def test_stream_reset_retracts_partial_and_ignores_the_damaged_tail():
     from agent.speech.scribe import StreamReset
 
-    pipeline, transcriber, sent = make()
+    pipeline, transcriber, sent = make(final_only=frozenset())
     for frame in [VOICE] * 6:
         pipeline.on_frame(frame)
     pipeline.on_event(PartialTranscript("quiero cerveza"))
@@ -250,7 +258,8 @@ def test_real_rehearsal_correction_overrides_old_interest_in_one_segment():
     pipeline.on_event(PartialTranscript("quiero una cerveza mejor"))
     pipeline.on_event(PartialTranscript("quiero una cerveza mejor un café"))
     pipeline.on_event(CommittedTranscript("Quiero una cerveza, mejor un café."))
-    assert [message.keyterms_hit for message in sent] == [["cerveza"], [], ["café"], ["café"]]
+    # Beer is never on screen, not even provisionally: alcohol is final-only.
+    assert [message.keyterms_hit for message in sent] == [[], ["café"], ["café"]]
     assert len({message.utterance_id for message in sent}) == 1
 
 
@@ -323,7 +332,7 @@ def test_stabilized_candidate_does_not_survive_a_commit_or_reset() -> None:
 
 
 def test_stabilized_retraction_also_needs_agreement() -> None:
-    pipeline, _, sent = make(stability=2)
+    pipeline, _, sent = make(stability=2, final_only=frozenset())
     pipeline.on_event(PartialTranscript("quiero cerveza"))
     pipeline.on_event(PartialTranscript("quiero cerveza"))
     pipeline.on_event(PartialTranscript("quiero"))  # one revision: not yet a retraction
@@ -335,3 +344,175 @@ def test_stabilized_retraction_also_needs_agreement() -> None:
 def test_partial_stability_must_be_positive() -> None:
     with pytest.raises(ValueError):
         make(stability=0)
+
+
+# ------------------------------------------------------------ age-restricted intents
+
+
+def test_alcohol_is_never_requested_from_a_partial() -> None:
+    pipeline, _, sent = make(stability=2, final_only=None)
+    for text in ["Shop", "Shop", "una chela", "una chela", "quiero cerveza y café"] * 2:
+        pipeline.on_event(PartialTranscript(text))
+    assert all("cerveza" not in m.keyterms_hit for m in sent)
+    assert pipeline.stats.held_restricted_partials >= 3
+
+
+def test_alcohol_still_counts_from_the_committed_transcript() -> None:
+    pipeline, _, sent = make(stability=2, final_only=None)
+    pipeline.on_event(PartialTranscript("una chela"))
+    pipeline.on_event(PartialTranscript("una chela"))
+    pipeline.on_event(CommittedTranscript("una chela", "es"))
+    assert [(m.keyterms_hit, m.is_final) for m in sent] == [(["cerveza"], True)]
+
+
+def test_rejecting_alcohol_on_a_partial_is_still_sent_early() -> None:
+    pipeline, _, sent = make(stability=2, final_only=None)
+    for text in ["no quiero cerveza, quiero café"] * 2:
+        pipeline.on_event(PartialTranscript(text))
+    assert len(sent) == 1 and not sent[0].is_final
+    assert sent[0].keyterms_hit == ["café"]
+    assert sent[0].text  # the backend reads the rejection from the text
+
+
+# ------------------------------------------------------------ settled-turn commit
+
+
+class AlwaysVoiced:
+    """A crowd: the VAD never hears silence."""
+
+    def speech_probability(self, frame: bytes) -> float:
+        return 0.9
+
+
+def crowd(settle: int | None = 38):  # type: ignore[no-untyped-def]
+    sent: list[AudienceUtterance] = []
+    transcriber = RecordingTranscriber()
+    pipeline = SpeechPipeline(
+        screen_id="demo-01",
+        gate=SpeechGate(AlwaysVoiced()),
+        transcriber=transcriber,
+        keyterms=DEFAULT_KEYTERMS,
+        emit=sent.append,
+        settle_frames=settle,
+        clock=lambda: T0,
+    )
+    return pipeline, transcriber, sent
+
+
+def test_settled_request_commits_in_a_room_that_never_goes_quiet() -> None:
+    pipeline, transcriber, sent = crowd()
+    for _ in range(10):
+        pipeline.on_frame(VOICE)
+    pipeline.on_event(PartialTranscript("una chela"))
+    pipeline.on_event(PartialTranscript("una chela"))
+    for _ in range(37):
+        pipeline.on_frame(VOICE)
+    assert transcriber.commits == 0
+    pipeline.on_frame(VOICE)  # 38 frames (~1.2 s) without new words
+    assert transcriber.commits == 1 and pipeline.stats.settled_commits == 1
+    pipeline.on_event(CommittedTranscript("una chela", "es"))
+    assert sent[-1].is_final and sent[-1].keyterms_hit == ["cerveza"]  # seconds, not 15 s
+    audio = transcriber.audio
+    for _ in range(5):
+        pipeline.on_frame(VOICE)
+    assert transcriber.audio > audio  # still listening: the crowd opens a new segment
+    assert transcriber.commits == 1  # and it isn't committed without words
+
+
+def test_settle_timer_restarts_while_the_request_is_still_growing() -> None:
+    pipeline, transcriber, _ = crowd()
+    for _ in range(5):
+        pipeline.on_frame(VOICE)
+    for text in ["quiero un", "quiero un café", "quiero un café y una empanada"]:
+        pipeline.on_event(PartialTranscript(text))
+        for _ in range(30):
+            pipeline.on_frame(VOICE)
+    assert transcriber.commits == 0
+    for _ in range(8):
+        pipeline.on_frame(VOICE)
+    assert transcriber.commits == 1
+
+
+def test_a_dangling_negation_is_never_settled_early() -> None:
+    pipeline, transcriber, _ = crowd()
+    for _ in range(5):
+        pipeline.on_frame(VOICE)
+    pipeline.on_event(PartialTranscript("ahora no quiero"))
+    for _ in range(100):
+        pipeline.on_frame(VOICE)
+    assert transcriber.commits == 0  # "no quiero | cerveza" must not be split
+
+
+def test_a_one_word_hallucination_never_becomes_a_final() -> None:
+    pipeline, transcriber, _ = crowd()
+    for _ in range(5):
+        pipeline.on_frame(VOICE)
+    pipeline.on_event(PartialTranscript("Shop"))
+    for _ in range(100):
+        pipeline.on_frame(VOICE)
+    assert transcriber.commits == 0
+
+
+def test_a_quiet_room_never_needs_the_settle_rule() -> None:
+    pipeline, transcriber, _ = make()
+    for frame in [VOICE] * 6:
+        pipeline.on_frame(frame)
+    pipeline.on_event(PartialTranscript("una chela"))
+    for frame in [SILENCE] * 40:
+        pipeline.on_frame(frame)
+    assert transcriber.commits == 1 and pipeline.stats.settled_commits == 0
+
+
+def test_settle_rule_can_be_disabled() -> None:
+    pipeline, transcriber, _ = crowd(settle=None)
+    for _ in range(5):
+        pipeline.on_frame(VOICE)
+    pipeline.on_event(PartialTranscript("una chela"))
+    for _ in range(100):
+        pipeline.on_frame(VOICE)
+    assert transcriber.commits == 0
+
+
+def test_late_partials_of_a_settled_segment_do_not_settle_the_crowd_after_it() -> None:
+    pipeline, transcriber, _ = crowd()
+    for _ in range(5):
+        pipeline.on_frame(VOICE)
+    pipeline.on_event(PartialTranscript("vamos por un café"))
+    for _ in range(38):
+        pipeline.on_frame(VOICE)
+    assert transcriber.commits == 1
+    pipeline.on_event(PartialTranscript("vamos por un café."))  # late, old segment
+    for _ in range(60):
+        pipeline.on_frame(VOICE)  # the crowd keeps talking
+    assert transcriber.commits == 1
+    pipeline.on_event(CommittedTranscript("vamos por un café", "es"))
+    pipeline.on_event(PartialTranscript("y una empanada"))  # a genuinely new request
+    for _ in range(38):
+        pipeline.on_frame(VOICE)
+    assert transcriber.commits == 2
+
+
+# ------------------------------------------------------------ final confidence
+
+
+def test_a_low_confidence_final_requests_nothing_and_retracts_its_partial() -> None:
+    pipeline, _, sent = make()
+    pipeline.on_event(PartialTranscript("un café"))
+    # Recorded live: babble transcribed as "Un café", word logprobs -1.87 / -2.61.
+    pipeline.on_event(CommittedTranscript("Un café", "es", confidence=-2.24))
+    assert [(m.keyterms_hit, m.is_final) for m in sent] == [(["café"], False), ([], True)]
+    assert sent[-1].text == ""
+    assert pipeline.stats.low_confidence_finals == 1
+
+
+def test_a_confident_final_counts() -> None:
+    pipeline, _, sent = make()
+    # Recorded live: the same request under 10 dB babble, mean logprob about -0.85.
+    pipeline.on_event(CommittedTranscript("¡Uf, qué hambre! Vamos por un café", confidence=-0.85))
+    assert sent[-1].keyterms_hit == ["hambre", "café"]
+
+
+def test_a_final_without_confidence_still_counts() -> None:
+    pipeline, _, sent = make()
+    pipeline.on_event(CommittedTranscript("una chela", confidence=None))
+    assert sent[-1].keyterms_hit == ["cerveza"]
