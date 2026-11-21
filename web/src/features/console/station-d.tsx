@@ -283,70 +283,75 @@ export function AuctionSection({ view, screen }: { view: ScreenView; screen: str
                         error={error}
                     />
                 ) : (
-                    <div className="overflow-x-auto">
-                        <table className="w-full min-w-[720px] border-collapse text-compact">
-                            <thead>
-                                <tr className="text-left whitespace-nowrap text-muted">
-                                    <th className="border-b border-border py-2 pr-2 pl-3 font-medium">
-                                        Marca
-                                    </th>
-                                    <th className="border-b border-border p-2 text-right font-medium">
-                                        Puja/s
-                                    </th>
-                                    <th className="border-b border-border p-2 text-center font-medium">
-                                        Multiplicador
-                                    </th>
-                                    <>
-                                        <th className="border-b border-border p-2 font-medium">
-                                            Coincide con
+                    <>
+                        <MobileBids rows={shown} controls={controls} onError={setError} />
+                        <div className="hidden overflow-x-auto md:block">
+                            <table className="w-full min-w-[720px] border-collapse text-compact">
+                                <thead>
+                                    <tr className="text-left whitespace-nowrap text-muted">
+                                        <th className="border-b border-border py-2 pr-2 pl-3 font-medium">
+                                            Marca
                                         </th>
                                         <th className="border-b border-border p-2 text-right font-medium">
-                                            Valor/s
+                                            Puja/s
                                         </th>
-                                        <th
-                                            className="border-b border-border p-2 text-right font-medium"
-                                            title="Cada ganadora paga lo justo para seguir ganando, nunca más que su puja."
-                                        >
-                                            Paga/s
+                                        <th className="border-b border-border p-2 text-center font-medium">
+                                            Multiplicador
                                         </th>
-                                        <th className="border-b border-border py-2 pl-2 font-medium">
-                                            Resultado
-                                        </th>
-                                    </>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {shown.map((row) => (
-                                    <AuctionRow
-                                        key={row.campaignId}
-                                        row={row}
-                                        screen={screen}
-                                        controls={controls}
-                                        live={live}
-                                        onError={setError}
-                                    />
-                                ))}
-                            </tbody>
-                        </table>
-                        {idle.length > 0 && (
-                            <details className="mt-2 pl-3 text-compact text-muted">
-                                <summary className="cursor-pointer">
-                                    Sin interés en este momento ({idle.length})
-                                </summary>
-                                <p className="mt-1">{idle.map((row) => row.brand).join(", ")}</p>
-                            </details>
-                        )}
-                        {error && (
-                            <p className="mt-2 text-compact text-danger" role="status">
-                                No se aplicó: {error}
-                            </p>
-                        )}
-                        {!controls && (
-                            <p className="mt-2 pl-3 text-metadata text-muted">
-                                Solo lectura: abre una vez /demo/&lt;clave&gt; para editar.
-                            </p>
-                        )}
-                    </div>
+                                        <>
+                                            <th className="border-b border-border p-2 font-medium">
+                                                Coincide con
+                                            </th>
+                                            <th className="border-b border-border p-2 text-right font-medium">
+                                                Valor/s
+                                            </th>
+                                            <th
+                                                className="border-b border-border p-2 text-right font-medium"
+                                                title="Cada ganadora paga lo justo para seguir ganando, nunca más que su puja."
+                                            >
+                                                Paga/s
+                                            </th>
+                                            <th className="border-b border-border py-2 pl-2 font-medium">
+                                                Resultado
+                                            </th>
+                                        </>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {shown.map((row) => (
+                                        <AuctionRow
+                                            key={row.campaignId}
+                                            row={row}
+                                            screen={screen}
+                                            controls={controls}
+                                            live={live}
+                                            onError={setError}
+                                        />
+                                    ))}
+                                </tbody>
+                            </table>
+                            {idle.length > 0 && (
+                                <details className="mt-2 pl-3 text-compact text-muted">
+                                    <summary className="cursor-pointer">
+                                        Sin interés en este momento ({idle.length})
+                                    </summary>
+                                    <p className="mt-1">
+                                        {idle.map((row) => row.brand).join(", ")}
+                                    </p>
+                                </details>
+                            )}
+                            {error && (
+                                <p className="mt-2 text-compact text-danger" role="status">
+                                    No se aplicó: {error}
+                                </p>
+                            )}
+                            {!controls && (
+                                <p className="mt-2 pl-3 text-metadata text-muted">
+                                    Solo lectura: abre una vez /demo/&lt;clave&gt; para editar.
+                                </p>
+                            )}
+                        </div>
+                    </>
                 )}
                 {lines.length > 0 && (
                     <div className="flex flex-col gap-2.5">
@@ -389,6 +394,115 @@ export function AuctionSection({ view, screen }: { view: ScreenView; screen: str
 }
 
 /** Standby: every brand as a compact tile, ready to bid, before anyone is seen. */
+/** Phone: one card per bid (who, result, bid, multiplier, price paid); no sideways scroll. */
+function MobileBids({
+    rows,
+    controls,
+    onError,
+}: {
+    rows: readonly BidRow[];
+    controls: boolean;
+    onError: (message: string | null) => void;
+}) {
+    const step = (row: BidRow, direction: 1 | -1) => {
+        const next = stepMultiplier(row.multiplier, direction);
+        if (next === null) return;
+        setBidMultiplier(row.campaignId, next, row.multiplierSeq).then(
+            () => {
+                onError(null);
+            },
+            (reason: unknown) => {
+                onError(String(reason));
+            },
+        );
+    };
+    return (
+        <ul aria-label="Pujas" className="flex flex-col gap-2 md:hidden">
+            {rows.map((row) => {
+                const won = row.result?.label === "Gana";
+                return (
+                    <li
+                        key={row.campaignId}
+                        data-brand={row.brand}
+                        className={
+                            won
+                                ? "flex flex-col gap-2 rounded-control border border-accent bg-accent-soft p-3"
+                                : "flex flex-col gap-2 rounded-control border border-border-subtle p-3"
+                        }
+                    >
+                        <span className="flex items-center gap-2">
+                            <span
+                                aria-hidden
+                                className="size-2.5 shrink-0 rounded-full"
+                                style={{ background: row.accent ?? "var(--color-border)" }}
+                            />
+                            <span className="font-medium">{row.brand}</span>
+                            {row.onAir && (
+                                <span className="text-metadata text-success">al aire</span>
+                            )}
+                            {row.result && (
+                                <span className="ml-auto">
+                                    <Badge tone={row.result.tone}>{row.result.label}</Badge>
+                                </span>
+                            )}
+                        </span>
+                        <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-compact text-muted tabular-nums">
+                            <span>
+                                Puja{" "}
+                                <span className="text-fg">
+                                    {row.bidPerAs ? `${money(row.bidPerAs)}/s` : "—"}
+                                </span>
+                            </span>
+                            <span>
+                                Paga{" "}
+                                <span
+                                    className={row.pays ? "font-semibold text-success" : "text-fg"}
+                                >
+                                    {row.pays ? `${money(row.pays)}/s` : "—"}
+                                </span>
+                            </span>
+                            <span className="ml-auto inline-flex items-center rounded-control border border-border bg-surface">
+                                {controls && (
+                                    <Button
+                                        size="icon-sm"
+                                        variant="ghost"
+                                        aria-label={`Bajar puja de ${row.brand}`}
+                                        disabled={stepMultiplier(row.multiplier, -1) === null}
+                                        onClick={() => {
+                                            step(row, -1);
+                                        }}
+                                    >
+                                        <Minus aria-hidden />
+                                    </Button>
+                                )}
+                                <span className="min-w-9 px-1 text-center text-fg">
+                                    ×{decimalCl(row.multiplier, 1)}
+                                </span>
+                                {controls && (
+                                    <Button
+                                        size="icon-sm"
+                                        variant="ghost"
+                                        aria-label={`Subir puja de ${row.brand}`}
+                                        disabled={stepMultiplier(row.multiplier, 1) === null}
+                                        onClick={() => {
+                                            step(row, 1);
+                                        }}
+                                    >
+                                        <Plus aria-hidden />
+                                    </Button>
+                                )}
+                            </span>
+                        </span>
+                        {row.reason && (
+                            <span className="text-metadata text-muted">{row.reason}</span>
+                        )}
+                    </li>
+                );
+            })}
+        </ul>
+    );
+}
+
 function BrandGrid({
     rows,
     screen,
