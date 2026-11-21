@@ -398,7 +398,8 @@ def test_frame_buffer_clear_drops_partial_audio_from_a_dead_stream() -> None:
 
 
 @pytest.mark.parametrize(
-    ("raw", "expected"), [("3", 3), (" 12 ", 12), ("Jabra", "Jabra"), ("", None), (None, None), (2, 2)]
+    ("raw", "expected"),
+    [("3", 3), (" 12 ", 12), ("Jabra", "Jabra"), ("", None), (None, None), (2, 2)],
 )
 def test_device_argument_accepts_an_index_or_a_name(raw: object, expected: object) -> None:
     assert parse_device(raw) == expected  # type: ignore[arg-type]

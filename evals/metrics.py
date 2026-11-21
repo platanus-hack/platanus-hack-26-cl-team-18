@@ -189,9 +189,8 @@ def _match_violations(auction: ConsoleAuction) -> list[tuple[str, str]]:
             found.append(("bid_match_duplicate", f"{bid.brand_name}: {segments}"))
         for match in bid.matches:
             exact = match.segment_id == match.bid_segment_id
-            consistent = (
-                (match.kind.value == "exact") == exact
-                and (match.weight == 1 if exact else 0 < match.weight < 1)
+            consistent = (match.kind.value == "exact") == exact and (
+                match.weight == 1 if exact else 0 < match.weight < 1
             )
             if not consistent:
                 found.append(
@@ -202,9 +201,7 @@ def _match_violations(auction: ConsoleAuction) -> list[tuple[str, str]]:
                     )
                 )
             if bid.category in AGE_RESTRICTED_CATEGORIES and not exact:
-                found.append(
-                    ("restricted_reach_widened", f"{bid.brand_name}: {match.kind.value}")
-                )
+                found.append(("restricted_reach_widened", f"{bid.brand_name}: {match.kind.value}"))
     if len(auction.winners) == 1:
         (winner,) = auction.winners
         line = lines.get(winner.campaign_id)

@@ -1,4 +1,5 @@
 import type {
+    BidMatch,
     DegradationFlag,
     ExclusionReason,
     MoneyDTO,
@@ -36,6 +37,21 @@ export const MATCH: Record<SegmentMatchKind, string> = {
     narrower: "más específico",
     related: "relacionado",
 };
+
+/**
+ * How a bid reached the moment beyond its exact segments, one route per match:
+ * "vía Café → Pasteles · relacionado 40 %". Exact matches need no explanation,
+ * so a bid with only exact matches returns "".
+ */
+export function affinityRoutes(matches: readonly BidMatch[]): string {
+    return matches
+        .filter((m) => m.kind !== "exact")
+        .map(
+            (m) =>
+                `vía ${m.bid_segment_label || m.bid_segment_id} → ${m.segment_label || m.segment_id} · ${MATCH[m.kind]} ${Math.round(m.weight * 100)} %`,
+        )
+        .join(" · ");
+}
 
 export const SOURCE: Record<SignalSource, string> = {
     vision: "cámara",

@@ -169,9 +169,7 @@ def to_frames(x: np.ndarray) -> list[bytes]:
 def voiced_frames(clean: np.ndarray) -> np.ndarray:
     """Ground truth from the clean track: frames within 35 dB of the line's peak level."""
     frames = to_frames(clean)
-    levels = np.array(
-        [_rms(np.frombuffer(f, dtype=np.int16).astype(np.float64)) for f in frames]
-    )
+    levels = np.array([_rms(np.frombuffer(f, dtype=np.int16).astype(np.float64)) for f in frames])
     return levels > levels.max() * 10 ** (-35 / 20)
 
 
@@ -273,8 +271,16 @@ def eval_two_part_request(vad_name: str, make_vad: VadFactory) -> GateResult:
     trace = run_gate(SpeechGate(make_vad()), to_frames(clean))
     coverage = float(trace.streamed[truth].mean())
     result = GateResult(
-        vad_name, "two_part", "pause_1.5s", round(coverage, 4), trace.segments, 4,
-        not trace.open_at_end, None, 0, True,
+        vad_name,
+        "two_part",
+        "pause_1.5s",
+        round(coverage, 4),
+        trace.segments,
+        4,
+        not trace.open_at_end,
+        None,
+        0,
+        True,
     )
     if trace.segments < 2:
         result.failures.append("two requests merged into one segment")
@@ -302,15 +308,26 @@ def eval_resampled_device() -> GateResult:
     # Best alignment within 0..16 samples (FIR group delay), then signal-to-error ratio.
     best = max(
         (
-            10 * math.log10(_rms(ref[20 : n - 20]) ** 2
-            / max(_rms(ref[20 : n - 20] - got[20 + d : n - 20 + d]) ** 2, 1e-9)),
+            10
+            * math.log10(
+                _rms(ref[20 : n - 20]) ** 2
+                / max(_rms(ref[20 : n - 20] - got[20 + d : n - 20 + d]) ** 2, 1e-9)
+            ),
             d,
         )
         for d in range(17)
     )
     result = GateResult(
-        "converter", LINES[0].name, "48k_stereo", round(len(got) / len(speech), 4),
-        0, 0, True, None, 0, True,
+        "converter",
+        LINES[0].name,
+        "48k_stereo",
+        round(len(got) / len(speech), 4),
+        0,
+        0,
+        True,
+        None,
+        0,
+        True,
     )
     if abs(len(got) - len(speech)) > 64:
         result.failures.append(f"length {len(got)} vs {len(speech)} samples")
@@ -322,9 +339,9 @@ def eval_resampled_device() -> GateResult:
 def run_offline(silero_model: Path | None) -> list[GateResult]:
     results: list[GateResult] = []
     for vad_name, make_vad in vad_factories(silero_model).items():
-        for line in LINES:
-            for cond in CONDITIONS:
-                results.append(eval_clip(vad_name, make_vad, line, cond))
+        results.extend(
+            eval_clip(vad_name, make_vad, line, cond) for line in LINES for cond in CONDITIONS
+        )
         results.append(eval_two_part_request(vad_name, make_vad))
     results.append(eval_resampled_device())
     return results
@@ -334,7 +351,11 @@ def run_offline(silero_model: Path | None) -> list[GateResult]:
 
 
 LIVE_CONDITIONS = (
-    "clean", "far_quiet_-24dB", "hot_clipped_+20dB", "white_snr10", "crowd_babble_snr10",
+    "clean",
+    "far_quiet_-24dB",
+    "hot_clipped_+20dB",
+    "white_snr10",
+    "crowd_babble_snr10",
 )
 
 
@@ -370,8 +391,11 @@ async def _live_clip(
     )
     vad = next(iter(vad_factories(silero_model).values()))()
     pipeline = SpeechPipeline(
-        screen_id="eval", gate=SpeechGate(vad), transcriber=scribe,
-        keyterms=DEFAULT_KEYTERMS, emit=sent.append,
+        screen_id="eval",
+        gate=SpeechGate(vad),
+        transcriber=scribe,
+        keyterms=DEFAULT_KEYTERMS,
+        emit=sent.append,
     )
     loop = asyncio.get_running_loop()
     task = asyncio.create_task(scribe.run())
@@ -412,7 +436,10 @@ async def _live_clip(
             heard.update(dict.fromkeys(meaning.wanted))
     got = tuple(sorted(heard))
     return LiveResult(
-        line.name, cond.name, line.keyterms, got,
+        line.name,
+        cond.name,
+        line.keyterms,
+        got,
         None if first_hit is None else round(first_hit),
         tuple(false_early),
         got == tuple(sorted(line.keyterms)) and not false_early,
@@ -455,7 +482,9 @@ def main(argv: list[str] | None = None) -> int:
 
     offline = run_offline(args.silero_model)
     gate_fail = [r for r in offline if r.gated and not r.passed]
-    print(f"{'vad':16} {'line':18} {'condition':20} {'cov':>6} {'seg':>4} {'lag ms':>7} {'noise':>5}")
+    print(
+        f"{'vad':16} {'line':18} {'condition':20} {'cov':>6} {'seg':>4} {'lag ms':>7} {'noise':>5}"
+    )
     for r in offline:
         mark = "ok " if r.passed else ("FAIL" if r.gated else "warn")
         lag = "-" if r.end_lag_ms is None else f"{r.end_lag_ms:.0f}"
@@ -463,7 +492,9 @@ def main(argv: list[str] | None = None) -> int:
             f"{r.vad:16} {r.line:18} {r.condition:20} {r.coverage:6.1%} {r.segments:>4} "
             f"{lag:>7} {r.noise_opens:>5}  {mark} {'; '.join(r.failures)}"
         )
-    print(f"\noffline: {len(offline) - len(gate_fail)}/{len(offline)} pass (gated failures: {len(gate_fail)})")
+    print(
+        f"\noffline: {len(offline) - len(gate_fail)}/{len(offline)} pass (gated failures: {len(gate_fail)})"
+    )
 
     live: list[LiveResult] = []
     if args.live:
@@ -486,7 +517,8 @@ def main(argv: list[str] | None = None) -> int:
         args.json.write_text(
             json.dumps(
                 {"offline": [asdict(r) for r in offline], "live": [asdict(r) for r in live]},
-                indent=1, ensure_ascii=False,
+                indent=1,
+                ensure_ascii=False,
             )
         )
     live_fail = [lr for lr in live if not lr.passed and lr.condition != "crowd_babble_snr10"]

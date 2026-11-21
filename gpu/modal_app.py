@@ -16,18 +16,25 @@ image = (
     modal.Image.debian_slim(python_version="3.12")
     .apt_install("libgl1", "libglib2.0-0", "git")
     .uv_pip_install(
-        "fastapi>=0.115", "uvicorn[standard]>=0.32", "numpy>=2.0", "pillow>=11.0",
+        "fastapi>=0.115",
+        "uvicorn[standard]>=0.32",
+        "numpy>=2.0",
+        "pillow>=11.0",
         "ultralytics>=8.4,<9",
-        "clip @ git+https://github.com/ultralytics/CLIP.git", "ftfy>=6.3", "regex>=2024.0",
+        "clip @ git+https://github.com/ultralytics/CLIP.git",
+        "ftfy>=6.3",
+        "regex>=2024.0",
     )
-    .env({
-        "GPU_MODEL": "yolo",
-        "GPU_POSE_MODEL": "/models/yolo26s-pose.pt",
-        "GPU_OBJECT_MODEL": "/models/yoloe-26s-seg.pt",
-        "GPU_DEVICE": "0",
-        "GPU_TENSORRT": "0",
-        "YOLO_CONFIG_DIR": "/models/.ultralytics",
-    })
+    .env(
+        {
+            "GPU_MODEL": "yolo",
+            "GPU_POSE_MODEL": "/models/yolo26s-pose.pt",
+            "GPU_OBJECT_MODEL": "/models/yoloe-26s-seg.pt",
+            "GPU_DEVICE": "0",
+            "GPU_TENSORRT": "0",
+            "YOLO_CONFIG_DIR": "/models/.ultralytics",
+        }
+    )
     .add_local_python_source("service")
 )
 
