@@ -46,20 +46,24 @@ logger = logging.getLogger("agent.vision")
 class _TimedDetector:
     """Wraps a detector to collect inference times for the recording's meta file."""
 
-    def __init__(self, inner: CompositeDetector) -> None:
+    def __init__(self, inner: CompositeDetector, *, collect_samples: bool = False) -> None:
         self._inner = inner
         self.name = inner.name
+        self._collect_samples = collect_samples
         self.ms: list[float] = []
 
     def detect(self, frame: Frame, measured_at: datetime) -> FrameDetections:
         started = time.perf_counter()
         result = self._inner.detect(frame, measured_at)
-        self.ms.append((time.perf_counter() - started) * 1000)
+        if self._collect_samples:
+            self.ms.append((time.perf_counter() - started) * 1000)
         return result
 
 
 async def run(args: argparse.Namespace) -> int:
+    from agent.vision.association import ByteTrackAssociator
     from agent.vision.capture import ClipSource, LatestFrameCamera, VideoFileSource
+    from agent.vision.tracking import PersonTracker
 
     source: LatestFrameCamera | VideoFileSource | ClipSource
     if args.record:
@@ -104,7 +108,8 @@ async def run(args: argparse.Namespace) -> int:
             logger.warning("GPU warmup unavailable; local fallback is inference-warm")
         main_detector = FailoverDetector(remote, local, primary_ready=primary_ready)
     timing = _TimedDetector(
-        CompositeDetector(main_detector, ArucoMarkerDetector() if catalog else None)
+        CompositeDetector(main_detector, ArucoMarkerDetector() if catalog else None),
+        collect_samples=bool(args.record),
     )
     detector = timing
 
@@ -144,6 +149,7 @@ async def run(args: argparse.Namespace) -> int:
         source=source,
         detector=detector,
         link=link,
+        tracker=PersonTracker(associator=ByteTrackAssociator()),
         held=HeldProductTracker(catalog) if catalog else None,
         snapshots=SnapshotBuilder(
             args.screen, SnapshotConfig(debounce=timedelta(milliseconds=args.debounce_ms))

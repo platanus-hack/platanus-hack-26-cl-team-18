@@ -53,6 +53,7 @@ class VisionConfig:
 @dataclass(slots=True)
 class VisionStats:
     frames: int = 0
+    stale_frames: int = 0
     snapshots: int = 0
     keyframes: int = 0
     last_inference_ms: float = 0.0
@@ -95,6 +96,9 @@ class VisionPipeline:
 
     def process(self, frame: Frame, detections: FrameDetections) -> AudienceSnapshot | None:
         """Process a detected frame and publish timestamped aggregate facts."""
+        if self._latest_at is not None and detections.measured_at <= self._latest_at:
+            self.stats.stale_frames += 1
+            return None
         self._latest_at = detections.measured_at
         detected_at = datetime.now(UTC)
         tracks = self._tracker.update(detections)
