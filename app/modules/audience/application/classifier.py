@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from decimal import Decimal
 from enum import StrEnum
+from typing import Literal
 
 import anyio
 
@@ -26,6 +27,7 @@ from app.contract.messages import AudienceKeyframe, AudienceSnapshot
 from app.modules.audience.application.ports import (
     AudienceTagger,
     KeyframeTags,
+    TaggedProduct,
     TaggedSegment,
     WarmScheduler,
 )
@@ -58,6 +60,26 @@ class WarmSignalFailed(RuntimeError):
 
 type FindingsListener = Callable[[str], None]
 type DegradationListener = Callable[[str, DegradedSignal, bool], None]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class TagReport:
+    """One keyframe-tagging call as the `/dev` console shows it (no image, no person).
+
+    Each tagged item carries why the anti-corruption layer dropped it (None = kept).
+    """
+
+    wire_screen_id: str
+    submitted_at: datetime
+    outcome: Literal["ok", "failed", "stale"]
+    tags: KeyframeTags | None = None
+    segments: tuple[tuple[TaggedSegment, str | None], ...] = ()
+    products: tuple[tuple[TaggedProduct, str | None], ...] = ()
+    expires_at: datetime | None = None
+    error_type: str | None = None
+
+
+type TagsListener = Callable[[TagReport], None]
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -103,6 +125,7 @@ class AudienceClassifier:
         warm: WarmScheduler | None = None,
         on_findings: FindingsListener | None = None,
         on_degraded: DegradationListener | None = None,
+        on_tags: TagsListener | None = None,
     ) -> None:
         self.catalog = catalog
         self._settings = settings or ClassifierSettings()
@@ -112,6 +135,7 @@ class AudienceClassifier:
         self._warm = warm
         self._on_findings = on_findings
         self._on_degraded = on_degraded
+        self._on_tags = on_tags
         self._screens: dict[str, _Screen] = {}
         self._brand_categories = {
             product.brand_ref: product.category for product in catalog.products if product.brand_ref
@@ -186,6 +210,14 @@ class AudienceClassifier:
                 tags = await tagger.tag(jpeg=jpeg, looking=looking)
             except Exception as exc:
                 self._degraded(wire_id, True)
+                self._report(
+                    TagReport(
+                        wire_screen_id=wire_id,
+                        submitted_at=received_at,
+                        outcome="failed",
+                        error_type=type(exc).__name__,
+                    )
+                )
                 raise WarmSignalFailed(f"keyframe tagging failed: {type(exc).__name__}") from None
             self._degraded(wire_id, False)
             await anyio.to_thread.run_sync(self._apply_tags, wire_id, taken_at, tags)
@@ -216,9 +248,22 @@ class AudienceClassifier:
         screen = self._screen(wire_id)
         with screen.lock:
             current = screen.keyframe
-            if current is not None and findings.measured_at.value <= current.measured_at.value:
-                return  # a newer keyframe already landed
-            screen.keyframe = findings
+            stale = current is not None and findings.measured_at.value <= current.measured_at.value
+            if not stale:
+                screen.keyframe = findings
+        self._report(
+            TagReport(
+                wire_screen_id=wire_id,
+                submitted_at=taken_at.value,
+                outcome="stale" if stale else "ok",
+                tags=tags,
+                segments=tuple((item, self._segment_drop(item)) for item in tags.segments),
+                products=tuple((item, self._product_drop(item)) for item in tags.held_products),
+                expires_at=expires.value,
+            )
+        )
+        if stale:
+            return  # a newer keyframe already landed
         # Outside our lock: the caller re-decides, which calls classify() again.
         if self._on_findings is not None:
             self._on_findings(wire_id)
@@ -288,6 +333,30 @@ class AudienceClassifier:
             )
             if weight > 0
         )
+
+    def _segment_drop(self, item: TaggedSegment) -> str | None:
+        if item.segment_id not in self.catalog:
+            return "unknown_segment"
+        if item.viewer_count < 1:
+            return "no_viewers"
+        if _ratio(item.confidence) <= 0:
+            return "zero_confidence"
+        return None
+
+    def _product_drop(self, item: TaggedProduct) -> str | None:
+        if item.category not in self.catalog.categories:
+            return "unknown_category"
+        if item.brand_ref is not None and item.brand_ref not in self._brand_categories:
+            return "unknown_brand"
+        return None
+
+    def _report(self, report: TagReport) -> None:
+        if self._on_tags is None:
+            return
+        try:
+            self._on_tags(report)
+        except Exception:  # a debug listener never breaks tagging
+            logger.exception("tag listener failed")
 
     def _degraded(self, wire_id: str, active: bool) -> None:
         if self._on_degraded is not None:

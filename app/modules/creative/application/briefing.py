@@ -36,6 +36,9 @@ class MomentContext:
     held_brand_ids: frozenset[BrandId] = frozenset()
     queue_length: int = 0
     daypart: Daypart | None = None
+    # The group the offer addresses (creative.domain.party): steadier than this
+    # instant's looking count. None = the moment's own looking count.
+    party: int | None = None
 
 
 def build_brief(
@@ -89,6 +92,10 @@ def assemble_brief(
         (catalog.kits[b].name for b in sorted(context.held_brand_ids, key=str) if b in basket_ids),
         None,
     )
+    # The steadied group (context.party) when given, never more than are present, and
+    # someone looking is always at least a party of one.
+    party = looking if context.party is None else context.party
+    party = max(min(party, max(people, looking)), 1 if looking else 0)
     angle = choose_angle(
         segments=segments,
         segment_angles=catalog.segment_angles,
@@ -100,10 +107,10 @@ def assemble_brief(
     return CreativeBrief(
         brands=brands,
         layout=layout,
-        party=looking,
+        party=party,
         people=people,
         angle=angle,
-        offer=catalog.offers.for_party(basket_ids, looking),
+        offer=catalog.offers.for_party(basket_ids, party),
         avoid_names=frozenset(
             kit.name for brand_id, kit in catalog.kits.items() if brand_id not in basket_ids
         ),

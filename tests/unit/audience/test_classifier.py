@@ -187,3 +187,54 @@ def test_without_a_tagger_keyframes_flag_the_vlm_as_degraded() -> None:
     c, _, degraded = classifier()
     c.observe_keyframe(keyframe(), jpeg=b"x", received_at=T0)
     assert degraded == [(DegradedSignal.VLM, True)]
+
+
+def test_each_tagging_call_is_reported_with_why_items_were_dropped() -> None:
+    from app.modules.audience.application.classifier import TagReport
+
+    reports: list[TagReport] = []
+    warm = CollectingWarm()
+    tagger = FakeTagger(
+        KeyframeTags(
+            segments=(
+                TaggedSegment(segment_id=DOGS, viewer_count=1, confidence=0.8),
+                TaggedSegment(segment_id=SegmentId.create("999999"), viewer_count=1, confidence=1),
+                TaggedSegment(segment_id=DOGS, viewer_count=0, confidence=0.5),
+            ),
+            held_products=(
+                TaggedProduct(category="coffee", brand_ref="cafe-patio", confidence=0.9),
+                TaggedProduct(category="vodka", brand_ref=None, confidence=0.9),
+                TaggedProduct(category="coffee", brand_ref="no-such-brand", confidence=0.9),
+            ),
+            minor_likely=False,
+            minor_likely_confidence=0.1,
+            reasoning="a branded coffee cup",
+            model_version="claude-haiku-5-5@low",
+        )
+    )
+    c, _, _ = classifier(tagger=tagger, warm=warm, on_tags=reports.append)
+    c.observe_keyframe(keyframe(), jpeg=b"\xff\xd8..", received_at=T0)
+    warm.run()
+
+    (report,) = reports
+    assert report.outcome == "ok" and report.submitted_at == T0
+    assert [reason for _, reason in report.segments] == [None, "unknown_segment", "no_viewers"]
+    assert [reason for _, reason in report.products] == [
+        None,
+        "unknown_category",
+        "unknown_brand",
+    ]
+
+
+def test_a_failed_tagging_call_is_reported_by_error_type_only() -> None:
+    from app.modules.audience.application.classifier import TagReport
+
+    reports: list[TagReport] = []
+    warm = CollectingWarm()
+    c, _, _ = classifier(
+        tagger=FakeTagger(RuntimeError("leaked model text")), warm=warm, on_tags=reports.append
+    )
+    c.observe_keyframe(keyframe(), jpeg=b"\xff\xd8..", received_at=T0)
+    warm.run()
+    (report,) = reports
+    assert (report.outcome, report.error_type, report.tags) == ("failed", "RuntimeError", None)
