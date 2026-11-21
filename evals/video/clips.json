@@ -1,5 +1,5 @@
 {
-  "_comment": "Freely licensed stock clips (Wikimedia Commons) used as real-video eval input. Videos are downloaded by evals/video/fetch.py into the gitignored evals/perception/videos/ and never committed. `expect` is a human judgement of which demo brands would make sense on a screen facing this scene.",
+  "_comment": "Freely licensed stock clips (Wikimedia Commons and Pexels) used as real-video eval input. Videos are downloaded by evals/video/fetch.py into the gitignored evals/perception/videos/ and never committed. `expect` is a human judgement of which demo brands would make sense on a screen facing this scene.",
   "clips": [
     {
       "id": "coffee-counter",
@@ -170,6 +170,197 @@
           "Malta Sur"
         ],
         "note": "Mid-workout: energy drink is the clear fit."
+      }
+    },
+    {
+      "id": "cafe-group-meeting",
+      "title": "A Group Of People Meeting In A Coffee Shop",
+      "page": "https://www.pexels.com/video/a-group-of-people-meeting-in-a-coffee-shop-5529078/",
+      "license": "Pexels License",
+      "license_url": "https://www.pexels.com/license/",
+      "artist": "RDNE Stock project",
+      "url": "https://videos.pexels.com/video-files/5529078/5529078-hd_1920_1080_30fps.mp4",
+      "start_s": 0,
+      "duration_s": 12,
+      "scene": "Group of adult friends meeting over coffee indoors.",
+      "expect": {
+        "sensible_brands": [
+          "Café Patio",
+          "Voltio"
+        ],
+        "never_brands": [],
+        "note": "Several people with cups: coffee, or the Voltio + Café Patio basket."
+      }
+    },
+    {
+      "id": "cafe-friends-sunny",
+      "title": "Friends Meeting at a Coffee Shop",
+      "page": "https://www.pexels.com/video/friends-meeting-at-a-coffee-shop-5529206/",
+      "license": "Pexels License",
+      "license_url": "https://www.pexels.com/license/",
+      "artist": "RDNE Stock project",
+      "url": "https://videos.pexels.com/video-files/5529206/5529206-hd_1920_1080_30fps.mp4",
+      "start_s": 0,
+      "duration_s": 12,
+      "scene": "Friends laughing over coffee in a sunny café.",
+      "expect": {
+        "sensible_brands": [
+          "Café Patio",
+          "Voltio"
+        ],
+        "never_brands": [],
+        "note": "Coffee group: Café Patio (alone or in the basket)."
+      }
+    },
+    {
+      "id": "friends-outdoors-coffee",
+      "title": "Friends Hanging Out",
+      "page": "https://www.pexels.com/video/friends-hanging-out-6137850/",
+      "license": "Pexels License",
+      "license_url": "https://www.pexels.com/license/",
+      "artist": "William Fortunato",
+      "url": "https://videos.pexels.com/video-files/6137850/6137850-uhd_3840_2160_30fps.mp4",
+      "start_s": 0,
+      "duration_s": 9,
+      "scene": "A group of friends chatting outdoors holding coffee.",
+      "expect": {
+        "sensible_brands": [
+          "Café Patio",
+          "Voltio"
+        ],
+        "never_brands": [],
+        "note": "Group with coffee outdoors."
+      }
+    },
+    {
+      "id": "bar-friends",
+      "title": "A Group of Friends at a Bar",
+      "page": "https://www.pexels.com/video/a-group-of-friends-at-a-bar-6174260/",
+      "license": "Pexels License",
+      "license_url": "https://www.pexels.com/license/",
+      "artist": "RDNE Stock project",
+      "url": "https://videos.pexels.com/video-files/6174260/6174260-hd_1920_1080_30fps.mp4",
+      "start_s": 0,
+      "duration_s": 9,
+      "scene": "Adult friends having drinks at a bar.",
+      "expect": {
+        "sensible_brands": [
+          "Malta Sur",
+          "Café Patio",
+          "Voltio"
+        ],
+        "never_brands": [],
+        "note": "Adults at a bar: beer fits; a house ad is acceptable."
+      }
+    },
+    {
+      "id": "house-party-beer",
+      "title": "Men Drinking Beer",
+      "page": "https://www.pexels.com/video/men-drinking-beer-9003042/",
+      "license": "Pexels License",
+      "license_url": "https://www.pexels.com/license/",
+      "artist": "Yan Krukau",
+      "url": "https://videos.pexels.com/video-files/9003042/9003042-hd_1920_1080_25fps.mp4",
+      "start_s": 0,
+      "duration_s": 12,
+      "scene": "Five adult friends toasting with beer bottles indoors.",
+      "expect": {
+        "sensible_brands": [
+          "Malta Sur"
+        ],
+        "never_brands": [],
+        "note": "Five adults with bottles: beer is the fit; no minors."
+      }
+    },
+    {
+      "id": "energy-drink-solo",
+      "title": "Video Of Man Drinking Energy Drink",
+      "page": "https://www.pexels.com/video/video-of-man-drinking-energy-drink-4804774/",
+      "license": "Pexels License",
+      "license_url": "https://www.pexels.com/license/",
+      "artist": "Ketut Subiyanto",
+      "url": "https://videos.pexels.com/video-files/4804774/4804774-uhd_3840_2160_25fps.mp4",
+      "start_s": 0,
+      "duration_s": 12,
+      "scene": "A sweaty adult drinking an energy drink outdoors.",
+      "expect": {
+        "sensible_brands": [
+          "Voltio",
+          "Rayo"
+        ],
+        "never_brands": [
+          "Malta Sur"
+        ],
+        "note": "Energy drink in hand: Voltio or Rayo (or their basket)."
+      }
+    },
+    {
+      "id": "cashier-counter",
+      "title": "People at the Cashier Counter",
+      "page": "https://www.pexels.com/video/people-at-the-cashier-counter-8421356/",
+      "license": "Pexels License",
+      "license_url": "https://www.pexels.com/license/",
+      "artist": "Kampus Production",
+      "url": "https://videos.pexels.com/video-files/8421356/8421356-uhd_3840_2160_25fps.mp4",
+      "start_s": 0,
+      "duration_s": 8,
+      "scene": "A customer at a grocery checkout counter with a cashier.",
+      "expect": {
+        "sensible_brands": [
+          "Café Patio",
+          "Voltio",
+          "Rayo"
+        ],
+        "never_brands": [
+          "Malta Sur"
+        ],
+        "note": "Counter moment: any convenience product; staff present, not a beer pitch."
+      }
+    },
+    {
+      "id": "queue-outdoors",
+      "title": "People Waiting in Line",
+      "page": "https://www.pexels.com/video/people-waiting-in-line-6229548/",
+      "license": "Pexels License",
+      "license_url": "https://www.pexels.com/license/",
+      "artist": "Bonus Studio",
+      "url": "https://videos.pexels.com/video-files/6229548/6229548-uhd_3840_2160_25fps.mp4",
+      "start_s": 0,
+      "duration_s": 12,
+      "scene": "A line of people waiting outdoors.",
+      "expect": {
+        "sensible_brands": [
+          "Café Patio",
+          "Voltio",
+          "Rayo"
+        ],
+        "never_brands": [
+          "Malta Sur"
+        ],
+        "note": "Queue: a coffee or energy pitch fits, beer does not in public queues."
+      }
+    },
+    {
+      "id": "family-kids-supermarket",
+      "title": "A Family Shopping in the Supermarket",
+      "page": "https://www.pexels.com/video/a-family-shopping-in-the-supermarket-9640201/",
+      "license": "Pexels License",
+      "license_url": "https://www.pexels.com/license/",
+      "artist": "Greta Hoffman",
+      "url": "https://videos.pexels.com/video-files/9640201/9640201-uhd_2160_3840_30fps.mp4",
+      "start_s": 0,
+      "duration_s": 12,
+      "scene": "Parents with a child shopping in a supermarket.",
+      "expect": {
+        "sensible_brands": [
+          "Café Patio",
+          "Voltio",
+          "Rayo"
+        ],
+        "never_brands": [
+          "Malta Sur"
+        ],
+        "note": "A child present: beer must never show (invariant 2)."
       }
     }
   ]

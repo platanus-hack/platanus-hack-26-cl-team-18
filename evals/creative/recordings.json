@@ -160,22 +160,18 @@
       "latency_ms": 870
     },
     "crowd-of-15": {
-      "teaser": "¿Post-entreno? Recarguen todos al tiro",
-      "offer": "Para todo el grupo · Pack x4 post-entreno: Voltio + Café Patio x4 por $10.990",
-      "close": "Escanea el QR · válido 10 min",
-      "voice_line": "Para todo el grupo, el pack de Voltio y Café Patio",
-      "latency_ms": 780,
-      "input_tokens": 1190,
-      "output_tokens": 140
+      "teaser": "Entrenaron. Ahora recarguen.",
+      "offer": "Voltio + Café Patio x4 para compartir por $10.990.",
+      "close": "Escanea el QR y canjea en caja.",
+      "voice_line": "Voltio y Café Patio para compartir después de entrenar, por $10.990.",
+      "latency_ms": 780
     },
     "five-at-a-4-pack": {
-      "teaser": "¿Post-entreno los 5? Voltio + Café Patio",
-      "offer": "Para los 5 · Pack x4 post-entreno: Voltio + Café Patio x4 por $10.990",
-      "close": "Escanea el QR · válido 10 min",
-      "voice_line": "Para los cinco, Voltio y Café Patio",
-      "latency_ms": 690,
-      "input_tokens": 1185,
-      "output_tokens": 132
+      "teaser": "Entrenaron. Recarguen: Voltio y Café Patio.",
+      "offer": "Voltio + Café Patio x4 para compartir por $10.990.",
+      "close": "Escanea el QR. Canjea Voltio y Café Patio en caja.",
+      "voice_line": "Voltio y Café Patio para compartir por $10.990, escanea el QR y canjea en caja.",
+      "latency_ms": 690
     }
   }
 }

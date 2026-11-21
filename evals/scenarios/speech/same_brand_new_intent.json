@@ -2,7 +2,7 @@
   "name": "speech-refreshes-copy",
   "beat": "A new spoken need changes the copy even when the winning brand stays",
   "steps": [
-    {"scene": "coffee", "expect": {"brands": ["Café Patio"], "copy_contains": "Pausa corta"}},
+    {"scene": "coffee", "expect": {"brands": ["Café Patio"], "copy_contains": "café"}},
     {"scene": "coffee", "speech": ["hambre"], "expect": {"brands": ["Café Patio"], "copy_contains": "hambre"}},
     {"scene": "coffee", "expect": {"no_change": true}},
     {"scene": "empty", "expect": {"brands": []}}

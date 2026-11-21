@@ -16,7 +16,8 @@ USER_AGENT = "team18-evals/0.1 (hackathon test fixtures; https://github.com/)"
 
 
 def clip_path(clip: dict) -> Path:
-    suffix = ".webm" if clip["url"].endswith(".webm") else ".mov"
+    url = clip["url"]
+    suffix = ".webm" if url.endswith(".webm") else ".mp4" if url.endswith(".mp4") else ".mov"
     return VIDEOS / f"{clip['id']}{suffix}"
 
 

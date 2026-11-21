@@ -39,7 +39,7 @@ from app.modules.creative.application.briefing import (
     MomentContext,
     assemble_brief,
 )
-from app.modules.creative.application.ports.copywriter import CopyWriter
+from app.modules.creative.application.ports.copywriter import CopyWriter, WrittenCopy
 from app.modules.creative.application.rendering import render_spec
 from app.modules.creative.application.studio import CreativeStudio, Outcome, StudioConfig
 from app.modules.creative.domain.angle import Angle
@@ -58,6 +58,31 @@ CASES_FILE = HERE / "cases.json"
 RECORDINGS_FILE = HERE / "recordings.json"
 ADVERSARIAL_FILE = HERE / "adversarial.json"
 BASELINE_FILE = HERE / "baseline.json"
+HARVEST_FILE = HERE / "harvested.json"
+
+
+class HarvestingWriter:
+    """Feedback loop: remembers every draft a writer returns, keyed by brief signature.
+
+    The studio keeps only the violation kinds of a rejected draft; this keeps its
+    text, so a live run's rejected or demoted outputs can become eval cases
+    (`--harvest` → harvested.json → promote to adversarial.json with an `expect`).
+    """
+
+    def __init__(self, inner: CopyWriter) -> None:
+        self._inner = inner
+        self.drafts: dict[str, CopyDraft] = {}
+
+    @property
+    def name(self) -> str:
+        return self._inner.name
+
+    async def write(self, brief: CreativeBrief) -> WrittenCopy:
+        written = await self._inner.write(brief)
+        self.drafts[brief.signature()] = written.draft
+        return written
+
+
 RESULTS_DIR = HERE.parent / "results"
 
 WriterKind = Literal["stock", "recorded", "claude"]
@@ -299,11 +324,17 @@ def check_case(case: Case, brief: CreativeBrief, draft: CopyDraft) -> dict[str, 
     headline = f"{draft.teaser} {draft.offer}"
     named = None
     if brief.is_group:
-        named = (
-            has_text(headline, f"los {brief.addressed_party}|{brief.addressed_party} personas")
-            if brief.addressed_party
-            else has_text(headline, "grupo|todos")
-        )
+        if brief.offer_undersized:
+            # A 4-pack for 12 is addressed honestly: offered to share, never "para todo el grupo".
+            named = has_text(headline, "compartir") and not has_text(
+                headline, "todo el grupo|para todos|cada uno"
+            )
+        elif brief.addressed_party:
+            named = has_text(
+                headline, f"los {brief.addressed_party}|{brief.addressed_party} personas"
+            )
+        else:
+            named = has_text(headline, "grupo|todos")
     return {
         "angle_ok": angle_ok,
         "offer_ok": offer_ok,
@@ -348,6 +379,7 @@ class Report:
     adversarial: list[dict[str, Any]]
     outcomes: dict[str, int]
     recorded: dict[str, dict[str, Any]] = field(default_factory=dict)
+    harvested: list[dict[str, Any]] = field(default_factory=list)
 
 
 async def run(
@@ -356,10 +388,15 @@ async def run(
     suite: Suite | None = None,
     recordings: Mapping[str, Recording] | None = None,
     writer: CopyWriter | None = None,
+    harvest: bool = False,
 ) -> Report:
     suite = suite or load_suite()
     if writer is None:
         writer = build_writer(kind)
+    harvester = HarvestingWriter(writer) if harvest and writer is not None else None
+    if harvester is not None:
+        writer = harvester
+    harvested: list[dict[str, Any]] = []
     if kind == "recorded" and recordings is None:
         recordings = load_recordings()
     studio = CreativeStudio(
@@ -393,6 +430,21 @@ async def run(
             if len(studio.stats.records) > before:
                 record = studio.stats.records[-1]
                 outcome = record.outcome.value
+                draft = harvester.drafts.get(brief.signature()) if harvester else None
+                if draft is not None and record.outcome in (Outcome.REJECTED, Outcome.LOWER_SCORE):
+                    harvested.append(
+                        {
+                            "case": case.id,
+                            "outcome": record.outcome.value,
+                            "violations": sorted(v.value for v in record.violations),
+                            "teaser": draft.teaser,
+                            "offer": draft.offer,
+                            "close": draft.close,
+                            "voice_line": draft.voice_line,
+                            "model_version": record.model_version,
+                            "writer": record.writer,
+                        }
+                    )
                 warm_ms = (
                     recording.latency_ms
                     if isinstance(writer, RecordedCopywriter) and recording is not None
@@ -502,7 +554,37 @@ async def run(
         adversarial=adversarial,
         outcomes=outcomes,
         recorded=captured,
+        harvested=harvested,
     )
+
+
+def save_harvest(report: Report, path: Path = HARVEST_FILE) -> int:
+    """Append new rejected/demoted drafts (deduplicated by text); returns how many were new."""
+    data: dict[str, Any] = (
+        json.loads(path.read_text(encoding="utf-8"))
+        if path.exists()
+        else {
+            "_comment": (
+                "Live outputs the studio rejected or demoted (`python -m evals creative "
+                "--writer claude --harvest`). Review each one: a real violation becomes an "
+                "adversarial.json entry with its `expect` kind; a false rejection becomes a "
+                "guard fix plus a benign test. Never edit by hand except to mark `reviewed`."
+            ),
+            "entries": [],
+        }
+    )
+    seen = {(e["case"], e["teaser"], e["offer"], e["close"]) for e in data["entries"]}
+    stamp = datetime.now(UTC).isoformat(timespec="seconds")
+    new = 0
+    for entry in report.harvested:
+        key = (entry["case"], entry["teaser"], entry["offer"], entry["close"])
+        if key in seen:
+            continue
+        seen.add(key)
+        data["entries"].append({**entry, "harvested_at": stamp, "reviewed": False})
+        new += 1
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return new
 
 
 def run_adversarial(suite: Suite, path: Path = ADVERSARIAL_FILE) -> list[dict[str, Any]]:

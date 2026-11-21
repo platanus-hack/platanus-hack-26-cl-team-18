@@ -1,0 +1,14 @@
+{
+  "name": "group-shrinks",
+  "beat": "The offer follows the group down as people leave, then the screen frees itself",
+  "description": "Three viewers see the trio price; when one walks away the basket re-prices for two, a lone viewer loses the group offer, and nobody looking costs nothing.",
+  "steps": [
+    {"scene": {"people": 3, "objects": [{"label": "bottle", "score": 1}, {"label": "cup", "score": 0.65}, {"label": "cup", "score": 0.65}]},
+     "expect": {"brands": ["Voltio", "Café Patio"], "copy_contains": "$8.490"}},
+    {"scene": {"people": 2, "objects": [{"label": "bottle", "score": 1}, {"label": "cup", "score": 0.65}, {"label": "cup", "score": 0.65}]},
+     "expect": {"brands": ["Voltio", "Café Patio"], "copy_contains": "$5.990"}, "note": "one viewer walked away"},
+    {"scene": {"people": 2, "looking": 0, "objects": [{"label": "bottle", "score": 1}, {"label": "cup", "score": 0.65}]},
+     "expect": {"brands": []}, "note": "still there, nobody looking: house ad, charged $0"},
+    {"scene": "empty", "expect": {"brands": []}}
+  ]
+}

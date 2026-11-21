@@ -52,7 +52,14 @@ class Expect:
     layout: str | None = None
     excluded: dict[str, str] = field(default_factory=dict)  # brand -> reason
     min_coverage: float | None = None
+    max_coverage: float | None = None
     copy_contains: str | None = None
+    # Segment affinity (auction affinity.py): brand -> match specs its bid line must
+    # contain, each "kind" or "kind:Bid segment label>Moment segment label".
+    matches: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    no_bid: frozenset[str] = frozenset()  # brands that must not bid on this moment
+    # brand -> the most its winning slot may clear per attention-second.
+    max_price_per_as: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -63,6 +70,9 @@ class Step:
     note: str = ""
     # Event-only step against the latest camera scene. Canonical topics, never transcripts.
     speech: tuple[str, ...] | None = None
+    speech_text: str = ""  # synthetic fixture only; never collected from live speech
+    # A clerk action instead of a perception reading: brand name -> in stock.
+    stock: dict[str, bool] | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -95,7 +105,7 @@ def load_scenarios(
 def parse_scenario(raw: dict[str, Any], scenes: dict[str, Scene]) -> Scenario:
     steps: list[Step] = []
     for index, body in enumerate(raw["steps"]):
-        scene_ref = body["scene"]
+        scene_ref = body.get("scene", "empty")
         if isinstance(scene_ref, str):
             if scene_ref not in scenes:
                 raise ValueError(f"{raw['name']} step {index}: unknown scene {scene_ref!r}")
@@ -108,6 +118,8 @@ def parse_scenario(raw: dict[str, Any], scenes: dict[str, Scene]) -> Scenario:
             measured_offset=timedelta(seconds=float(body.get("measured_offset_s", 0))),
             note=body.get("note", ""),
             speech=tuple(body["speech"]) if "speech" in body else None,
+            speech_text=body.get("speech_text", ""),
+            stock={str(k): bool(v) for k, v in body["stock"].items()} if "stock" in body else None,
         )
         steps.append(step)
         # `hold: n` repeats the scene n times and expects the screen to stay put:
@@ -145,7 +157,11 @@ def _expect(body: dict[str, Any]) -> Expect:
         "layout",
         "excluded",
         "min_coverage",
+        "max_coverage",
         "copy_contains",
+        "matches",
+        "no_bid",
+        "max_price_per_as",
     }
     if unknown:
         raise ValueError(f"unknown expectation keys: {sorted(unknown)}")
@@ -155,5 +171,9 @@ def _expect(body: dict[str, Any]) -> Expect:
         layout=body.get("layout"),
         excluded=dict(body.get("excluded", {})),
         min_coverage=body.get("min_coverage"),
+        max_coverage=body.get("max_coverage"),
         copy_contains=body.get("copy_contains"),
+        matches={str(brand): tuple(specs) for brand, specs in body.get("matches", {}).items()},
+        no_bid=frozenset(body.get("no_bid", ())),
+        max_price_per_as={str(k): str(v) for k, v in body.get("max_price_per_as", {}).items()},
     )

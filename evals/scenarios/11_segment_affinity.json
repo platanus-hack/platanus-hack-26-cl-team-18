@@ -1,0 +1,124 @@
+{
+  "name": "segment-affinity",
+  "beat": "Targeting: a bid reaches related segments at a discount, never overcharged",
+  "description": "Café Patio bids on Coffee and Fast Food only. A donut tags Pastry/Doughnuts, which the catalog pairs with Coffee (0.4): Patio bids at 2 CLP/AS, which can't clear the reserve on its own, so the house ad plays and nobody pays. Add a cup and the exact Coffee viewer wins it, with the donut eater counted as a partial reach. A soda next to a sandwich reaches Fast Food the same way. Alcohol never widens its reach, and a bicycle (nobody bids on the sports family) stays a house ad.",
+  "steps": [
+    {
+      "scene": "empty",
+      "expect": {
+        "brands": []
+      }
+    },
+    {
+      "scene": {
+        "people": 2,
+        "looking": 2,
+        "objects": {
+          "donut": 0.95
+        }
+      },
+      "note": "related only: a weak, cheap match that can't buy the screen alone",
+      "expect": {
+        "brands": [],
+        "matches": {
+          "Café Patio": ["related:Coffee>Pastry/Doughnuts"]
+        },
+        "excluded": {
+          "Café Patio": "below_reserve"
+        },
+        "no_bid": ["Voltio", "Rayo", "Malta Sur"]
+      }
+    },
+    {
+      "scene": {
+        "people": 2,
+        "looking": 2,
+        "objects": {
+          "donut": 0.95,
+          "cup": 0.9
+        }
+      },
+      "note": "exact + related on one bid: each segment counted once, at its own weight",
+      "expect": {
+        "brands": ["Café Patio"],
+        "matches": {
+          "Café Patio": ["exact:Coffee>Coffee", "related:Coffee>Pastry/Doughnuts"]
+        },
+        "max_price_per_as": {
+          "Café Patio": "5"
+        },
+        "min_coverage": 0.5,
+        "max_coverage": 1.0
+      }
+    },
+    {
+      "scene": {
+        "people": 2,
+        "looking": 2,
+        "objects": {
+          "soda can": 0.9,
+          "sandwich": 0.9
+        }
+      },
+      "note": "a soft drink reaches the Fast Food bid through the curated combo pair",
+      "expect": {
+        "brands": ["Café Patio"],
+        "matches": {
+          "Café Patio": ["exact:Fast Food>Fast Food", "related:Fast Food>Carbonated Soft Drinks"]
+        },
+        "max_price_per_as": {
+          "Café Patio": "5"
+        }
+      }
+    },
+    {
+      "scene": {
+        "people": 1,
+        "looking": 1,
+        "objects": {
+          "beer bottle": 0.6,
+          "soda can": 0.9
+        }
+      },
+      "note": "alcohol reaches its own segment only; the oracle fails any widened match",
+      "expect": {
+        "brands": ["Malta Sur"],
+        "matches": {
+          "Malta Sur": ["exact:Alcoholic Beverages>Alcoholic Beverages"]
+        }
+      }
+    },
+    {
+      "scene": {
+        "people": 2,
+        "looking": 2,
+        "objects": {
+          "bicycle": 0.9
+        }
+      },
+      "note": "a segment no campaign reaches, exactly or by affinity: house ad, nobody bids",
+      "expect": {
+        "brands": [],
+        "no_bid": ["Voltio", "Rayo", "Café Patio", "Malta Sur"]
+      }
+    },
+    {
+      "scene": {
+        "people": 2,
+        "looking": 2,
+        "objects": {
+          "donut": 0.95,
+          "cup": 0.9
+        },
+        "minor": true
+      },
+      "note": "minor_likely blocks only restricted categories; the coffee basket still plays",
+      "expect": {
+        "brands": ["Café Patio"],
+        "matches": {
+          "Café Patio": ["related:Coffee>Pastry/Doughnuts"]
+        }
+      }
+    }
+  ]
+}

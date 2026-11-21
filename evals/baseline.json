@@ -1,12 +1,13 @@
 {
-  "git_sha": "b414080",
+  "git_sha": "8d0026d",
   "metrics": {
-    "basket_rate": 0.6,
-    "basket_revenue_lift": 0.05290770901194354,
-    "basket_value_lift": 0.09505649717514125,
-    "fill_rate": 0.6521739130434783,
-    "mean_coverage": 0.9777777777777777,
+    "basket_rate": 0.6363636363636364,
+    "basket_revenue_lift": 0.054349745474515765,
+    "basket_value_lift": 0.11702586206896551,
+    "fill_rate": 0.6470588235294118,
+    "mean_coverage": 0.9621212121212122,
     "scenario_pass_rate": 1.0
   },
-  "updated_at": "2026-11-21T16:02:07+00:00"
+  "updated_at": "2026-11-21T18:44:23+00:00",
+  "note": "Re-based for scenario 10_open_vocab_props (YOLOE-26 store labels): mean_coverage 0.958 -> 0.962; basket_rate 0.650 -> 0.636 and fill_rate 0.667 -> 0.647 because its beer step is solo by design and its stroller step is a deliberate safety no-fill. The old scenarios alone score as before."
 }

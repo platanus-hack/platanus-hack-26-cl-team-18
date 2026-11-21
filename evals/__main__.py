@@ -65,6 +65,10 @@ def main(argv: list[str] | None = None) -> int:
 
     rehearsal = sub.add_parser("rehearsal", help="score a recorded rehearsal")
     rehearsal.add_argument("recording", type=Path)
+    beats_cmd = sub.add_parser(
+        "beats", help="did each demo-video beat land, in order? (a recording)"
+    )
+    beats_cmd.add_argument("recording", type=Path)
 
     creative = sub.add_parser(
         "creative", help="creative generation eval (docs/creative-generation.md)"
@@ -72,8 +76,12 @@ def main(argv: list[str] | None = None) -> int:
     creative.add_argument("--writer", choices=["stock", "recorded", "claude"], default="recorded")
     creative.add_argument("--record", action="store_true", help="live: overwrite recordings.json")
     creative.add_argument("--update-baseline", dest="creative_baseline", action="store_true")
+    creative.add_argument(
+        "--harvest", action="store_true", help="append rejected/demoted drafts to harvested.json"
+    )
     sub.add_parser("campaigns", help="campaign catalog, media, safety, quality and latency")
     sub.add_parser("speech", help="speech event → auction → player regression suite")
+    sub.add_parser("demo-video", help="docs/demo.md §3 five beats end to end, complete ads")
 
     pipeline = sub.add_parser(
         "pipeline", help="end-to-end ad pipeline journeys: stage waterfall + bottleneck"
@@ -102,9 +110,32 @@ def main(argv: list[str] | None = None) -> int:
         from evals.campaigns import main as campaign_eval
 
         return campaign_eval(args.out)
+    if command == "beats":
+        from evals import beats as bt
+
+        results = bt.score(bt.load(args.recording))
+        print(bt.render(args.recording, results))
+        return 0 if all(r.hit for r in results) else 1
+    if command == "demo-video":
+        from evals import beats as bt
+        from evals.demo_video import render, run_demo_video
+
+        run = run_demo_video()
+        recording = sc.RESULTS_DIR / "demo-video.jsonl"
+        recording.write_text("\n".join(run.recording) + "\n", encoding="utf-8")
+        # The beat scorer for real webcam takes must agree with the scripted run.
+        beat_results = bt.score(bt.load(recording))
+        markdown = render(run) + "\n" + bt.render(recording, beat_results)
+        if not getattr(args, "no_save", False):
+            out = sc.RESULTS_DIR / "demo-video-latest.md"
+            out.write_text(markdown, encoding="utf-8")
+        print(markdown)
+        return 0 if run.passed and all(b.hit for b in beat_results) else 1
     if command == "speech":
         from evals.speech import run_speech_scenarios
+        from evals.speech_understanding import run_semantic_cases
 
+        semantic = run_semantic_cases()
         runs = run_speech_scenarios()
         decisions = [d for run in runs for d in run.decisions]
         checks = [c for run in runs for c in run.checks]
@@ -112,6 +143,7 @@ def main(argv: list[str] | None = None) -> int:
         failures = [
             f"{c.source} step {c.step}: {c.name}: {c.detail}" for c in checks if not c.passed
         ]
+        failures += [f"semantic replay: {case['id']}" for case in semantic if not case["passed"]]
         args.update_baseline = False
         return _finish(
             args,
@@ -124,6 +156,10 @@ def main(argv: list[str] | None = None) -> int:
             [_section(run, "Speech → player") for run in runs],
             violations,
             failures,
+            extra_markdown="\n## Synthetic semantic-response replay\n\n"
+            + "Application behavior only; this does not measure live LLM accuracy.\n\n"
+            + "\n".join(f"- {'PASS' if c['passed'] else 'FAIL'}: `{c['id']}`" for c in semantic)
+            + "\n",
         )
     if command == "suite":
         return _run_suite(args)
@@ -369,13 +405,16 @@ def _run_creative(args: argparse.Namespace) -> int:
 
     from evals.creative import runner
 
-    report = anyio.run(lambda: runner.run(args.writer))
+    report = anyio.run(lambda: runner.run(args.writer, harvest=args.harvest))
     rows = runner.judge(report.metrics, runner.load_baseline(report.writer), writer=report.writer)
     latest = runner.write_results(report, runner.render(report, rows), args.out)
     print(latest.read_text(encoding="utf-8"))
     if args.record and report.writer == "claude":
         runner.save_recordings(report)
         print(f"recorded {len(report.recorded)} responses to {runner.RECORDINGS_FILE}")
+    if args.harvest:
+        new = runner.save_harvest(report)
+        print(f"harvested {new} new drafts to {runner.HARVEST_FILE} (review before promoting)")
     bad = runner.failed(rows)
     if args.creative_baseline:
         if any(r["status"] == "FAIL" for r in rows):

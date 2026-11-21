@@ -8,5 +8,8 @@
   "coffee": {"people": 1, "looking": 1, "sound": {"coffee service fixture": 1.0}},
   "adult": {"people": 1, "looking": 1, "objects": {"tap handle fixture": 1.0}},
   "minor-safe": {"people": 1, "looking": 1, "objects": {"tap handle fixture": 1.0}, "minor": true},
-  "low-confidence": {"people": 1, "looking": 1, "objects": {"sports ball": 0.05}}
+  "low-confidence": {"people": 1, "looking": 1, "objects": {"sports ball": 0.05}},
+  "store-props": {"people": 2, "looking": 2, "objects": {"energy drink can": 0.58, "cup": 0.62}},
+  "beer-held": {"people": 1, "looking": 1, "objects": {"beer bottle": 0.6}},
+  "beer-held-stroller": {"people": 1, "looking": 1, "objects": {"beer bottle": 0.6, "stroller": 0.6}, "minor": true}
 }

@@ -1,0 +1,44 @@
+{
+  "name": "open-vocab-props",
+  "beat": "3. Complete the basket (no marker) + safety backup",
+  "description": "YOLOE-26 labels at held-prop scores (a close cup scores ~0.9, a far one ~0.35): an energy-drink can and a coffee cup in hand win the Voltio + Café Patio basket without any ArUco marker; a held beer bottle wins Malta Sur until a stroller (the agent's child-prop vote) blocks it.",
+  "steps": [
+    {
+      "scene": "empty",
+      "expect": {
+        "brands": []
+      }
+    },
+    {
+      "scene": "store-props",
+      "hold": 2,
+      "expect": {
+        "brands": [
+          "Voltio",
+          "Café Patio"
+        ],
+        "layout": "duo",
+        "excluded": {
+          "Rayo": "competitor"
+        }
+      }
+    },
+    {
+      "scene": "beer-held",
+      "expect": {
+        "brands": [
+          "Malta Sur"
+        ]
+      }
+    },
+    {
+      "scene": "beer-held-stroller",
+      "expect": {
+        "brands": [],
+        "excluded": {
+          "Malta Sur": "safety"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "speech-beer-safety",
+  "beat": "Beer changes the ad only when eligible; minor safety always wins",
+  "steps": [
+    {"scene": {"people": 1, "objects": {"cup": 1}, "minor": true}, "expect": {"brands": ["Café Patio"]}},
+    {"scene": {"people": 1, "objects": {"cup": 1}, "minor": true}, "speech": ["café"], "expect": {"brands": ["Café Patio"]}},
+    {"scene": {"people": 1, "objects": {"cup": 1}, "minor": true}, "speech": ["cerveza"], "expect": {"brands": ["Café Patio"], "excluded": {"Malta Sur": "safety"}}},
+    {"scene": {"people": 1, "objects": {"cup": 1}}, "expect": {"brands": ["Malta Sur"]}},
+    {"scene": {"people": 1, "objects": {"cup": 1}, "minor": true}, "expect": {"brands": ["Café Patio"], "excluded": {"Malta Sur": "safety"}}}
+  ]
+}

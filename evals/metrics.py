@@ -137,6 +137,10 @@ def invariant_violations(decisions: Iterable[Decision]) -> list[Violation]:
                     step=d.step,
                 )
             )
+        violations.extend(
+            Violation(kind=kind, detail=detail, source=d.source, step=d.step)
+            for kind, detail in _match_violations(d.auction)
+        )
         winners = frozenset(w.brand_name for w in d.auction.winners)
         # Only a swap must show the auction's winners; a kept incumbent or a
         # hold intentionally leaves the previous creative on air.
@@ -167,6 +171,55 @@ def invariant_violations(decisions: Iterable[Decision]) -> list[Violation]:
     return violations
 
 
+def _match_violations(auction: ConsoleAuction) -> list[tuple[str, str]]:
+    """Segment-affinity oracles, re-derived from the wire (auction affinity.py).
+
+    - every bid reaches each moment segment once, an exact match keeps the whole
+      bid and an approximate one strictly less;
+    - an age-restricted category only ever matches exactly (affinity never widens
+      its reach);
+    - a solo winner (no basket bonus can apply) never clears above its best
+      matched rate × live multiplier.
+    """
+    found: list[tuple[str, str]] = []
+    lines = {bid.campaign_id: bid for bid in auction.bids}
+    for bid in auction.bids:
+        segments = [match.segment_id for match in bid.matches]
+        if len(segments) != len(set(segments)):
+            found.append(("bid_match_duplicate", f"{bid.brand_name}: {segments}"))
+        for match in bid.matches:
+            exact = match.segment_id == match.bid_segment_id
+            consistent = (
+                (match.kind.value == "exact") == exact
+                and (match.weight == 1 if exact else 0 < match.weight < 1)
+            )
+            if not consistent:
+                found.append(
+                    (
+                        "bid_match_inconsistent",
+                        f"{bid.brand_name}: {match.kind.value} {match.bid_segment_id}"
+                        f"->{match.segment_id} @ {match.weight}",
+                    )
+                )
+            if bid.category in AGE_RESTRICTED_CATEGORIES and not exact:
+                found.append(
+                    ("restricted_reach_widened", f"{bid.brand_name}: {match.kind.value}")
+                )
+    if len(auction.winners) == 1:
+        (winner,) = auction.winners
+        line = lines.get(winner.campaign_id)
+        if line is not None and line.matches:
+            ceiling = Decimal(line.bid_per_as.amount) * Decimal(line.multiplier or "1")
+            if Decimal(winner.price_per_as.amount) > ceiling + Decimal("0.0001"):
+                found.append(
+                    (
+                        "charged_above_matched_bid",
+                        f"{winner.brand_name}: {winner.price_per_as.amount} > {ceiling}",
+                    )
+                )
+    return found
+
+
 def product_kpis(decisions: Sequence[Decision]) -> dict[str, float | int | None]:
     """docs/product.md §8, computed over observed decisions."""
     auctions = [d.auction for d in decisions if d.auction is not None]
@@ -187,6 +240,11 @@ def product_kpis(decisions: Sequence[Decision]) -> dict[str, float | int | None]
     cleared = sum((basket for basket, _ in revenue), Decimal(0))
     solo_revenue = sum((solo for _, solo in revenue), Decimal(0))
     exclusions = Counter(e.reason.value for a in auctions for e in a.exclusions)
+    bid_lines = [bid for a in auctions for bid in a.bids]
+    approximate = [b for b in bid_lines if any(m.kind.value != "exact" for m in b.matches)]
+    affinity_only = [
+        b for b in bid_lines if b.matches and all(m.kind.value != "exact" for m in b.matches)
+    ]
     return {
         "decisions": len(decisions),
         "fill_rate": _ratio(len(filled), len(auctions)),
@@ -198,6 +256,8 @@ def product_kpis(decisions: Sequence[Decision]) -> dict[str, float | int | None]
         "exclusions_competitor": exclusions.get("competitor", 0),
         "exclusions_safety": exclusions.get("safety", 0),
         "exclusions_below_reserve": exclusions.get("below_reserve", 0),
+        "affinity_bid_share": _ratio(len(approximate), len(bid_lines)),
+        "affinity_only_bids": len(affinity_only),
         "decisions_swapped": sum(d.swapped for d in decisions),
         "decisions_kept_on_air": sum(not d.swapped for d in decisions),
     }

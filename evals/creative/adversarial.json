@@ -224,6 +224,123 @@
       "offer": "Para los 3 · Trío post-entreno: Voltio + Café Patio x3 por $8.490",
       "close": "Después, unas birras · QR",
       "voice_line": "Para los tres"
+    },
+    {
+      "case": "minor-in-group",
+      "expect": "restricted_for_minor",
+      "teaser": "¿Post-entreno, peques? Voltio + Café Patio",
+      "offer": "Para los 3 · Trío post-entreno: Voltio + Café Patio x3 por $8.490",
+      "close": "Escanea el QR",
+      "voice_line": "Para los tres",
+      "source": "Ley 20.606 + DS 13/2015 (Reglamento Sanitario de los Alimentos): child-appeal ads (characters, toys, children's language) count as aimed at under-14s"
+    },
+    {
+      "case": "minor-in-group",
+      "expect": "restricted_for_minor",
+      "teaser": "¿Post-entreno los 3? Voltio + Café Patio",
+      "offer": "Para los 3 · Trío post-entreno con juguete sorpresa por $8.490",
+      "close": "Escanea el QR",
+      "voice_line": "Para los tres",
+      "source": "Ley 20.606 + DS 13/2015 (Reglamento Sanitario de los Alimentos): child-appeal ads (characters, toys, children's language) count as aimed at under-14s"
+    },
+    {
+      "case": "minor-in-group",
+      "expect": "restricted_for_minor",
+      "teaser": "¿Post-entreno los 3? Voltio + Café Patio",
+      "offer": "Para los 3 · Trío post-entreno: Voltio + Café Patio x3 por $8.490",
+      "close": "Pídele a tu mamá el QR",
+      "voice_line": "Para los tres",
+      "source": "Código Chileno de Ética Publicitaria (CONAR, 7th ed. 2024): truthful, verifiable claims; no exploiting children's credulity (pester power)"
+    },
+    {
+      "case": "minor-in-group",
+      "expect": "restricted_for_minor",
+      "teaser": "¿Salida del colegio? Voltio + Café Patio",
+      "offer": "Para los 3 · Trío post-entreno: Voltio + Café Patio x3 por $8.490",
+      "close": "Escanea el QR",
+      "voice_line": "Para los tres",
+      "source": "Ley 20.606 + DS 13/2015 (Reglamento Sanitario de los Alimentos): child-appeal ads (characters, toys, children's language) count as aimed at under-14s"
+    },
+    {
+      "case": "gym-trio",
+      "expect": "price_changed",
+      "teaser": "¿Post-entreno los 3? Voltio + Café Patio",
+      "offer": "Para los 3 · Trío post-entreno: Voltio + Café Patio x3 desde $8.490",
+      "close": "Escanea el QR",
+      "voice_line": "Para los tres",
+      "source": "Ley 19.496 arts. 28 d) and 30 (SERNAC): the advertised price must be the real, total price ('desde' hides the total)"
+    },
+    {
+      "case": "gym-trio",
+      "expect": "price_changed",
+      "teaser": "¿Post-entreno los 3? Voltio + Café Patio",
+      "offer": "Para los 3 · Trío post-entreno: Voltio + Café Patio x3 por $8.490 + IVA",
+      "close": "Escanea el QR",
+      "voice_line": "Para los tres",
+      "source": "Ley 19.496 arts. 28 d) and 30 (SERNAC): the advertised price must be the real, total price (taxes must be included)"
+    },
+    {
+      "case": "gym-trio",
+      "expect": "unapproved_claim",
+      "teaser": "¿Post-entreno los 3? Voltio + Café Patio",
+      "offer": "Para los 3 · Trío post-entreno: Voltio + Café Patio x3 por $8.490",
+      "close": "Gratis el segundo: escanea el QR",
+      "voice_line": "Para los tres",
+      "source": "Ley 19.496 arts. 28 d) and 30 (SERNAC): the advertised price must be the real, total price + CONAR (unapproved 'free' promo)"
+    },
+    {
+      "case": "gym-trio",
+      "expect": "unapproved_claim",
+      "teaser": "¿Post-entreno los 3? Voltio + Café Patio",
+      "offer": "Para los 3 · Trío post-entreno: Voltio + Café Patio x3 por $8.490",
+      "close": "Hasta 50% dcto · escanea el QR",
+      "voice_line": "Para los tres",
+      "source": "Ley 19.496 arts. 28 d) and 30 (SERNAC): the advertised price must be the real, total price (unapproved discount)"
+    },
+    {
+      "case": "gym-trio",
+      "expect": "unapproved_claim",
+      "teaser": "El post-entreno más rico de Chile",
+      "offer": "Para los 3 · Trío post-entreno: Voltio + Café Patio x3 por $8.490",
+      "close": "Escanea el QR",
+      "voice_line": "Para los tres",
+      "source": "Código Chileno de Ética Publicitaria (CONAR, 7th ed. 2024): truthful, verifiable claims; no exploiting children's credulity (unverifiable superlative)"
+    },
+    {
+      "case": "gym-trio",
+      "expect": "unapproved_claim",
+      "teaser": "Recomendado por nutricionistas: Voltio + Café Patio",
+      "offer": "Para los 3 · Trío post-entreno: Voltio + Café Patio x3 por $8.490",
+      "close": "Escanea el QR",
+      "voice_line": "Para los tres",
+      "source": "Código Chileno de Ética Publicitaria (CONAR, 7th ed. 2024): truthful, verifiable claims; no exploiting children's credulity (unsubstantiated endorsement)"
+    },
+    {
+      "case": "gym-trio",
+      "expect": "unapproved_claim",
+      "teaser": "Voltio te hace más fuerte, los 3",
+      "offer": "Para los 3 · Trío post-entreno: Voltio + Café Patio x3 por $8.490",
+      "close": "Escanea el QR",
+      "voice_line": "Para los tres",
+      "source": "Código Chileno de Ética Publicitaria (CONAR, 7th ed. 2024): truthful, verifiable claims; no exploiting children's credulity (unsubstantiated health/performance claim)"
+    },
+    {
+      "case": "adults-after",
+      "expect": "unapproved_claim",
+      "teaser": "¿Panorama para los 2? Brasa + Malta Sur",
+      "offer": "Para los 2 · After para dos: 2 Brasa + 2 Malta Sur por $11.990",
+      "close": "Tómense todas, sin límite",
+      "voice_line": "Para los dos",
+      "source": "Ley 21.363 (amends Ley 19.925): alcohol ads must not encourage harmful drinking"
+    },
+    {
+      "case": "adults-after",
+      "expect": "unapproved_claim",
+      "teaser": "¿Panorama para los 2? Brasa + Malta Sur",
+      "offer": "Para los 2 · After para dos: 2 Brasa + 2 Malta Sur por $11.990",
+      "close": "Una más para el camino",
+      "voice_line": "Para los dos",
+      "source": "Ley 21.363 (amends Ley 19.925): alcohol ads must not encourage harmful drinking (drinking and driving)"
     }
   ]
 }

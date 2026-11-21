@@ -1,0 +1,13 @@
+{
+  "name": "speech-corrections",
+  "beat": "Reject, correct, or request an unsupported item without a stale alcohol ad",
+  "steps": [
+    {"scene": {"people": 1, "looking": 1}, "expect": {"brands": []}},
+    {"scene": {"people": 1, "looking": 1}, "speech": ["cerveza"], "speech_text": "quiero cervezas", "expect": {"brands": ["Malta Sur"]}},
+    {"scene": {"people": 1, "looking": 1}, "speech": ["café", "cerveza"], "speech_text": "no quiero cerveza, quiero café", "expect": {"brands": ["Café Patio"]}},
+    {"scene": {"people": 1, "looking": 1}, "speech": ["café"], "speech_text": "ya no quiero café", "expect": {"brands": []}},
+    {"scene": {"people": 1, "looking": 1}, "speech": [], "speech_text": "quiero un acfe", "expect": {"brands": ["Café Patio"]}},
+    {"scene": {"people": 1, "looking": 1}, "speech": ["sed"], "speech_text": "quiero agua", "expect": {"brands": []}},
+    {"scene": {"people": 1, "looking": 1}, "speech": ["cerveza"], "speech_text": "cerveza sin alcohol", "expect": {"brands": [], "no_change": true}}
+  ]
+}

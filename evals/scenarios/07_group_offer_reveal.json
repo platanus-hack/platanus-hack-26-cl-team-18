@@ -84,7 +84,7 @@
           "Voltio",
           "Café Patio"
         ],
-        "copy_contains": "Tu Café Patio pide Voltio",
+        "copy_contains": "A tu Café Patio le falta Voltio",
         "min_coverage": 1
       }
     },

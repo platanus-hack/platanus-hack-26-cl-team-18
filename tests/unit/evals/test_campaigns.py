@@ -7,4 +7,4 @@ def test_real_campaign_catalog_passes_quality_safety_media_and_latency_gates() -
     assert report["campaigns"] == 576
     assert report["rejections"] == 156
     assert report["cache_hit_rate"] == 1
-    assert report["photo_assets"] == report["video_assets"] == 4
+    assert report["photo_assets"] == report["video_assets"] == 6  # + Rayo's lavender can

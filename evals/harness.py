@@ -5,10 +5,12 @@ from __future__ import annotations
 import json
 import random
 import time
+import urllib.request
 from collections.abc import Sequence
 from contextlib import ExitStack
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from functools import partial
 from pathlib import Path
 
@@ -18,9 +20,12 @@ from app.bootstrap.demo import DEMO_SCREEN
 from app.contract.messages import (
     AudienceSnapshot,
     AudienceUtterance,
+    BidLine,
     ConsoleAuction,
+    ConsoleBook,
     ConsoleMoment,
     CreativeReady,
+    StockSet,
 )
 from evals.live import CONSOLE_MESSAGES, PLAYER_MESSAGES, LiveBackend, live_backend
 from evals.metrics import Decision
@@ -118,14 +123,21 @@ class _Session:
         except TimeoutError:
             return
 
-    def observe(self, sent: float, *, quiet: bool) -> Observed:
-        """Wait for the decision this snapshot caused, then for the swap it promised."""
+    def observe(self, sent: float, *, quiet: bool, wait_holds: bool = True) -> Observed:
+        """Wait for the decision this snapshot caused, then for the swap it promised.
+
+        ``wait_holds=False`` is for real-time replays: like the camera, keep streaming
+        through a held swap so a later moment can supersede it (a glance back, a cup
+        reappearing). The held creative, if it is released, shows up in a later call.
+        """
         auction = self.await_auction(QUIET_WINDOW_S if quiet else RESPONSE_TIMEOUT_S)
         swap = getattr(auction, "swap", None) if auction is not None else None
         if auction is None:
             creative = self.await_creative(SETTLE_S)  # debounced, stale, or no decision
         elif swap in (None, "swap", "released"):
             creative = self.await_creative(RESPONSE_TIMEOUT_S)  # pushed now
+        elif swap == "held" and not wait_holds:
+            creative = self.await_creative(SETTLE_S)
         elif swap == "held":
             not_before = getattr(auction.trace, "swap_not_before", None)
             hold = (not_before - datetime.now(UTC)).total_seconds() if not_before else 0.0
@@ -160,15 +172,38 @@ def _decision(source: str, step: int, minor: bool, session: _Session, seen: Obse
     )
 
 
-def run_scenario(scenario: Scenario) -> RunRecord:
+def set_stock(backend: LiveBackend, stock: dict[str, bool]) -> None:
+    """The clerk's `/clerk` toggle, by brand name (ids are minted per backend)."""
+    with urllib.request.urlopen(f"{backend.http_url}/api/book", timeout=5) as response:
+        book = ConsoleBook.model_validate_json(response.read())
+    brand_ids = {line.brand_name: line.brand_id for line in book.lines}
+    for brand, in_stock in stock.items():
+        if brand not in brand_ids:
+            raise ValueError(f"stock step: unknown brand {brand!r}")
+        body = StockSet(
+            screen_id=DEMO_SCREEN, brand_id=brand_ids[brand], in_stock=in_stock
+        ).model_dump_json()
+        request = urllib.request.Request(
+            f"{backend.http_url}/api/clerk/stock",
+            data=body.encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        urllib.request.urlopen(request, timeout=5).close()
+
+
+def run_scenario(scenario: Scenario, *, swap_holds: bool | None = None) -> RunRecord:
     record = RunRecord(source=scenario.name)
     started = time.perf_counter()
-    with live_backend(speech_mode_screens=[DEMO_SCREEN]) as backend:
+    with live_backend(speech_mode_screens=[DEMO_SCREEN], auction_swap_holds=swap_holds) as backend:
         session = _Session(backend)
         record.initial = session.initial
         try:
             for index, step in enumerate(scenario.steps):
-                if step.speech is None:
+                if step.stock is not None:
+                    sent = time.perf_counter()
+                    set_stock(backend, step.stock)
+                elif step.speech is None:
                     sent = session.send(session.next_snapshot(step.scene, step.measured_offset))
                 else:
                     session.seq += 1
@@ -178,7 +213,7 @@ def run_scenario(scenario: Scenario) -> RunRecord:
                             screen_id=DEMO_SCREEN,
                             seq=session.seq,
                             measured_at=datetime.now(UTC),
-                            text="",
+                            text=step.speech_text,
                             language="es",
                             keyterms_hit=list(step.speech),
                         ).model_dump_json()
@@ -231,7 +266,13 @@ def _check(source: str, step: int, expect: Expect, d: Decision) -> list[Check]:
         text = " ".join(
             [*(stage.copy_text for stage in spec.stages), *(slot.copy_text for slot in spec.slots)]
         )
-        checks.append(check("copy", expect.copy_contains in text, f"copy was {text!r}"))
+        checks.append(
+            check(
+                "copy",
+                expect.copy_contains.casefold() in text.casefold(),
+                f"copy was {text!r}",
+            )
+        )
     if d.auction is not None:
         names = {bid.campaign_id: bid.brand_name for bid in d.auction.bids}
         got_excluded = {
@@ -253,7 +294,50 @@ def _check(source: str, step: int, expect: Expect, d: Decision) -> list[Check]:
                     f"got {d.auction.coverage:.2f}, want >= {expect.min_coverage:.2f}",
                 )
             )
+        if expect.max_coverage is not None:
+            checks.append(
+                check(
+                    "coverage_max",
+                    d.auction.coverage <= expect.max_coverage + 1e-9,
+                    f"got {d.auction.coverage:.2f}, want <= {expect.max_coverage:.2f}",
+                )
+            )
+        lines = {bid.brand_name: bid for bid in d.auction.bids}
+        for brand in sorted(expect.no_bid):
+            checks.append(
+                check(f"no_bid:{brand}", brand not in lines, f"{brand} bid on this moment")
+            )
+        for brand, specs in expect.matches.items():
+            line = lines.get(brand)
+            got = sorted(_match_specs(line)) if line is not None else []
+            for spec in specs:
+                checks.append(
+                    check(
+                        f"match:{brand}:{spec}",
+                        spec in got,
+                        f"got {got or 'no bid'}, want {spec}",
+                    )
+                )
+        prices = {w.brand_name: Decimal(w.price_per_as.amount) for w in d.auction.winners}
+        for brand, limit in expect.max_price_per_as.items():
+            price = prices.get(brand)
+            checks.append(
+                check(
+                    f"price:{brand}",
+                    price is not None and price <= Decimal(limit),
+                    f"got {price if price is not None else 'not a winner'}, want <= {limit}",
+                )
+            )
     return checks
+
+
+def _match_specs(line: BidLine) -> set[str]:
+    """Both spellings a scenario may use: "related" and "related:Coffee>Pastry/Doughnuts"."""
+    specs: set[str] = set()
+    for match in line.matches:
+        specs.add(match.kind.value)
+        specs.add(f"{match.kind.value}:{match.bid_segment_label}>{match.segment_label}")
+    return specs
 
 
 def run_soak(scenes: Sequence[Scene], *, steps: int, seed: int) -> RunRecord:
@@ -299,7 +383,8 @@ def replay_recording(path: Path, *, speed: float = 1.0) -> RunRecord:
     ]
     record = RunRecord(source=f"replay:{path.name}")
     started = time.perf_counter()
-    with live_backend() as backend:
+    # Real footage plays in real time: judge it with production swap holds (D5), as live.
+    with live_backend(auction_swap_holds=True) as backend:
         session = _Session(backend)
         record.initial = session.initial
         try:
@@ -322,7 +407,7 @@ def replay_recording(path: Path, *, speed: float = 1.0) -> RunRecord:
                     update={"screen_id": DEMO_SCREEN, "seq": session.seq, **instants}
                 )
                 sent = session.send(snapshot)
-                seen = session.observe(sent, quiet=True)
+                seen = session.observe(sent, quiet=True, wait_holds=False)
                 if seen.auction is None and seen.creative is None:
                     continue
                 record.decisions.append(

@@ -1,0 +1,12 @@
+{
+  "name": "speech-same-utterance-correction",
+  "beat": "A real-microphone rehearsal exposed two requests surviving one STT segment",
+  "description": "Authored reproduction: an explicit correction must replace beer even when the final transcript and old edge hits still mention it. Intentional additions remain valid.",
+  "steps": [
+    {"scene":{"people":1,"looking":1},"expect":{"brands":[]}},
+    {"scene":{"people":1,"looking":1},"speech":["cerveza"],"expect":{"brands":["Malta Sur"]}},
+    {"scene":{"people":1,"looking":1},"speech":["cerveza","café"],"speech_text":"quiero una cerveza, mejor un café","expect":{"brands":["Café Patio"]}},
+    {"scene":{"people":1,"looking":1},"speech":["cerveza","café"],"speech_text":"quiero cerveza y café","expect":{"brands":["Malta Sur"]}},
+    {"scene":{"people":1,"looking":1},"speech":["café"],"expect":{"brands":["Café Patio"]}}
+  ]
+}

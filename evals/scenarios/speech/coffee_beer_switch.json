@@ -1,0 +1,10 @@
+{
+  "name": "speech-coffee-beer-switch",
+  "beat": "Coffee then beer changes the ad, and a later coffee request changes it back",
+  "steps": [
+    {"scene": {"people": 1, "looking": 1}, "expect": {"brands": []}},
+    {"scene": {"people": 1, "looking": 1}, "speech": ["café"], "expect": {"brands": ["Café Patio"]}},
+    {"scene": {"people": 1, "looking": 1}, "speech": ["cerveza"], "expect": {"brands": ["Malta Sur"]}},
+    {"scene": {"people": 1, "looking": 1}, "speech": ["café"], "expect": {"brands": ["Café Patio"]}}
+  ]
+}

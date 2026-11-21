@@ -1,0 +1,10 @@
+{
+  "name": "speech-camera-mix",
+  "beat": "Camera and voice together: a spoken need joins what the camera sees, a minor still blocks beer",
+  "steps": [
+    {"scene": {"people": 2, "objects": [{"label": "bottle", "score": 1}]}, "expect": {"brands": ["Voltio"]}},
+    {"scene": {"people": 2, "objects": [{"label": "bottle", "score": 1}]}, "speech": ["café"], "expect": {"brands": ["Voltio", "Café Patio"]}, "note": "voice completes the basket the camera started"},
+    {"scene": {"people": 2, "minor": true, "objects": [{"label": "bottle", "score": 1}]}, "expect": {}, "note": "a minor arrives"},
+    {"scene": {"people": 2, "minor": true, "objects": [{"label": "bottle", "score": 1}]}, "speech": ["cerveza"], "expect": {"excluded": {"Malta Sur": "safety"}}, "note": "beer requested near a minor: blocked"}
+  ]
+}

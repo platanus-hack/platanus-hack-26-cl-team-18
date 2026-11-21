@@ -1,0 +1,10 @@
+{
+  "name": "stock-out",
+  "beat": "Backup moment: the clerk marks a brand out of stock and the screen re-auctions",
+  "description": "An out-of-stock brand never wins the screen; restocking brings the basket back without a new audience reading.",
+  "steps": [
+    {"scene": "co-brand", "expect": {"brands": ["Voltio", "Café Patio"]}},
+    {"stock": {"Café Patio": false}, "expect": {"brands": ["Voltio"]}, "note": "clerk: Café Patio sold out"},
+    {"stock": {"Café Patio": true}, "expect": {"brands": ["Voltio", "Café Patio"]}, "note": "restocked"}
+  ]
+}
