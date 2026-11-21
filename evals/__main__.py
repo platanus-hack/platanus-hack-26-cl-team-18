@@ -82,6 +82,13 @@ def main(argv: list[str] | None = None) -> int:
     pipeline.add_argument("--tts-latency-ms", type=float, default=350.0)
     pipeline.add_argument("--cold", action="store_true", help="also run a cold-boot journey")
 
+    browser = sub.add_parser(
+        "browser", help="glass-to-glass in headless Chromium (needs: uv run --with playwright)"
+    )
+    browser.add_argument("--moments", type=int, default=21)
+    browser.add_argument("--dwell", type=float, default=1.2)
+    browser.add_argument("--reuse-build", action="store_true")
+
     warmup = sub.add_parser(
         "warmup", help="demo-day: warm copy + voice caches on a running backend"
     )
@@ -100,6 +107,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run_pipeline(args)
     if command == "warmup":
         return _run_warmup(args)
+    if command == "browser":
+        return _run_browser(args)
     if command == "replay":
         return _run_replay(args)
     if command == "perception":
@@ -272,6 +281,24 @@ def _run_pipeline(args: argparse.Namespace) -> int:
     metrics.update(gates)
     args.update_baseline = False
     return _finish(args, "pipeline", metrics, [], [], [], extra_markdown=extra)
+
+
+def _run_browser(args: argparse.Namespace) -> int:
+    from evals import browser as br
+
+    run = br.run_browser(moments=args.moments, dwell_s=args.dwell, reuse_build=args.reuse_build)
+    analysis = br.analyse(run)
+    (br.OUT / "moments.json").write_text(br.to_json(run), encoding="utf-8")
+    args.update_baseline = False
+    return _finish(
+        args,
+        "browser",
+        analysis["metrics"],
+        [],
+        [],
+        [],
+        extra_markdown="\n" + br.render(run, analysis),
+    )
 
 
 def _run_warmup(args: argparse.Namespace) -> int:

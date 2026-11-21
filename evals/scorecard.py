@@ -107,6 +107,24 @@ SPECS: dict[str, Spec] = {
     "demo_copy_provider_calls": Spec(
         "gate", "lower", 0, label="Demo: live LLM calls after warm-up"
     ),
+    # Real browser (evals/browser.py): the actual web player in headless Chromium.
+    "browser_glass_p50_ms": Spec(
+        "gate", "lower", m.GLASS_TO_GLASS_P50_MS, label="Browser: snapshot → fully visible p50 (ms)"
+    ),
+    "browser_glass_p95_ms": Spec(
+        "gate", "lower", 500, label="Browser: snapshot → fully visible p95 (ms, screen budget)"
+    ),
+    "browser_report_vs_probe_p95_ms": Spec(
+        "gate", "lower", 50, label="Browser: player's displayed_at vs pixels, p95 (ms)"
+    ),
+    "browser_blank_frames": Spec("gate", "lower", 0, label="Browser: frames not fully covered"),
+    "browser_missed_swaps": Spec("gate", "lower", 0, label="Browser: creatives never shown"),
+    "browser_hard_cuts": Spec("gate", "lower", 0, label="Browser: swaps without the crossfade"),
+    "browser_fps": Spec("info", "higher", label="Browser: frames per second while playing"),
+    "browser_long_frames": Spec("info", "lower", label="Browser: frame gaps > 50 ms (jank)"),
+    "browser_glass_first_paint_p50_ms": Spec(
+        "info", "lower", label="Browser: first pixels p50 (ms)"
+    ),
     "video_clips": Spec("info", label="Video: clips"),
     "video_ad_precision": Spec("info", label="Video: ad precision (fitting / paid time)"),
     "video_sensible_ad_reach": Spec("info", label="Video: sensible-ad reach (fitting / clip time)"),

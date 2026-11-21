@@ -8,7 +8,7 @@ LOCAL_DATABASE_URL := postgresql://team18:team18@localhost:5432/team18
 
 .PHONY: help install edge-install edge-check test-live test-sandbox dev web-install web-dev web-check contract contract-check lint format typecheck test check migrate migrate-status db-up db-down db-reset \
         live-preflight bundle-loops \
-        eval eval-baseline eval-creative eval-creative-baseline eval-campaigns eval-replay eval-perception eval-record eval-rehearsal eval-video-fetch eval-video eval-pipeline demo-warmup \
+        eval eval-baseline eval-creative eval-creative-baseline eval-campaigns eval-replay eval-perception eval-record eval-rehearsal eval-video-fetch eval-video eval-pipeline demo-warmup eval-browser \
         tf-init tf-fmt tf-fmt-check tf-validate tf-test tf-check tf-plan tf-apply tf-output tf-lock
 
 help: ## Show this help
@@ -111,6 +111,9 @@ eval-video: ## Stock video -> edge agent -> live backend -> ad-fit report (ARGS=
 
 eval-pipeline: ## End-to-end ad pipeline journeys: stage waterfall + bottleneck (ARGS="--cold --copy-scale 2")
 	uv run python -m evals pipeline $(ARGS)
+
+eval-browser: ## Glass-to-glass in headless Chromium: real web player, pixels probe (first run: uv run --with playwright playwright install chromium)
+	uv run --with playwright python -m evals browser $(ARGS)
 
 demo-warmup: ## Demo day: warm AI copy + voice-over caches on the running backend (same daypart as the demo)
 	uv run python -m evals warmup $(ARGS)
