@@ -56,6 +56,21 @@ class BudgetAccount:
         left = self.budget - self.spent - self.reserved
         return left if left.amount > 0 else Money.zero(currency=self.budget.currency)
 
+    def available_for(self, key: str) -> Money:
+        """Left to spend if the hold `key` were released: what a charge for it may use."""
+        held_elsewhere = sum(
+            (item.amount for item in self.reservations if item.key != key),
+            Money.zero(currency=self.budget.currency),
+        )
+        left = self.budget - self.spent - held_elsewhere
+        return left if left.amount > 0 else Money.zero(currency=self.budget.currency)
+
+    def capped_charge(self, key: str, charge: Money) -> Money:
+        """The charge, capped so spend never exceeds the budget."""
+        self._same_currency(charge)
+        available = self.available_for(key)
+        return charge if charge <= available else available
+
     def reserve(self, key: str, amount: Money, *, at: datetime) -> BudgetAccount:
         """Hold `amount` for `key`. Re-reserving the same key replaces it (idempotent)."""
         self._same_currency(amount)

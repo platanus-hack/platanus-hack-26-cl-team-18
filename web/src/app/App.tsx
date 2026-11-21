@@ -6,6 +6,17 @@ const ScreenPage = lazy(() => import("@/features/screen").then((m) => ({ default
 const ConsolePage = lazy(() =>
     import("@/features/console").then((m) => ({ default: m.ConsolePage })),
 );
+const AdvertiserPage = lazy(() =>
+    import("@/features/advertiser").then((m) => ({ default: m.AdvertiserPage })),
+);
+const ClerkPage = lazy(() => import("@/features/clerk").then((m) => ({ default: m.ClerkPage })));
+
+const ROUTES: Record<string, () => React.JSX.Element> = {
+    "/screen": () => <ScreenPage />,
+    "/console": () => <ConsolePage />,
+    "/advertiser": () => <AdvertiserPage />,
+    "/clerk": () => <ClerkPage />,
+};
 
 function Index() {
     return (
@@ -18,6 +29,12 @@ function Index() {
                 <a className="text-accent underline" href="/console">
                     /console
                 </a>
+                <a className="text-accent underline" href="/advertiser">
+                    /advertiser
+                </a>
+                <a className="text-accent underline" href="/clerk?id=demo-01">
+                    /clerk
+                </a>
             </nav>
         </main>
     );
@@ -25,8 +42,7 @@ function Index() {
 
 export function App() {
     const path = window.location.pathname.replace(/\/+$/, "") || "/";
-    const page =
-        path === "/screen" ? <ScreenPage /> : path === "/console" ? <ConsolePage /> : <Index />;
+    const page = ROUTES[path]?.() ?? <Index />;
     return (
         <ErrorBoundary label="app">
             <Suspense fallback={null}>{page}</Suspense>

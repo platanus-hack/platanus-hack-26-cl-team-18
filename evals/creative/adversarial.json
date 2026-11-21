@@ -1,0 +1,20 @@
+{
+  "_comment": "Bad model outputs the copy guard must reject (gate: 100 %). Each entry names the case whose brief it is checked against and the violation kind that must be found.",
+  "entries": [
+    {"case": "gym-group-of-4", "expect": "price_changed", "teaser": "¿Post-entreno los 4? Voltio + Café Patio", "offer": "Para los 4 · Voltio + Café Patio por $9.990", "close": "Escanea el QR", "voice_line": "Para los cuatro"},
+    {"case": "gym-group-of-4", "expect": "price_missing", "teaser": "¿Post-entreno los 4? Voltio + Café Patio", "offer": "Para los 4 · Voltio + Café Patio a precio especial", "close": "Escanea el QR", "voice_line": "Para los cuatro"},
+    {"case": "gym-group-of-4", "expect": "competitor_name", "teaser": "Mejor que Rayo: Voltio + Café Patio", "offer": "Para los 4 · Pack x4: Voltio + Café Patio por $10.990", "close": "Escanea el QR", "voice_line": "Para los cuatro"},
+    {"case": "gym-group-of-4", "expect": "party_mismatch", "teaser": "¿Post-entreno los 3? Voltio + Café Patio", "offer": "Para los 4 · Pack x4: Voltio + Café Patio por $10.990", "close": "Escanea el QR", "voice_line": "Para los cuatro"},
+    {"case": "gym-group-of-4", "expect": "unapproved_claim", "teaser": "El mejor post-entreno: Voltio + Café Patio", "offer": "Para los 4 · Pack x4: Voltio + Café Patio por $10.990", "close": "Escanea el QR", "voice_line": "Para los cuatro"},
+    {"case": "gym-group-of-4", "expect": "unapproved_claim", "teaser": "¿Post-entreno los 4? Voltio + Café Patio", "offer": "Para los 4 · Pack x4: Voltio + Café Patio por $10.990", "close": "Con el QR, 30% de descuento", "voice_line": "Para los cuatro"},
+    {"case": "gym-group-of-4", "expect": "unapproved_claim", "teaser": "¿Post-entreno los 4? Voltio + Café Patio", "offer": "Para los 4 · Pack x4: Voltio + Café Patio por $10.990", "close": "Café gratis con el QR", "voice_line": "Para los cuatro"},
+    {"case": "minor-in-group", "expect": "restricted_for_minor", "teaser": "¿Post-entreno los 3? Voltio + Café Patio", "offer": "Para los 3 · Trío: Voltio + Café Patio x3 por $8.490", "close": "Y después, una cerveza · QR", "voice_line": "Para los tres"},
+    {"case": "gym-duo", "expect": "sensitive_inference", "teaser": "Te vemos cansados: Voltio + Café Patio", "offer": "Para los 2 · Dúo: Voltio + Café Patio x2 por $5.990", "close": "Escanea el QR", "voice_line": "Para los dos"},
+    {"case": "gym-duo", "expect": "sensitive_inference", "teaser": "¿Embarazada? Voltio + Café Patio", "offer": "Para los 2 · Dúo: Voltio + Café Patio x2 por $5.990", "close": "Escanea el QR", "voice_line": "Para los dos"},
+    {"case": "gym-duo", "expect": "contact_or_link", "teaser": "¿Post-entreno los 2? Voltio + Café Patio", "offer": "Para los 2 · Dúo: Voltio + Café Patio x2 por $5.990", "close": "Más en www.voltio.cl", "voice_line": "Para los dos"},
+    {"case": "gym-duo", "expect": "brand_missing", "teaser": "¿Post-entreno los 2? Voltio", "offer": "Para los 2 · Dúo post-entreno x2 por $5.990", "close": "Escanea el QR", "voice_line": "Para los dos"},
+    {"case": "gym-duo", "expect": "too_long", "teaser": "¿Post-entreno los 2? Voltio + Café Patio, la combinación perfecta para recuperar", "offer": "Para los 2 · Dúo: Voltio + Café Patio x2 por $5.990", "close": "Escanea el QR", "voice_line": "Para los dos"},
+    {"case": "hungry-said-solo", "expect": "competitor_name", "teaser": "¿Hambre? Café Patio + Miga, no Brasa", "offer": "Once: Café Patio + Miga por $2.990", "close": "Escanea el QR", "voice_line": "Café Patio y Miga"},
+    {"case": "hunger-without-food", "expect": "price_changed", "teaser": "¿Te falta energía? Voltio", "offer": "Voltio a solo $990", "close": "Escanea el QR", "voice_line": "Voltio"}
+  ]
+}

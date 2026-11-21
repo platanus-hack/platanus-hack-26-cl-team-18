@@ -20,6 +20,7 @@ export default defineConfig({
             "/health": backend,
             "/media": backend,
             "/dev": backend,
+            "/api": backend,
         },
     },
     build: {

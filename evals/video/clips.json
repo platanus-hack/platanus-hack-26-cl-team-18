@@ -11,13 +11,16 @@
       "url": "https://upload.wikimedia.org/wikipedia/commons/transcoded/3/39/Starbucks_en_la_a%C4%89etcentro_Kristall_%28Tjumeno%29.webm/Starbucks_en_la_a%C4%89etcentro_Kristall_%28Tjumeno%29.webm.480p.vp9.webm",
       "start_s": 0,
       "duration_s": 11,
-      "scene": "",
+      "scene": "Mall café: people at tables with laptops and coffee cups; a costumed mascot and families pass outside.",
       "expect": {
-        "sensible_brands": [],
+        "sensible_brands": [
+          "Café Patio",
+          "Voltio"
+        ],
         "never_brands": [
           "Malta Sur"
         ],
-        "note": ""
+        "note": "Coffee is the obvious fit; Voltio+Café Patio basket also works. Families in the mall: no beer."
       }
     },
     {
@@ -30,13 +33,15 @@
       "url": "https://upload.wikimedia.org/wikipedia/commons/transcoded/1/1d/Vespero_en_Hong_Kong_Island_%282014%29_02.webm/Vespero_en_Hong_Kong_Island_%282014%29_02.webm.480p.vp9.webm",
       "start_s": 0,
       "duration_s": 11,
-      "scene": "",
+      "scene": "Evening street walk past bars and shop fronts; people move past, few face the camera.",
       "expect": {
-        "sensible_brands": [],
-        "never_brands": [
-          "Malta Sur"
+        "sensible_brands": [
+          "Malta Sur",
+          "Café Patio",
+          "Voltio"
         ],
-        "note": ""
+        "never_brands": [],
+        "note": "Adults at night near bars: beer is plausible. Passers-by mostly: a house ad is fine too."
       }
     },
     {
@@ -49,13 +54,15 @@
       "url": "https://upload.wikimedia.org/wikipedia/commons/transcoded/3/38/Laukontori%2C_Tampere%2C_2018.webm/Laukontori%2C_Tampere%2C_2018.webm.480p.vp9.webm",
       "start_s": 5,
       "duration_s": 25,
-      "scene": "",
+      "scene": "Outdoor market terrace: couples and families seated at café tables, children around.",
       "expect": {
-        "sensible_brands": [],
+        "sensible_brands": [
+          "Café Patio"
+        ],
         "never_brands": [
           "Malta Sur"
         ],
-        "note": ""
+        "note": "Café terrace, coffee fits. Children present: never beer."
       }
     },
     {
@@ -68,13 +75,13 @@
       "url": "https://upload.wikimedia.org/wikipedia/commons/transcoded/b/b0/Disinfecting_shopping_cart.webm/Disinfecting_shopping_cart.webm.480p.vp9.webm",
       "start_s": 0,
       "duration_s": 7,
-      "scene": "",
+      "scene": "Car park: a worker pushes a line of shopping carts past the camera.",
       "expect": {
         "sensible_brands": [],
         "never_brands": [
           "Malta Sur"
         ],
-        "note": ""
+        "note": "A passer-by at work, not an audience: the house ad is the right answer."
       }
     },
     {
@@ -87,13 +94,16 @@
       "url": "https://upload.wikimedia.org/wikipedia/commons/transcoded/a/a8/Exposici%C3%B3n_en_el_Gimnasio_de_Banderilla%2C_Veracruz.webm/Exposici%C3%B3n_en_el_Gimnasio_de_Banderilla%2C_Veracruz.webm.480p.vp9.webm",
       "start_s": 0,
       "duration_s": 11,
-      "scene": "",
+      "scene": "Boxing gym: a ring in the foreground, a few people walking in the background.",
       "expect": {
-        "sensible_brands": [],
+        "sensible_brands": [
+          "Voltio",
+          "Rayo"
+        ],
         "never_brands": [
           "Malta Sur"
         ],
-        "note": ""
+        "note": "Fitness context: energy/sports brands fit."
       }
     },
     {
@@ -106,13 +116,17 @@
       "url": "https://upload.wikimedia.org/wikipedia/commons/transcoded/2/21/Pyrkon_2026_-_ambient_flow_of_people_1.webm/Pyrkon_2026_-_ambient_flow_of_people_1.webm.480p.vp9.webm",
       "start_s": 10,
       "duration_s": 25,
-      "scene": "",
+      "scene": "Convention hall: a dense crowd flowing past, most people not facing the camera.",
       "expect": {
-        "sensible_brands": [],
+        "sensible_brands": [
+          "Voltio",
+          "Rayo",
+          "Café Patio"
+        ],
         "never_brands": [
           "Malta Sur"
         ],
-        "note": ""
+        "note": "Mixed-age crowd in transit: energy or coffee are fine, beer is not."
       }
     },
     {
@@ -125,13 +139,15 @@
       "url": "https://upload.wikimedia.org/wikipedia/commons/transcoded/4/46/Tour_of_an_American_Supermarket_in_2018.webm/Tour_of_an_American_Supermarket_in_2018.webm.480p.vp9.webm",
       "start_s": 60,
       "duration_s": 25,
-      "scene": "",
+      "scene": "Supermarket electronics aisle: one shopper walks toward the camera.",
       "expect": {
-        "sensible_brands": [],
-        "never_brands": [
-          "Malta Sur"
+        "sensible_brands": [
+          "Voltio",
+          "Café Patio",
+          "Rayo"
         ],
-        "note": ""
+        "never_brands": [],
+        "note": "Single shopper in a store: any convenience product fits."
       }
     },
     {
@@ -144,13 +160,16 @@
       "url": "https://upload.wikimedia.org/wikipedia/commons/transcoded/d/df/Video_of_a_free_open_outdoor_gym_-_Wadala_Five_Garden_nearby_Mumbai.webm/Video_of_a_free_open_outdoor_gym_-_Wadala_Five_Garden_nearby_Mumbai.webm.360p.mpeg4.mov",
       "start_s": 20,
       "duration_s": 25,
-      "scene": "",
+      "scene": "Open-air park gym: a man in workout clothes talks to camera between exercises.",
       "expect": {
-        "sensible_brands": [],
+        "sensible_brands": [
+          "Voltio",
+          "Rayo"
+        ],
         "never_brands": [
           "Malta Sur"
         ],
-        "note": ""
+        "note": "Mid-workout: energy drink is the clear fit."
       }
     }
   ]

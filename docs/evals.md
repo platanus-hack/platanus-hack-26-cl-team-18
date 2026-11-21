@@ -40,6 +40,11 @@ marked `xfail(strict=True)` that cites the requirement. Today:
 When the fix lands the test XPASSes, strict mode fails the build, and the
 fixer deletes the marker. A fixed gap can never come back unnoticed.
 
+The creative generation engine has its own offline suite (targeting,
+safety, quality, latency and cost): `make eval-creative`, documented in
+[`creative-generation.md`](creative-generation.md) §4. It runs inside
+`make check` too (`tests/unit/creative/test_creative_eval.py`).
+
 ## 2. The scorecard
 
 `make eval` writes `evals/results/latest.md` (also the CI job summary and an

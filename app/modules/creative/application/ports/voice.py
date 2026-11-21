@@ -32,6 +32,7 @@ class VoiceFailure(StrEnum):
     RATE_LIMITED = "rate_limited"  # retryable
     INVALID_REQUEST = "invalid_request"  # our bug or a bad voice id
     UNAVAILABLE = "unavailable"  # provider/network down: retryable
+    BUDGET = "budget"  # our own character budget is spent: no more calls
 
 
 class VoiceSynthesisError(Exception):
@@ -61,3 +62,11 @@ class MediaStore(Protocol):
     def put(self, key: str, extension: str, data: bytes) -> str:
         """Write atomically and return the public URL."""
         ...
+
+
+class CharacterBudget(Protocol):
+    """A hard cap on provider characters, persisted so a restart can't reset it."""
+
+    def remaining(self) -> int: ...
+
+    def spend(self, characters: int) -> None: ...

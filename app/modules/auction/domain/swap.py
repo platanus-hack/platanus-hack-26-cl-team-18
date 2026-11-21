@@ -117,22 +117,31 @@ class MinAdTimePolicy(Policy[SwapInput, SwapPlan]):
             hold = timings.same_moment
         return SwapPlan(action=SwapAction.SWAP, not_before=max(now, on_air.displayed_at + hold))
 
+    def unsafe_on_air(self, on_air: OnAir | None, opportunity: AdOpportunity) -> bool:
+        """Must what is on air come down now, whatever the engine says? (invariant 2, D5.2)"""
+        if on_air is None or on_air.is_house_ad:
+            return False
+        return self._facts_unsafe(on_air, opportunity)
+
     @staticmethod
-    def _unsafe_on_air(on_air: OnAir, input: SwapInput) -> bool:
-        """Read the facts directly: an exclusion is only recorded for bidders that
-        still match a segment, but a minor in front of a beer ad must end it even
-        when the beer segment is gone or nobody is looking."""
-        opportunity = input.opportunity
+    def _facts_unsafe(on_air: OnAir, opportunity: AdOpportunity) -> bool:
         if on_air.age_restricted and opportunity.moment.minor_likely:
             return True
         if on_air.brand_ids & opportunity.out_of_stock:
             return True
         book = {bidder.campaign_id: bidder for bidder in opportunity.bidders}
-        if any(
+        return any(
             (bidder := book.get(campaign_id)) is None or not bidder.active
             for campaign_id in on_air.campaign_ids
-        ):
-            return True  # dropped from the book or paused
+        )
+
+    @staticmethod
+    def _unsafe_on_air(on_air: OnAir, input: SwapInput) -> bool:
+        """Read the facts directly: an exclusion is only recorded for bidders that
+        still match a segment, but a minor in front of a beer ad must end it even
+        when the beer segment is gone or nobody is looking."""
+        if MinAdTimePolicy._facts_unsafe(on_air, input.opportunity):
+            return True
         return any(
             (exclusion := input.result.exclusion_for(campaign_id)) is not None
             and exclusion.reason in INELIGIBLE_ON_AIR

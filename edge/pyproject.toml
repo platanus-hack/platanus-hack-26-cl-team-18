@@ -74,3 +74,11 @@ known-first-party = ["agent", "tests"]
 python_version = "3.12"
 ignore_missing_imports = true
 check_untyped_defs = true
+
+# Ultralytics and torch ship loose stubs (union return types) for the vision
+# extra. Treat them as untyped so mypy gives the same answer with or without
+# `--extra vision` installed (CI runs without it).
+[[tool.mypy.overrides]]
+module = ["ultralytics", "ultralytics.*", "torch", "torch.*"]
+follow_imports = "skip"
+follow_untyped_imports = false

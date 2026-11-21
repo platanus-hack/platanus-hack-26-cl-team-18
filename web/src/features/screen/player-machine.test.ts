@@ -18,6 +18,10 @@ const spec = {
     video_url: null,
     voiceover_url: null,
     qr_url: null,
+    stages: [],
+    offer: null,
+    angle: null,
+    copy_source: null,
 };
 const house: Playable = { creativeId: "house", auctionId: null, spec, kind: "house" };
 const ad = (id: string): Playable => ({

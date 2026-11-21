@@ -12,8 +12,9 @@ from datetime import datetime
 
 from app.modules.auction.application.ports.engine import AuctionEngine
 from app.modules.auction.domain.opportunity import AdOpportunity
-from app.modules.auction.domain.result import AuctionResult
+from app.modules.auction.domain.result import AuctionResult, NoFillReason
 from app.modules.auction.domain.swap import (
+    SAME_MOMENT_TRIGGERS,
     MinAdTimePolicy,
     OnAir,
     SwapAction,
@@ -46,7 +47,7 @@ class AuctionDesk:
         self._policy = MinAdTimePolicy(timings)
         self._holds_enabled = holds_enabled
         self._on_air: OnAir | None = None
-        self._pending: tuple[int, AuctionResult] | None = None
+        self._pending: tuple[int, AuctionResult, Trigger] | None = None
         self._tokens = 0
 
     @property
@@ -56,10 +57,24 @@ class AuctionDesk:
     def run(self, opportunity: AdOpportunity, trigger: Trigger, *, now: datetime) -> DeskOutcome:
         on_air = self._on_air
         incumbent = None if on_air is None or on_air.is_house_ad else on_air.campaign_ids
+        # A bid or stock change during a new group's hold is still that new group's
+        # decision: keep its 1.5 s floor and no hysteresis (D5.3, D8).
+        if trigger in SAME_MOMENT_TRIGGERS and self._pending is not None:
+            if self._pending[2] is Trigger.MOMENT_CHANGED:
+                trigger = Trigger.MOMENT_CHANGED
         try:
             result = self._engine.decide(replace(opportunity, incumbent=incumbent))
-        except Exception:  # the screen is never blank (R-D6): keep what plays
-            logger.exception("auction engine failed; keeping the current creative")
+        except Exception:  # the screen is never blank (R-D6)
+            logger.exception("auction engine failed")
+            # Nothing decided may reach the screen: a held swap was cleared against
+            # older facts (e.g. before a minor arrived).
+            self._pending = None
+            if self._policy.unsafe_on_air(on_air, opportunity):
+                # Safety never depends on the engine: take an unsafe ad down now.
+                fallback = AuctionResult.house_ad(
+                    currency=opportunity.reserve, reason=NoFillReason.ENGINE_ERROR
+                )
+                return DeskOutcome(result=fallback, action=SwapAction.SWAP, swap_now=True)
             return DeskOutcome(result=None, action=SwapAction.UNCHANGED)
         plan = self._policy.apply(
             SwapInput(
@@ -73,7 +88,7 @@ class AuctionDesk:
             self._pending = None
             return DeskOutcome(result=result, action=SwapAction.SWAP, swap_now=True)
         self._tokens += 1
-        self._pending = (self._tokens, result)  # latest wins: supersedes any earlier hold
+        self._pending = (self._tokens, result, trigger)  # latest wins: supersedes earlier holds
         return DeskOutcome(
             result=result,
             action=SwapAction.SWAP,
@@ -88,6 +103,10 @@ class AuctionDesk:
         result = self._pending[1]
         self._pending = None
         return result
+
+    @property
+    def hold_pending(self) -> bool:
+        return self._pending is not None
 
     def aired(self, result: AuctionResult | None, *, displayed_at: datetime) -> None:
         """Record what the screen now shows (None or a no-fill: the house ad)."""

@@ -142,6 +142,32 @@ class CreativeSlot(_Model):
     hero_image_url: str | None = None
 
 
+class CreativeStageName(StrEnum):
+    TEASER = "teaser"  # 0-3 s: big visuals, logos
+    OFFER = "offer"  # 3-8 s: the basket offer sized to the group
+    CLOSE = "close"  # 8 s+: QR + "valid 10 min"
+
+
+class CreativeStage(_Model):
+    name: CreativeStageName
+    copy_text: Annotated[str, Field(min_length=1, max_length=280)]
+
+
+class CreativeOffer(_Model):
+    """The approved basket offer the creative is sized to (price never AI-written)."""
+
+    label: Annotated[str, Field(min_length=1, max_length=80)]
+    text: Annotated[str, Field(min_length=1, max_length=160)]
+    price: MoneyDTO
+    party_size: Annotated[int, Field(ge=1, le=12)]
+
+
+class CopySourceKind(StrEnum):
+    STOCK = "stock"
+    AI = "ai"
+    CACHE = "cache"
+
+
 class CreativeSpec(_Model):
     layout_id: EntityId
     slots: Annotated[list[CreativeSlot], Field(min_length=1, max_length=3)]
@@ -149,6 +175,12 @@ class CreativeSpec(_Model):
     video_url: str | None = None
     voiceover_url: str | None = None
     qr_url: str | None = None
+    # Dwell-stage copy (architecture §6.1); empty = render the slots' copy only.
+    stages: Annotated[list[CreativeStage], Field(max_length=3)] = Field(default_factory=list)
+    offer: CreativeOffer | None = None
+    # Why this ad: the angle the copy answers (hunger, queue, ...) and who wrote it.
+    angle: Annotated[str, Field(max_length=32)] | None = None
+    copy_source: CopySourceKind | None = None
 
 
 # ---------------------------------------------------------------- agent -> backend

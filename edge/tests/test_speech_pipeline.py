@@ -123,6 +123,7 @@ async def test_end_to_end_audio_to_utterance_over_the_scribe_protocol() -> None:
             api_key="test-key", url=await fake.start(), keyterms=DEFAULT_KEYTERMS.prompt_terms()
         ),
         lambda e: pipeline.on_event(e) if pipeline else None,
+        idle_close_s=None,
     )
     pipeline = SpeechPipeline(
         screen_id="demo-01",

@@ -42,6 +42,7 @@ class NoFillReason(StrEnum):
     NO_AUDIENCE = "no_audience"
     NO_ELIGIBLE_BIDS = "no_eligible_bids"
     BELOW_RESERVE = "below_reserve"
+    ENGINE_ERROR = "engine_error"  # the engine failed and what was on air became unsafe
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -89,6 +90,24 @@ class AuctionResult:
     coverage: Decimal  # 0..1, upper-bound estimate (R-O4)
     no_fill: NoFillReason | None
     incumbent_value: MoneyRate | None = None  # best value of the on-air set, if still feasible
+
+    @classmethod
+    def house_ad(cls, *, currency: MoneyRate, reason: NoFillReason) -> AuctionResult:
+        """A no-fill with no bids: the safe fallback when no auction can be trusted."""
+        zero = MoneyRate.zero(currency.currency)
+        return cls(
+            pricing=PricingRule.CORE_ADJUSTED,
+            layout=None,
+            winners=(),
+            bids=(),
+            exclusions=(),
+            bundle_value=zero,
+            bundle_revenue=zero,
+            single_brand_value=zero,
+            single_brand_revenue=zero,
+            coverage=Decimal(0),
+            no_fill=reason,
+        )
 
     @property
     def winner_ids(self) -> frozenset[CampaignId]:

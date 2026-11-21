@@ -149,7 +149,7 @@ export function ScreenPage() {
                         }}
                         aria-hidden={!isFront}
                     >
-                        <CreativeView spec={creative.spec} />
+                        <CreativeView spec={creative.spec} playKey={creative.creativeId} />
                     </div>
                 );
             })}

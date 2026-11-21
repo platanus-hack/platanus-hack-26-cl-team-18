@@ -12,7 +12,6 @@ import time
 from pathlib import Path
 
 import anyio
-import httpx
 import pytest
 
 from app.config.settings import AppSettings
@@ -33,17 +32,12 @@ if not KEY:
     pytest.skip("ELEVENLABS_API_KEY not set", allow_module_level=True)
 
 
+# Premade voice reachable with a TTS-only key (no voices_read permission needed).
+PREMADE_VOICE = "JBFqnCBsd6RMkjVDRZzb"
+
+
 def voice_id() -> str:
-    if SETTINGS.elevenlabs_narrator_voice_id:
-        return SETTINGS.elevenlabs_narrator_voice_id
-    resp = httpx.get(
-        "https://api.elevenlabs.io/v2/voices",
-        params={"category": "premade", "page_size": 10, "include_total_count": "false"},
-        headers={"xi-api-key": KEY},
-        timeout=20,
-    )
-    resp.raise_for_status()
-    return str(resp.json()["voices"][0]["voice_id"])
+    return SETTINGS.elevenlabs_narrator_voice_id or PREMADE_VOICE
 
 
 PROFILE = VoiceProfile(
@@ -53,11 +47,16 @@ PROFILE = VoiceProfile(
 )
 
 
-def test_real_voiceover_is_synthesized_cached_and_reused(tmp_path: Path) -> None:
+# Persistent (gitignored) cache: only the first run ever spends characters.
+LIVE_CACHE = Path(__file__).resolve().parents[2] / "var" / "live-cache"
+
+
+def test_real_voiceover_is_synthesized_cached_and_reused() -> None:
     async def run() -> tuple[str | None, str | None, float, VoiceoverService]:
         synth = ElevenLabsVoiceSynthesizer(KEY)
-        service = VoiceoverService(synth, FileMediaStore(tmp_path), PROFILE)
-        line = "Combo post-entreno · Voltio + Café Patio por $3.490"
+        service = VoiceoverService(synth, FileMediaStore(LIVE_CACHE), PROFILE)
+        # Short on purpose (~35 chars): the account has ~10k credits.
+        line = "Voltio y Café Patio, a dos minutos."
         started = time.perf_counter()
         first = await service.voiceover_url(line, voice_id())
         elapsed = time.perf_counter() - started
@@ -67,10 +66,14 @@ def test_real_voiceover_is_synthesized_cached_and_reused(tmp_path: Path) -> None
 
     first, second, elapsed, service = anyio.run(run)
     assert first is not None and first == second
-    assert service.stats.synthesized == 1 and service.stats.cache_hits == 1
-    data = (tmp_path / "voiceovers" / first.rsplit("/", 1)[1]).read_bytes()
+    assert service.stats.synthesized <= 1  # 0 on every rerun: the cache answers
+    assert service.stats.synthesized + service.stats.cache_hits == 2
+    data = (LIVE_CACHE / "voiceovers" / first.rsplit("/", 1)[1]).read_bytes()
     assert data[:3] == b"ID3" or data[:2] in (b"\xff\xfb", b"\xff\xf3", b"\xff\xf2")  # MP3
-    print(f"\nTTS {PROFILE.model_id}: {elapsed * 1000:.0f} ms, {len(data)} bytes")
+    print(
+        f"\nTTS {PROFILE.model_id}: {elapsed * 1000:.0f} ms, {len(data)} bytes, "
+        f"characters spent this run: {service.stats.characters}"
+    )
 
 
 def test_real_api_errors_translate() -> None:

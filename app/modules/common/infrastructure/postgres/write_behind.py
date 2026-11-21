@@ -98,7 +98,9 @@ class WriteBehindWriter:
                 except Exception as exc:  # reconnect and retry the same batch
                     self.stats.failures += 1
                     self.stats.last_error = type(exc).__name__
-                    logger.warning("write-behind %s failed: %s", self._thread.name, type(exc).__name__)
+                    logger.warning(
+                        "write-behind %s failed: %s", self._thread.name, type(exc).__name__
+                    )
                     try:
                         if conn is not None:
                             conn.close()

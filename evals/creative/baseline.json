@@ -1,0 +1,16 @@
+{
+  "recorded": {
+    "cache_hit_rate": 0.9047619047619048,
+    "cost_per_creative_usd": 0.00017466666666666667,
+    "must_contain_rate": 1.0,
+    "party_mention_rate": 1.0,
+    "quality_mean": 0.9780904761904762
+  },
+  "stock": {
+    "cache_hit_rate": 0.0,
+    "cost_per_creative_usd": 0.0,
+    "must_contain_rate": 1.0,
+    "party_mention_rate": 1.0,
+    "quality_mean": 0.9821333333333333
+  }
+}

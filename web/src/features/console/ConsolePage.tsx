@@ -87,6 +87,8 @@ function ScreenRow({ screenId, view }: { screenId: string; view: ScreenView }) {
             <MomentPanel screenId={screenId} view={view} />
             <AuctionPanel view={view} />
             <LatencyPanel view={view} />
+            <ReceiptPanel view={view} />
+            <MarketPanel view={view} />
             {view.degradation.length > 0 && (
                 <div className="flex flex-wrap gap-2 lg:col-span-3">
                     {view.degradation.map((flag) => (
@@ -284,6 +286,100 @@ function LatencyPanel({ view }: { view: ScreenView }) {
                     </li>
                 ))}
             </ol>
+        </Panel>
+    );
+}
+
+/** The last moment receipt: who looked, for how long, and what each brand paid. */
+function ReceiptPanel({ view }: { view: ScreenView }) {
+    const [last] = view.receipts;
+    // Session total: presentation only (ADR 0008 D5); each amount stays a decimal string.
+    const session = view.receipts.reduce((sum, r) => sum + Number(r.total.amount), 0);
+    return (
+        <Panel
+            title="Moment receipt"
+            aside={
+                view.receipts.length > 0 && (
+                    <span className="text-metadata text-muted tabular-nums">
+                        Session {session} {last?.total.currency}
+                    </span>
+                )
+            }
+        >
+            {!last ? (
+                <Empty>No play has been billed yet.</Empty>
+            ) : (
+                <div className="flex flex-col gap-2">
+                    <p className="tabular-nums">
+                        {last.people} people · {last.looking} looked · {last.attention_seconds} AS ·{" "}
+                        {last.played_s} s on screen
+                    </p>
+                    {last.total.amount === "0" ? (
+                        <StatusBadge tone="info" label="Charged $0: nobody looked" />
+                    ) : (
+                        <ul className="flex flex-col gap-1">
+                            {last.charges.map((c) => (
+                                <li
+                                    key={c.campaign_id}
+                                    className="flex justify-between tabular-nums"
+                                >
+                                    <span>{c.brand_name}</span>
+                                    <span>
+                                        {c.attention_seconds} AS × {c.price_per_as.amount} ={" "}
+                                        <strong>
+                                            ${c.amount.amount} {c.amount.currency}
+                                        </strong>
+                                    </span>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
+            )}
+        </Panel>
+    );
+}
+
+/** Live bids (the bidding war), stock (the clerk) and budgets (reserved while on air). */
+function MarketPanel({ view }: { view: ScreenView }) {
+    const book = view.book;
+    return (
+        <Panel
+            title="Market"
+            aside={<span className="text-metadata text-muted">/advertiser · /clerk</span>}
+        >
+            {!book ? (
+                <Empty>The book appears after the first decision.</Empty>
+            ) : (
+                <table className="w-full text-metadata tabular-nums">
+                    <thead className="text-muted">
+                        <tr>
+                            <th className="text-left font-normal">Brand</th>
+                            <th className="text-right font-normal">Bid ×</th>
+                            <th className="text-right font-normal">Spent</th>
+                            <th className="text-right font-normal">Held</th>
+                            <th className="text-right font-normal">Left</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {book.lines.map((l) => (
+                            <tr key={l.campaign_id}>
+                                <td>
+                                    {l.brand_name}
+                                    {l.on_air && <span className="ml-1 text-success">●</span>}
+                                    {!l.in_stock && (
+                                        <span className="ml-1 text-warning">out of stock</span>
+                                    )}
+                                </td>
+                                <td className="text-right">{l.multiplier}</td>
+                                <td className="text-right">{l.spent.amount}</td>
+                                <td className="text-right">{l.reserved.amount}</td>
+                                <td className="text-right">{l.remaining.amount}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            )}
         </Panel>
     );
 }

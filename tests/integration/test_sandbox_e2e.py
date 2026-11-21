@@ -175,6 +175,7 @@ def start_sandbox(tmp: Path, *, fake_env: dict[str, str] | None = None) -> Sandb
             "ELEVENLABS_BASE_URL": f"http://127.0.0.1:{fake_port}",
             "ELEVENLABS_NARRATOR_VOICE_ID": VOICE_ID,
             "MEDIA_DIR": str(tmp / "media"),
+            "ELEVENLABS_BUDGET_FILE": str(tmp / "budget.json"),
             "LOG_LEVEL": "DEBUG",
         },
         cwd=ROOT,

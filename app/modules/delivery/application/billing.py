@@ -21,6 +21,7 @@ from app.modules.campaigns.domain.book import CampaignId
 from app.modules.common.application.id_generator import IdGenerator
 from app.modules.common.domain.primitives.errors import DomainError
 from app.modules.common.domain.value_objects.money import Money
+from app.modules.delivery.application.ports.budget import BudgetGate
 from app.modules.delivery.application.ports.ledger import ChargeLedger
 from app.modules.delivery.domain.attention import (
     Attention,
@@ -28,7 +29,13 @@ from app.modules.delivery.domain.attention import (
     measure_attention,
     seconds_of,
 )
-from app.modules.delivery.domain.charge import BilledSlot, Charge, ChargeId, price_play
+from app.modules.delivery.domain.charge import (
+    BilledSlot,
+    Charge,
+    ChargeId,
+    ChargeReason,
+    price_play,
+)
 
 # Attention samples older than this are useless for any play still reporting.
 SAMPLE_RETENTION = timedelta(minutes=10)
@@ -54,6 +61,7 @@ class PlayRecord:
     people: int
     looking: int
     slots: tuple[BilledSlot, ...]
+    aired_at: datetime  # server instant it went on air: no play is billed before it
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -92,12 +100,17 @@ class AttentionLog:
 
 
 class DeliveryDesk:
-    def __init__(self, *, ledger: ChargeLedger, ids: IdGenerator) -> None:
+    def __init__(
+        self, *, ledger: ChargeLedger, ids: IdGenerator, budgets: BudgetGate | None = None
+    ) -> None:
         self._ledger = ledger
         self._ids = ids
+        self._budgets = budgets
         self._lock = Lock()
         self._plays: dict[str, PlayRecord] = {}
         self._billed: dict[str, tuple[str, Receipt]] = {}
+        # Per creative, the end of the last billed window: a play second bills once.
+        self._billed_until: dict[str, datetime] = {}
         self.attention = AttentionLog()
 
     def aired(self, play: PlayRecord) -> None:
@@ -131,8 +144,14 @@ class DeliveryDesk:
             play = self._plays.get(creative_id)
             if play is None or play.screen_id != screen_id:
                 return None
+            # Bill only time this creative was on air and not already billed: a window
+            # from before it aired, or re-sent under a new seq, never bills twice.
+            start = max(started_at, play.aired_at, self._billed_until.get(creative_id, started_at))
+            if start >= ended_at:
+                return None
+            self._billed_until[creative_id] = ended_at
             attention = measure_attention(
-                self.attention.samples(screen_id), start=started_at, end=ended_at
+                self.attention.samples(screen_id), start=start, end=ended_at
             )
             charges = tuple(
                 Charge(
@@ -145,15 +164,16 @@ class DeliveryDesk:
                     brand_id=priced.slot.brand_id,
                     attention_seconds=attention.attention_seconds,
                     price_per_as=priced.slot.price_per_as,
-                    amount=priced.amount,
-                    reason=priced.reason,
-                    played_from=started_at,
+                    amount=booked,
+                    reason=ChargeReason.BUDGET_CAP if booked < priced.amount else priced.reason,
+                    played_from=start,
                     played_to=ended_at,
                     recorded_at=recorded_at,
                 )
                 for priced in price_play(play.slots, attention.attention_seconds)
+                for booked in (self._book(creative_id, priced.slot.campaign_id, priced.amount),)
             )
-            played = ended_at - started_at
+            played = ended_at - start
             receipt = Receipt(
                 play=play,
                 played_s=seconds_of(played).quantize(Decimal("0.001")),
@@ -165,3 +185,8 @@ class DeliveryDesk:
                 self._billed.pop(next(iter(self._billed)))
         self._ledger.append(charges)
         return receipt
+
+    def _book(self, creative_id: str, campaign_id: CampaignId, amount: Money) -> Money:
+        if self._budgets is None:
+            return amount
+        return self._budgets.charge(creative_id, campaign_id, amount)

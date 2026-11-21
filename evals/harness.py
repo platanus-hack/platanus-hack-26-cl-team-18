@@ -15,7 +15,7 @@ from pathlib import Path
 from websockets.sync.client import ClientConnection
 
 from app.bootstrap.demo import DEMO_SCREEN
-from app.contract.messages import AudienceSnapshot, ConsoleAuction, CreativeReady
+from app.contract.messages import AudienceSnapshot, ConsoleAuction, ConsoleMoment, CreativeReady
 from evals.live import CONSOLE_MESSAGES, PLAYER_MESSAGES, LiveBackend, live_backend
 from evals.metrics import Decision
 from evals.scenario import Expect, Scenario, Scene
@@ -42,6 +42,7 @@ class RunRecord:
     initial: CreativeReady | None = None
     duration_s: float = 0.0
     errors: list[str] = field(default_factory=list)
+    moments: dict[int, ConsoleMoment] = field(default_factory=dict)  # step -> understood moment
 
 
 class _Session:
@@ -61,6 +62,7 @@ class _Session:
         self.seq = 0
         self.initial = self._next_creative(RESPONSE_TIMEOUT_S)
         self.screen = self.initial
+        self.last_moment: ConsoleMoment | None = None  # what the audience context understood
 
     def close(self) -> None:
         self._sockets.close()
@@ -95,14 +97,18 @@ class _Session:
                 message = CONSOLE_MESSAGES.validate_json(self.console.recv(timeout=remaining))
             except TimeoutError:
                 return None
-            if isinstance(message, ConsoleAuction):
+            if isinstance(message, ConsoleMoment):
+                self.last_moment = message
+            elif isinstance(message, ConsoleAuction):
                 return message
         return None
 
     def drain_console(self) -> None:
         try:
             while True:
-                self.console.recv(timeout=0.01)
+                message = CONSOLE_MESSAGES.validate_json(self.console.recv(timeout=0.01))
+                if isinstance(message, ConsoleMoment):
+                    self.last_moment = message
         except TimeoutError:
             return
 
@@ -295,6 +301,8 @@ def replay_recording(path: Path, *, speed: float = 1.0) -> RunRecord:
                 record.decisions.append(
                     _decision(record.source, index, snapshot.minor_likely.value, session, seen)
                 )
+                if session.last_moment is not None:
+                    record.moments[index] = session.last_moment
         finally:
             session.close()
     record.duration_s = time.perf_counter() - started

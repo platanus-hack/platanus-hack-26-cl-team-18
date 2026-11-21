@@ -91,8 +91,11 @@ real brand; real logos only with permission or clearly marked as a mock.
 **Prop markers:** `edge/props/markers.json` maps marker id → brand slug. Print
 each marker at least 4 × 4 cm on the prop, facing the camera when held.
 
-**Group-size offers in the seed data:** each basket defines offers for 1, 2
-and 3+ people ("Combo", "2×1", "Trío").
+**Group-size offers in the seed data:** each basket defines offers by party
+size (Voltio + Café Patio: Combo $3.490 · Dúo $5.990 · Trío $8.490 · Pack x4
+$10.990), and the copy names the group ("Para los 3 · Trío post-entreno…").
+With three people in beat 2 the screen shows the **Trío** price, not the
+single combo. Copy rules and evals: [`creative-generation.md`](creative-generation.md).
 
 **Video note:** every approved demo basket has a pre-generated AI video loop,
 approved by both brands, so the creative is full-motion from the first frame.

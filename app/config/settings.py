@@ -16,6 +16,9 @@ class AppSettings(BaseSettings):
     log_level: str = "INFO"
     demo_simulator: bool = False
     vlm_enabled: bool = False
+    # Postgres is the record (auctions, charges), written behind the hot path.
+    # Unset: everything stays in memory (simulator, tests, offline rehearsal).
+    database_url: SecretStr | None = None
     # Minimum ad seconds (docs/auction-plan.md D5): hold a swap so ads aren't strobed.
     # None = on, except app_env=test (fixed-clock tests get immediate swaps unless
     # they opt in and inject a scheduler).
@@ -54,6 +57,18 @@ class AppSettings(BaseSettings):
     # Pick one with `uv run python -m scripts.elevenlabs_voices`.
     elevenlabs_narrator_voice_id: str | None = None
     voiceovers_enabled: bool = True
+    # Hard cap on TTS characters this install may ever spend (persisted across restarts).
+    # The account has ~10k credits: leave headroom for rehearsal and live tests.
+    elevenlabs_char_budget: int = Field(default=2000, ge=0)
+    # Outside media_dir on purpose: /media is publicly served.
+    elevenlabs_budget_file: Path = Path("var/elevenlabs-budget.json")
+    # ------------------------------------------------------------ creative (docs/creative-generation.md)
+    # Warm AI copy (Claude Haiku 5.5) upgrades targeted stock copy in place. Needs
+    # ANTHROPIC_API_KEY; without it every creative airs on stock copy.
+    creative_ai_copy: bool = False
+    creative_copy_timeout_s: float = Field(default=2.5, gt=0, le=20)
+    # Generation spend cap per screen-hour, USD (the ROI rule applies under it).
+    creative_hourly_budget_usd: str = "2"
     # Speech topics from opted-in screens (ADR 0005: off by default, per screen).
     speech_mode_screens: list[str] = Field(default_factory=list)
     speech_topic_ttl_s: int = Field(default=60, gt=0, le=600)

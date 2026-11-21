@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 
 import pytest
@@ -105,7 +106,7 @@ def test_config_enforces_scribe_keyterm_limits() -> None:
 async def test_streams_chunks_commits_and_delivers_transcripts_in_order() -> None:
     fake = FakeScribe(transcripts=["uf, qué hambre"])
     events: list[ScribeEvent] = []
-    client = ScribeRealtime(config(await fake.start()), events.append)
+    client = ScribeRealtime(config(await fake.start()), events.append, idle_close_s=None)
     task = asyncio.create_task(client.run())
     try:
         await client.wait_connected(2)
@@ -126,7 +127,7 @@ async def test_streams_chunks_commits_and_delivers_transcripts_in_order() -> Non
 
 async def test_chunks_are_at_least_96ms() -> None:
     fake = FakeScribe()
-    client = ScribeRealtime(config(await fake.start()), lambda e: None)
+    client = ScribeRealtime(config(await fake.start()), lambda e: None, idle_close_s=None)
     task = asyncio.create_task(client.run())
     try:
         await client.wait_connected(2)
@@ -144,7 +145,9 @@ async def test_chunks_are_at_least_96ms() -> None:
 
 async def test_sends_silence_keepalives_when_idle() -> None:
     fake = FakeScribe()
-    client = ScribeRealtime(config(await fake.start()), lambda e: None, keepalive_s=0.03)
+    client = ScribeRealtime(
+        config(await fake.start()), lambda e: None, keepalive_s=0.03, idle_close_s=None
+    )
     task = asyncio.create_task(client.run())
     try:
         await client.wait_connected(2)
@@ -160,7 +163,9 @@ async def test_transient_error_reconnects_and_keeps_transcribing() -> None:
         transcripts=["primero", "uf qué hambre"], error_after_commits={1: "rate_limited"}
     )
     events: list[ScribeEvent] = []
-    client = ScribeRealtime(config(await fake.start()), events.append, backoff=(0.01,))
+    client = ScribeRealtime(
+        config(await fake.start()), events.append, backoff=(0.01,), idle_close_s=None
+    )
     task = asyncio.create_task(client.run())
     try:
         await client.wait_connected(2)
@@ -181,7 +186,9 @@ async def test_transient_error_reconnects_and_keeps_transcribing() -> None:
 async def test_fatal_auth_error_stops_and_reports() -> None:
     fake = FakeScribe()
     events: list[ScribeEvent] = []
-    client = ScribeRealtime(config(await fake.start(), key="wrong"), events.append, backoff=(0.01,))
+    client = ScribeRealtime(
+        config(await fake.start(), key="wrong"), events.append, backoff=(0.01,), idle_close_s=None
+    )
     try:
         with pytest.raises(ScribeFatalError, match="auth_error"):
             await asyncio.wait_for(client.run(), 3)
@@ -207,3 +214,56 @@ async def test_offline_audio_is_bounded() -> None:
         client.send_audio(VOICE)
     assert len(client._outbox) <= 4
     assert client.stats.dropped_audio_bytes > 0
+
+
+# ------------------------------------------------------------------ lazy sessions (cost)
+
+
+async def test_no_session_is_opened_until_there_is_speech() -> None:
+    fake = FakeScribe()
+    client = ScribeRealtime(config(await fake.start()), lambda e: None, keepalive_s=0.02)
+    task = asyncio.create_task(client.run())
+    try:
+        await asyncio.sleep(0.2)
+        assert fake.sessions == 0 and client.stats.sessions == 0  # silence costs nothing
+        client.send_audio(VOICE * 3)
+        await wait_for(lambda: fake.audio_bytes == 3 * FRAME_BYTES)
+        assert fake.sessions == 1
+    finally:
+        task.cancel()
+        await fake.stop()
+
+
+async def test_idle_session_closes_and_reopens_on_the_next_speech() -> None:
+    fake = FakeScribe(transcripts=["primero", "uf qué hambre"])
+    events: list[ScribeEvent] = []
+    client = ScribeRealtime(
+        config(await fake.start()), events.append, keepalive_s=0.02, idle_close_s=0.1
+    )
+    task = asyncio.create_task(client.run())
+    try:
+        client.send_audio(VOICE * 3)
+        client.commit()
+        await wait_for(lambda: any(isinstance(e, CommittedTranscript) for e in events))
+        await wait_for(lambda: client.stats.idle_closes == 1 and not client.connected)
+        keepalives_at_close = fake.keepalives
+        await asyncio.sleep(0.2)
+        assert fake.keepalives == keepalives_at_close  # closed: nothing is sent or billed
+        assert fake.sessions == 1
+
+        client.send_audio(VOICE * 3)  # someone speaks again
+        client.commit()
+        await wait_for(
+            lambda: (
+                [e.text for e in events if isinstance(e, CommittedTranscript)][-1:]
+                == ["uf qué hambre"]
+            )
+        )
+        assert fake.sessions == 2
+        voiced = [base64.b64decode(c["audio_base_64"]) for c in fake.chunks]
+        assert (
+            sum(len(pcm) for pcm in voiced if any(pcm)) == 6 * FRAME_BYTES
+        )  # every voiced byte, once
+    finally:
+        task.cancel()
+        await fake.stop()

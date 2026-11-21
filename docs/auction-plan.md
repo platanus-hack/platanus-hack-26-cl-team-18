@@ -426,10 +426,11 @@ reaction.
 | D9 trace | Done: `LatencyTrace.swap_not_before`; the console excludes the hold from glass-to-glass and server time | `contract/messages.py`, `web/.../metrics.ts` |
 | §4.9 contract, console | Done: new exclusion reasons with `detail`, revenue fields, `pricing`/`trigger`/`swap` on `console.auction` | `demo_console.py`, `ConsolePage.tsx` |
 | Held-product boost, speech-intent boost, context multipliers | Done in valuation; inputs not wired yet (audience `held_products`, `context.set`) | `valuation.py`, `AdOpportunity` |
-| R-B5 `SetLiveMultiplier` + `/advertiser` socket (S6) | **Open**: `Bidder.with_multiplier` and the `BID_CHANGED` trigger exist | — |
-| R-C4 `stock.set` from `/clerk` (S7) | **Open**: `AdOpportunity.out_of_stock` + `STOCK_CHANGED` exist | — |
-| R-B7 budget reservation, R-O6 auction log/Postgres (S9) | **Open** | — |
-| D7 minimum billable look | **Open**: belongs to `delivery`, which isn't built | — |
+| R-B5 bidding war (S6) | Done: `POST /api/advertiser/bid-multiplier` (`advertiser.bid_multiplier`), idempotent by `(campaign, seq)`: applied / duplicate / stale, 409 on a reused seq with another value, 422 outside ×0.2–5.0. Re-auctions the current moment (`BID_CHANGED`: 2 % hysteresis, 3 s hold). `/advertiser?brand=Rayo` page | `campaigns/application/live_book.py`, `api/demo_controls.py`, `web/src/features/advertiser` |
+| R-C4 stock (S7) | Done: `POST /api/clerk/stock` (`stock.set`). A change re-auctions (`STOCK_CHANGED`); an on-air brand going out of stock swaps at once. `/clerk?id=demo-01` page | `campaigns/application/stock.py`, `web/src/features/clerk` |
+| R-B7 budget reservation (S9) | Done: on air, each winner holds `price_per_as × looking × 15 s` (ceiling) against its budget; the play's charge settles it; an unreported hold expires after 2 min. Bidders see budget net of spend and holds | `campaigns/domain/budget.py`, `LiveCampaignBook` |
+| R-O6 auction log + charge ledger in Postgres (S9) | Done: always in memory, plus Postgres when `DATABASE_URL` is set (not in `app_env=test`). Written behind by one daemon thread, one transaction per unit, `ON CONFLICT DO NOTHING` on natural keys; never blocks the hot path. Tables `auction`, `charge` (append-only, migration 0002) | `common/infrastructure/postgres/write_behind.py`, `auction/infrastructure/auction_log.py`, `delivery/infrastructure/ledger.py` |
+| D7 minimum billable look + delivery | Done: `playback.report` → attention-seconds from the agent's anonymous tracklets (sample-and-hold, 10 s max) → a look counts only if ≥ 1 s **within the play**, then in full → each basket brand pays its price × AS (explicit $0 `no_attention`) → `console.receipt` + `console.book`. Idempotent by `screen:creative:seq`; a conflicting window fails; house ads never bill | `delivery/domain/attention.py`, `delivery/domain/charge.py`, `delivery/application/billing.py` |
 | D13 break-even multiplier on the console | **Open** | — |
 
 Verified facts from the seeded co-brand moment: basket value 8.6 vs solo 8
@@ -470,3 +471,25 @@ safety swap, a superseded hold never reaching the screen, the 3 s walk-away
 grace, billing-unit consistency on the console, the full demo script in order,
 and engine-failure retry. It is also verified on a live uvicorn server with
 `scripts.replay_audience`.
+
+### 10.2 Market inputs, budgets, billing and records (2026-11-21)
+
+S6, S7, S9 and D7 are implemented (§10 table). They are verified three ways:
+
+- **Unit:** attention table cases (glance, exactly 1 s, look in progress at
+  play start, look broken, silent agent), charges and $0, idempotent billing,
+  budget transitions, live-book seq semantics, stock, and the write-behind
+  writer (ordered units, reconnect without half batches, never blocks).
+- **End to end** (`tests/unit/api/test_auction_loop_e2e.py`, holds on): the
+  bidding war keeping the incumbent at ×1.24 and flipping at ×1.5 after 3 s,
+  slider idempotency and bounds over HTTP, a clerk stock-out reforming the
+  basket at once and a restock held 3 s, a watched play billed 26 CLP with the
+  hold settled, a glance billed $0, house ads never billed, and every auction
+  recorded.
+- **Real Postgres** (`tests/integration/test_records_postgres.py`, `make db-up`):
+  the live loop writes its auction and charge rows, a replayed charge is
+  deduped by natural key, and negative money is rejected.
+
+**Demo operations:** judges' phones open the Vite app through the tunnel
+(ADR 0008 D3). Point the tunnel at the web server (`:5173`, which proxies
+`/api` and `/ws` to the backend), not at `:8000`.

@@ -58,6 +58,9 @@ SPECS: dict[str, Spec] = {
         "gate", "lower", m.GLASS_TO_GLASS_P95_MS, label="Glass-to-glass p95 (ms)"
     ),
     "minor_windows_missed": Spec("gate", "lower", 0, label="Perception: minor windows missed"),
+    "inappropriate_ad_seconds": Spec(
+        "gate", "lower", 0, label="Video: seconds of a must-never brand on screen"
+    ),
     # Ratchets: deterministic product outcomes of the scripted suite.
     "scenario_pass_rate": Spec("ratchet", "higher", label="Scenario pass rate"),
     "fill_rate": Spec("ratchet", "higher", label="Fill rate"),
@@ -82,6 +85,14 @@ SPECS: dict[str, Spec] = {
     "loopback_round_trip_max_ms": Spec("info", "lower", label="Round trip max (ms)"),
     "glass_to_glass_samples": Spec("info", label="Glass-to-glass samples"),
     "soak_decisions_per_s": Spec("info", label="Soak throughput (decisions/s)"),
+    "video_clips": Spec("info", label="Video: clips"),
+    "video_ad_precision": Spec("info", label="Video: ad precision (fitting / paid time)"),
+    "video_sensible_ad_reach": Spec("info", label="Video: sensible-ad reach (fitting / clip time)"),
+    "video_paid_share": Spec("info", label="Video: paid screen-time share"),
+    "video_flicker_per_minute": Spec("info", "lower", label="Video: screen changes/min"),
+    "video_clips_with_unmapped_signals": Spec(
+        "info", "lower", label="Video: clips with objects seen but not understood"
+    ),
 }
 
 

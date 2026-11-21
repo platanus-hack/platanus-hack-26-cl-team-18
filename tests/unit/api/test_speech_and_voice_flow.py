@@ -64,6 +64,7 @@ def app_for(tmp_path: Path, *, speech: bool = True, synth: FakeSynth | None = No
         app_env="test",
         demo_simulator=True,
         media_dir=tmp_path,
+        elevenlabs_budget_file=tmp_path / "budget.json",
         speech_mode_screens=["demo-01"] if speech else [],
         elevenlabs_narrator_voice_id=NARRATOR if synth else None,
         **kw,
@@ -219,3 +220,40 @@ def test_quota_exhaustion_degrades_to_silent_creatives_and_tells_the_console(
         assert set(paid_brands(creative(player))) == {"Voltio", "Café Patio"}
         types = [console.receive_json()["type"] for _ in range(4)]
         assert types[-1] == "console.degradation"
+
+
+def test_character_budget_stops_new_lines_but_cached_ones_keep_playing(tmp_path: Path) -> None:
+    synth = FakeSynth()
+    # Fits one demo line (~65 chars) but not a second one (~45): copy can change,
+    # so the test asserts the arithmetic instead of hard-coding lengths.
+    budget = 100
+    app, clock = app_for(tmp_path, synth=synth, elevenlabs_char_budget=budget)
+    with (
+        TestClient(app) as client,
+        client.websocket_connect("/ws/screen/demo-01") as player,
+        client.websocket_connect("/ws/agent") as agent,
+    ):
+        creative(player)
+        agent.send_text(snapshot_for("co-brand", 1, clock.now_utc()).model_dump_json())
+        creative(player)
+        first = CreativeUpgraded.model_validate(player.receive_json())
+        spent = len(synth.requests[0].text)
+        assert spent <= budget < 2 * spent, "budget must fit exactly one line"
+
+        # A new line no longer fits what is left: it plays silent, no provider call.
+        agent.send_text(
+            snapshot_for("fitness", 2, clock.advance(timedelta(milliseconds=200))).model_dump_json()
+        )
+        assert paid_brands(creative(player)) == ("Voltio",)
+
+        # Back to the co-brand: the next frame is its creative, not a voice for fitness.
+        agent.send_text(
+            snapshot_for(
+                "co-brand", 3, clock.advance(timedelta(milliseconds=200))
+            ).model_dump_json()
+        )
+        assert set(paid_brands(creative(player))) == {"Voltio", "Café Patio"}
+        again = CreativeUpgraded.model_validate(player.receive_json())  # cache hit: free
+        assert again.spec.voiceover_url == first.spec.voiceover_url
+        assert len(synth.requests) == 1
+    assert f'"spent": {spent}' in (tmp_path / "budget.json").read_text()

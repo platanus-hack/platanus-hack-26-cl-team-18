@@ -254,6 +254,18 @@ export const ConsoleReceiptSchema = z.strictObject({
 });
 export type ConsoleReceipt = z.infer<typeof ConsoleReceiptSchema>;
 
+export const CopySourceKindSchema = z.enum(["stock", "ai", "cache"]);
+export type CopySourceKind = z.infer<typeof CopySourceKindSchema>;
+
+// The approved basket offer the creative is sized to (price never AI-written).
+export const CreativeOfferSchema = z.strictObject({
+  label: z.string().min(1).max(80),
+  text: z.string().min(1).max(160),
+  price: MoneyDTOSchema,
+  party_size: z.number().int().gte(1).lte(12),
+});
+export type CreativeOffer = z.infer<typeof CreativeOfferSchema>;
+
 export const CreativeSlotSchema = z.strictObject({
   brand_id: z.string().min(1).max(64),
   brand_name: z.string().min(1).max(80),
@@ -264,6 +276,15 @@ export const CreativeSlotSchema = z.strictObject({
 });
 export type CreativeSlot = z.infer<typeof CreativeSlotSchema>;
 
+export const CreativeStageNameSchema = z.enum(["teaser", "offer", "close"]);
+export type CreativeStageName = z.infer<typeof CreativeStageNameSchema>;
+
+export const CreativeStageSchema = z.strictObject({
+  name: CreativeStageNameSchema,
+  copy_text: z.string().min(1).max(280),
+});
+export type CreativeStage = z.infer<typeof CreativeStageSchema>;
+
 export const CreativeSpecSchema = z.strictObject({
   layout_id: z.string().min(1).max(64),
   slots: z.array(CreativeSlotSchema).min(1).max(3),
@@ -271,6 +292,10 @@ export const CreativeSpecSchema = z.strictObject({
   video_url: z.string().nullable(),
   voiceover_url: z.string().nullable(),
   qr_url: z.string().nullable(),
+  stages: z.array(CreativeStageSchema).max(3),
+  offer: CreativeOfferSchema.nullable(),
+  angle: z.string().max(32).nullable(),
+  copy_source: CopySourceKindSchema.nullable(),
 });
 export type CreativeSpec = z.infer<typeof CreativeSpecSchema>;
 

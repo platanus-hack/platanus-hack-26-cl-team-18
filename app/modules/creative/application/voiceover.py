@@ -16,6 +16,7 @@ import unicodedata
 from dataclasses import dataclass
 
 from app.modules.creative.application.ports.voice import (
+    CharacterBudget,
     MediaStore,
     VoiceFailure,
     VoiceRequest,
@@ -75,11 +76,16 @@ class VoiceoverStats:
 
 class VoiceoverService:
     def __init__(
-        self, synthesizer: VoiceSynthesizer, store: MediaStore, profile: VoiceProfile
+        self,
+        synthesizer: VoiceSynthesizer,
+        store: MediaStore,
+        profile: VoiceProfile,
+        budget: CharacterBudget | None = None,
     ) -> None:
         self._synthesizer = synthesizer
         self._store = store
         self._profile = profile
+        self._budget = budget
         self.stats = VoiceoverStats()
 
     def key_for(self, copy: str, voice_id: str) -> str:
@@ -94,8 +100,6 @@ class VoiceoverService:
 
     async def voiceover_url(self, copy: str, voice_id: str) -> str | None:
         """Warm path: cached URL, or synthesize + store. None means 'play without voice'."""
-        if self.stats.disabled_by is not None:
-            return None
         try:
             line = spoken_line(copy)
         except InvalidSpokenLine as exc:
@@ -105,6 +109,13 @@ class VoiceoverService:
         if (url := self._store.url_if_cached(key, self._profile.extension)) is not None:
             self.stats.cache_hits += 1
             return url
+        if self.stats.disabled_by is not None:
+            return None  # provider calls are off (auth, quota or budget); cached lines still play
+        if self._budget is not None and self._budget.remaining() < len(line):
+            # Cache hits above stay free; only new lines are refused.
+            self.stats.disabled_by = VoiceFailure.BUDGET
+            logger.warning("voice-over budget spent: new lines play without voice")
+            return None
         request = VoiceRequest(
             text=line,
             voice_id=voice_id,
@@ -125,5 +136,8 @@ class VoiceoverService:
             )
             return None
         self.stats.synthesized += 1
-        self.stats.characters += voice.character_cost or len(line)
+        cost = voice.character_cost if voice.character_cost is not None else len(line)
+        self.stats.characters += cost
+        if self._budget is not None:
+            self._budget.spend(cost)
         return self._store.put(key, self._profile.extension, voice.audio)

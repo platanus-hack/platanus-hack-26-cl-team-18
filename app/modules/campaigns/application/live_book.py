@@ -64,10 +64,29 @@ class LiveCampaignBook:
                 bidder=bidder, account=account, multiplier_seq=0
             )
 
-    def snapshot(self) -> tuple[Bidder, ...]:
-        """Immutable bidders for one auction: live multiplier and budget left applied."""
+    def snapshot(self, *, excluding_hold: str | None = None) -> tuple[Bidder, ...]:
+        """Immutable bidders for one auction: live multiplier and budget left applied.
+
+        `excluding_hold` is the on-air creative: a re-auction replaces that play, so
+        its own hold must not price its winners out of the very screen they hold.
+        """
         with self._lock:
-            return tuple(self._bidder(entry) for entry in self._entries.values())
+            return tuple(self._bidder(entry, excluding_hold) for entry in self._entries.values())
+
+    def charge(self, hold_key: str, campaign_id: CampaignId, amount: Money) -> Money:
+        """Atomically cap a charge at the budget left and book it (settling the hold)."""
+        with self._lock:
+            entry = self._entry(campaign_id)
+            if entry.account is None:
+                return amount
+            booked = entry.account.capped_charge(hold_key, amount)
+            self._update(campaign_id, lambda account: account.settle(hold_key, booked))
+            return booked
+
+    def can_afford(self, campaign_id: CampaignId, amount: Money) -> bool:
+        with self._lock:
+            account = self._entry(campaign_id).account
+            return account is None or account.remaining >= amount
 
     def entries(self) -> tuple[BookEntry, ...]:
         with self._lock:
@@ -97,13 +116,15 @@ class LiveCampaignBook:
     def reserve(self, key: str, holds: dict[CampaignId, Money], *, at: datetime) -> None:
         with self._lock:
             for campaign_id, amount in holds.items():
-                self._update(campaign_id, lambda account: account.reserve(key, amount, at=at))
+                self._update(
+                    campaign_id, lambda account, held=amount: account.reserve(key, held, at=at)
+                )
             self._expire(at)
 
     def settle(self, key: str, charges: dict[CampaignId, Money]) -> None:
         with self._lock:
             for campaign_id, charge in charges.items():
-                self._update(campaign_id, lambda account: account.settle(key, charge))
+                self._update(campaign_id, lambda account, paid=charge: account.settle(key, paid))
 
     def release(self, key: str) -> None:
         with self._lock:
@@ -132,10 +153,14 @@ class LiveCampaignBook:
         return entry
 
     @staticmethod
-    def _bidder(entry: BookEntry) -> Bidder:
+    def _bidder(entry: BookEntry, excluding_hold: str | None = None) -> Bidder:
         bidder = entry.bidder
         if entry.account is None:
             return bidder
+        account = entry.account
+        remaining = (
+            account.remaining if excluding_hold is None else account.available_for(excluding_hold)
+        )
         return Bidder(
             campaign_id=bidder.campaign_id,
             brand_id=bidder.brand_id,
@@ -146,5 +171,5 @@ class LiveCampaignBook:
             basket_bonuses=bidder.basket_bonuses,
             live_multiplier=bidder.live_multiplier,
             active=bidder.active,
-            budget_remaining=entry.account.remaining,
+            budget_remaining=remaining,
         )
