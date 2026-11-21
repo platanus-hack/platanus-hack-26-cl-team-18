@@ -62,3 +62,15 @@ def test_stop_cleans_owned_children_when_the_process_leader_has_exited(tmp_path)
                 os.killpg(worker.process.pid, signal.SIGTERM)
             except ProcessLookupError:
                 pass
+
+
+def test_the_station_starts_in_standby_unless_asked_to_start_live():
+    from scripts.live_demo import agent_live_args, live_switch_environment
+
+    assert live_switch_environment({"A": "1"}, start_live=False) == {
+        "A": "1",
+        "LIVE_STARTS_ON": "false",
+    }
+    assert live_switch_environment({}, start_live=True)["LIVE_STARTS_ON"] == "true"
+    assert agent_live_args(start_live=False) == ["--await-live"]
+    assert agent_live_args(start_live=True) == []

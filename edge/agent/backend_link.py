@@ -6,6 +6,8 @@
 - Bounded outbox: when full, drop the oldest pending item.
 - Rejected frames come back as `system.error`; they are logged and counted,
   never retried (a bad frame stays bad).
+- `hello` (an `agent.hello`) is sent first on every connection, ahead of the
+  outbox; the backend answers with `live.status`, handed to `on_status`.
 """
 
 from __future__ import annotations
@@ -21,7 +23,9 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 import websockets
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
+
+from agent.contract import LiveStatus
 
 logger = logging.getLogger(__name__)
 
@@ -66,8 +70,12 @@ class BackendLink:
         backoff_max_s: float = 5.0,
         state_max_age_s: float = 1.5,
         monotonic: Callable[[], float] = time.monotonic,
+        hello: BaseModel | None = None,
+        on_status: Callable[[LiveStatus], None] | None = None,
     ) -> None:
         self._url = url
+        self._hello = hello
+        self._on_status = on_status
         self._connect = connect
         self._pending: deque[_Pending] = deque()
         self._now = monotonic
@@ -116,8 +124,10 @@ class BackendLink:
                 await self._sleep_backoff(attempt, exc)
                 continue
             attempt = 0
-            self._connected.set()
             try:
+                if self._hello is not None:
+                    await socket.send(self._hello.model_dump_json())
+                self._connected.set()
                 await self._pump(socket)
             except (OSError, websockets.WebSocketException) as exc:
                 logger.warning("backend link dropped: %s", exc)
@@ -182,7 +192,15 @@ class BackendLink:
                 payload: Any = json.loads(frame)
             except json.JSONDecodeError:
                 continue
-            if isinstance(payload, dict) and payload.get("type") == "system.error":
+            if isinstance(payload, dict) and payload.get("type") == "live.status":
+                try:
+                    status = LiveStatus.model_validate(payload)
+                except ValidationError:
+                    logger.warning("backend sent an invalid live.status; ignored")
+                    continue
+                if self._on_status is not None:
+                    self._on_status(status)
+            elif isinstance(payload, dict) and payload.get("type") == "system.error":
                 self.stats.rejected += 1
                 logger.warning(
                     "backend rejected %s: %s %s",

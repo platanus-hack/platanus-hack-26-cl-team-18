@@ -44,6 +44,17 @@ def provider_environment(environment: dict[str, str], *, paid: bool) -> dict[str
     return result
 
 
+def live_switch_environment(environment: dict[str, str], *, start_live: bool) -> dict[str, str]:
+    """The station starts in standby: nothing is sensed or generated until the console's
+    "Iniciar en vivo" button (app/realtime/live_switch.py). `--start-live` skips it."""
+    return {**environment, "LIVE_STARTS_ON": "true" if start_live else "false"}
+
+
+def agent_live_args(*, start_live: bool) -> list[str]:
+    """Agents in a standby station wait for the switch before opening the camera loop or mic."""
+    return [] if start_live else ["--await-live"]
+
+
 @dataclass
 class ManagedProcess:
     name: str
@@ -106,6 +117,11 @@ def main() -> int:
         "--speech", action="store_true", help="opt-in speech; ADR 0005 disclosure applies"
     )
     parser.add_argument("--silero-model", type=Path)
+    parser.add_argument(
+        "--start-live",
+        action="store_true",
+        help="skip standby: sense and generate from startup (default: wait for the console)",
+    )
     parser.add_argument("--no-open", action="store_true")
     args = parser.parse_args()
     if args.speech and not args.paid_providers:
@@ -144,7 +160,10 @@ def main() -> int:
     backend = f"http://127.0.0.1:{args.backend_port}"
     origin = f"http://127.0.0.1:{args.web_port}"
     link = backend.replace("http://", "ws://") + "/ws/agent"
-    env = provider_environment(dict(os.environ), paid=args.paid_providers)
+    env = live_switch_environment(
+        provider_environment(dict(os.environ), paid=args.paid_providers),
+        start_live=args.start_live,
+    )
     env["BACKEND_URL"] = backend
     # An inherited build override must not send this station to a different backend.
     env["VITE_BACKEND_URL"] = origin
@@ -200,6 +219,7 @@ def main() -> int:
                 "props/markers.json",
                 "--device",
                 "cpu",
+                *agent_live_args(start_live=args.start_live),
             ],
             ROOT / "edge",
         ),
@@ -220,6 +240,7 @@ def main() -> int:
                     "--speech-mode",
                     "--silero-model",
                     str(args.silero_model.resolve()),
+                    *agent_live_args(start_live=args.start_live),
                 ],
                 ROOT / "edge",
             )
@@ -242,8 +263,13 @@ def main() -> int:
         f"Player: {origin}/screen?id={args.screen}\nConsole: {origin}/console?screen={args.screen}",
         flush=True,
     )
+    if not args.start_live:
+        print(
+            "STANDBY: camera, mic and ad generation wait for 'Iniciar en vivo' on the console",
+            flush=True,
+        )
     if args.speech:
-        print("● MICROPHONE ON: opted-in ElevenLabs speech", flush=True)
+        print("Speech opted in: the mic opens only while the console is live", flush=True)
     if not args.paid_providers:
         print("Paid providers OFF: local perception and approved stock ads", flush=True)
     opened = args.no_open

@@ -31,7 +31,7 @@ from app.modules.creative.application.ports.copywriter import (
     CopyWriterError,
     TokenUsage,
 )
-from app.modules.creative.application.stock_copy import StockCopywriter
+from app.modules.creative.application.stock_copy import StockCopywriter, hook_options
 from app.modules.creative.domain.brief import CreativeBrief
 from app.modules.creative.domain.cost import (
     CostModel,
@@ -154,7 +154,9 @@ class CreativeStudio:
         self._timer = timer
         self.disabled_by: CopyFailure | None = None
         self.stats = StudioStats()
-        self._memo: OrderedDict[CreativeBrief, tuple[CopyDraft, QualityScore]] = OrderedDict()
+        self._memo: OrderedDict[tuple[CreativeBrief, int], tuple[CopyDraft, QualityScore]] = (
+            OrderedDict()
+        )
         # compose() runs on worker threads (under the demo lock); upgrades run on the event
         # loop thread. One lock guards the memo, the cache and the ledger between them.
         self._lock = threading.RLock()
@@ -165,13 +167,23 @@ class CreativeStudio:
 
     # ------------------------------------------------------------------ hot
 
-    def compose(self, brief: CreativeBrief) -> Composed:
+    def hook_count(self, brief: CreativeBrief) -> int:
+        """How many approved hooks may be tested for this brief: 1 when guarded AI copy is
+        cached for it (that draft airs as-is), else the stock hook options."""
+        with self._lock:
+            cached = self.cache.peek(brief.signature())
+            if cached is not None and score_draft(cached, brief).verdict.passed:
+                return 1
+        return len(hook_options(brief))
+
+    def compose(self, brief: CreativeBrief, *, variant: int = 0) -> Composed:
+        """`variant` picks among the approved stock hooks (HookLab); 0 is the targeted one."""
         started = self._timer()
         with self._lock:
-            memo = self._memo.get(brief)
+            memo = self._memo.get((brief, variant))
             if memo is None:
-                memo = self._decide(brief)
-                self._memo[brief] = memo
+                memo = self._decide(brief, variant)
+                self._memo[(brief, variant)] = memo
                 while len(self._memo) > MEMO_ENTRIES:
                     self._memo.popitem(last=False)
             draft, score = memo
@@ -184,13 +196,19 @@ class CreativeStudio:
             brief=brief, draft=draft, score=score, compose_ms=(self._timer() - started) * 1000
         )
 
-    def _decide(self, brief: CreativeBrief) -> tuple[CopyDraft, QualityScore]:
-        """Cached AI copy if it still passes the guard for this exact brief, else stock."""
+    def _decide(self, brief: CreativeBrief, variant: int = 0) -> tuple[CopyDraft, QualityScore]:
+        """Cached AI copy if it still passes the guard for this exact brief, else stock (the
+        requested hook if it passes the guard for this brief, else the targeted one)."""
         draft = self.cache.peek(brief.signature())
         if draft is not None:
             score = score_draft(draft, brief)
             if score.verdict.passed:
                 return draft, score
+        if variant:
+            alternate = self._stock.compose(brief, variant=variant)
+            score = score_draft(alternate, brief)
+            if score.verdict.passed:
+                return alternate, score
         stock = self._stock.compose(brief)
         return stock, score_draft(stock, brief)
 

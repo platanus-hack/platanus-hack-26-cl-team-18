@@ -27,6 +27,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from agent.backend_link import BackendLink
+from agent.contract import AgentHello, AgentRole
+from agent.live import LiveGate
 from agent.vision.adapters import DEFAULT_OBJECT_MODEL, ArucoMarkerDetector, UltralyticsDetector
 from agent.vision.detector import (
     CompositeDetector,
@@ -116,7 +118,18 @@ async def run(args: argparse.Namespace) -> int:
     )
     detector = timing
 
-    backend = None if args.offline else BackendLink(args.backend)
+    # The console's "En vivo" switch (agent/live.py). Recordings are offline clips:
+    # they follow no switch.
+    live = None if args.offline else LiveGate(args.screen, initial=not args.await_live)
+    backend = (
+        None
+        if args.offline or live is None
+        else BackendLink(
+            args.backend,
+            hello=AgentHello(screen_id=args.screen, role=AgentRole.VISION),
+            on_status=live.apply,
+        )
+    )
     recorder = (
         JsonlRecorder(Path(args.record), source.clip_start, forward=backend)
         if args.record and isinstance(source, ClipSource)
@@ -158,6 +171,7 @@ async def run(args: argparse.Namespace) -> int:
             args.screen, SnapshotConfig(debounce=timedelta(milliseconds=args.debounce_ms))
         ),
         keyframes=None if (args.no_keyframes or args.record) else blur_encoder(),
+        live=live,
     )
     link_task = asyncio.create_task(backend.run()) if backend else None
     try:
@@ -210,6 +224,11 @@ def argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--screen", required=True)
     parser.add_argument("--backend", default="ws://127.0.0.1:8000/ws/agent")
     parser.add_argument("--offline", action="store_true", help="don't connect to the backend")
+    parser.add_argument(
+        "--await-live",
+        action="store_true",
+        help="start in standby: sense nothing until the console's live switch is on",
+    )
     parser.add_argument("--camera", type=int, default=0)
     parser.add_argument("--video", help="a video file instead of the webcam")
     parser.add_argument("--record", help="write the eval JSONL (docs/evals.md §4); needs --video")

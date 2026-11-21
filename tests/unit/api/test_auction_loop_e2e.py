@@ -820,3 +820,41 @@ def test_a_failing_auto_bid_tick_keeps_the_loop_alive(
         loop.clock.advance(timedelta(seconds=5))
         loop.scheduler.fire_due()
         assert calls["n"] == n  # exactly one tick per period, even after the failure
+
+
+def test_the_aired_hook_is_credited_with_the_attention_it_earned(tmp_path: Path) -> None:
+    """Stock copy (no cached AI draft): approved hooks rotate and each earns its attention."""
+    from tests.unit.api.test_ws_gateway import Recorder
+
+    clock = FixedClock(T0)
+    settings = AppSettings(
+        app_env="test", demo_simulator=True, media_dir=tmp_path, creative_ai_copy=False
+    )
+    container = build_container(settings, clock=clock)
+    with (
+        TestClient(create_app(container=container)) as client,
+        client.websocket_connect("/ws/screen/demo-01") as player,
+        client.websocket_connect("/ws/agent") as agent,
+    ):
+        assert paid_brands(CreativeReady.model_validate(player.receive_json())) == ()
+        agent.send_text(snapshot_for("fitness", 1, clock.now_utc()).model_dump_json())
+        first = CreativeReady.model_validate(player.receive_json())
+        assert first.spec.copy_source is not None and first.spec.copy_source.value == "stock"
+        routed = Recorder()
+        container.router.on(PlaybackReport, routed)
+        player.send_text(
+            PlaybackReport(
+                screen_id="demo-01",
+                creative_id=first.creative_id,
+                seq=1,
+                started_at=first.trace.ready_at,
+                ended_at=clock.advance(timedelta(seconds=4)),
+            ).model_dump_json()
+        )
+        routed.wait_for(1)
+        rows = client.get("/api/hooks").json()
+    assert len(rows) >= 2  # the targeted hook plus approved alternates are under test
+    played = [row for row in rows if row["plays"]]
+    assert [(row["variant"], row["hook"]) for row in played] == [
+        (0, first.spec.stages[0].copy_text)  # untried hooks air in order, targeted first
+    ]

@@ -546,6 +546,19 @@ an AI draft can only replace stock copy if it keeps them.
 - The guard treats taglines as approved text.
 - The prompt writes in the lead brand's voice and may use a tagline verbatim, never paraphrased.
 
+**Hook testing** (`hook_test.py`, `HookLab`):
+
+- **The options.** Each brief has a set of approved hook options: the targeted hook first, the
+  angle's alternate line, and the lead brand's tagline. Every option passes the guard.
+- **The pick.** A deterministic UCB1 chooses which option airs. Untried options go first, in
+  order, then the best attention-seconds per play plus an exploration bonus. A QR scan counts as
+  10 s. There is no randomness, so ties go to the targeted hook.
+- **Credit.** The playback receipt's validated attention-seconds and redemptions are credited to
+  the option that aired.
+- **Out of scope.** Cached guarded AI copy airs as-is, so it is not split into a test.
+- **Results.** `GET /api/hooks` (demo market only) lists every option with plays, attention,
+  scans and reward per play. Learning is in memory and per screen.
+
 **Layout** (`web/src/features/screen/CreativeView.tsx`, `creative.css`, `ad-theme.ts`), after the
 Relvo brand deck (`relvo_10abril` pp. 18–25):
 

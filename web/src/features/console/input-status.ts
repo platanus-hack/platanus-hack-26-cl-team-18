@@ -1,6 +1,14 @@
 import { z } from "zod";
 
+const ProviderSchema = z.object({ configured: z.boolean() });
+
 export const InputHealthSchema = z.object({
+    // Which paid generators have keys (app/bootstrap/readiness.py); absent on old backends.
+    ads: z
+        .object({
+            providers: z.object({ ai_copy: ProviderSchema, voice: ProviderSchema }).partial(),
+        })
+        .optional(),
     inputs: z.record(
         z.string(),
         z.object({
@@ -32,4 +40,17 @@ export function inputLabels(health: z.infer<typeof InputHealthSchema>, screen: s
               : "Voz habilitada · esperando frase",
         player: input?.player_connected ? "Pantalla conectada" : "Pantalla desconectada",
     };
+}
+
+/** What "ad generation" means on this station: AI only where keys exist, else stock copy. */
+export function generationLabel(health: z.infer<typeof InputHealthSchema>): {
+    label: string;
+    ai: boolean;
+} {
+    const providers = health.ads?.providers;
+    const copy = providers?.ai_copy?.configured ?? false;
+    const voice = providers?.voice?.configured ?? false;
+    if (copy && voice) return { label: "IA: copy y voz configurados", ai: true };
+    if (copy) return { label: "IA: copy configurado · sin voz", ai: true };
+    return { label: "Sin claves de IA: anuncios con copy aprobado de stock", ai: false };
 }

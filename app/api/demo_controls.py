@@ -7,6 +7,7 @@ business logic here. The live market supplies controls; production rejects opera
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Annotated
 
 import anyio
@@ -80,3 +81,20 @@ async def autobid(
     except UnknownCampaign as exc:
         raise HTTPException(status_code=404, detail=exc.msg) from exc
     return {"enabled": enabled}
+
+
+@router.get("/hooks")
+async def hooks(request: Request) -> list[dict[str, object]]:
+    """Hook testing: each approved hook option with its plays, attention and scans."""
+    return [
+        {
+            "brief": result.key,
+            "variant": result.variant,
+            "hook": result.hook,
+            "plays": result.stats.plays,
+            "attention_s": format(result.stats.attention_s, "f"),
+            "scans": result.stats.scans,
+            "reward_per_play": format(result.stats.mean_reward().quantize(Decimal("0.01")), "f"),
+        }
+        for result in _controls(request).hook_results()
+    ]

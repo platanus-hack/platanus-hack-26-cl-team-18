@@ -1497,7 +1497,12 @@ def register_demo(
         swap holds still apply), so standby can't charge or skip a receipt.
         """
         latest = reset_speech()
+        with lock:
+            floor = latest_observed_at
         now = clock.now_utc()
+        if floor is not None and now <= floor.value:
+            # Decisions only move forward: standby must land after the last reading.
+            now = floor.value + timedelta(microseconds=1)
         empty = AudienceSnapshot(
             screen_id=wire_screen_id,
             seq=latest[0].seq if latest is not None else 0,

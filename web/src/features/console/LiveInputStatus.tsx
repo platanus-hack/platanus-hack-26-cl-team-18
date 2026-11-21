@@ -1,7 +1,7 @@
 import { backendHttpUrl } from "@/lib/config";
 import { Badge } from "@/shared/ui/badge";
 import { useEffect, useState } from "react";
-import { InputHealthSchema, inputLabels } from "./input-status";
+import { generationLabel, InputHealthSchema, inputLabels } from "./input-status";
 
 export function LiveInputStatus({ screen }: { screen: string }) {
     const [health, setHealth] = useState<ReturnType<typeof InputHealthSchema.parse> | null>(null);
@@ -38,6 +38,7 @@ export function LiveInputStatus({ screen }: { screen: string }) {
             </Badge>
         );
     const labels = inputLabels(health, screen);
+    const generation = generationLabel(health);
     const input = health.inputs[screen];
     return (
         <div className="flex flex-wrap items-center gap-2" aria-label={`Entradas · ${screen}`}>
@@ -50,6 +51,9 @@ export function LiveInputStatus({ screen }: { screen: string }) {
             </Badge>
             <Badge tone={input?.player_connected ? "success" : "warning"} appearance="soft">
                 {labels.player}
+            </Badge>
+            <Badge tone={generation.ai ? "info" : "neutral"} appearance="soft">
+                {generation.label}
             </Badge>
         </div>
     );

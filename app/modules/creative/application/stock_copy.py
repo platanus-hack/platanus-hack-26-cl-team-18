@@ -104,6 +104,16 @@ _DAYPART_TEASERS: dict[tuple[Angle, Daypart], tuple[str, str]] = {
     ),
 }
 
+# One alternate per angle for hook testing (HookLab): same need, different line. Each is
+# person-neutral (works for one viewer or a group) and keeps its angle's keyword.
+_ALTERNATE_HOOKS: dict[Angle, str] = {
+    Angle.HUNGER: "Hambre, aquí al lado.",
+    Angle.ENERGY: "Recarga antes de seguir.",
+    Angle.COFFEE_BREAK: "Café, y a seguir.",
+    Angle.POST_WORKOUT: "Después del entreno, recarga.",
+    Angle.QUEUE: "Pedido aquí, retiro en caja.",
+}
+
 _CLOSES: dict[Angle, str] = {
     Angle.QUEUE: "Escanea ahora y canjea al pagar.",
     Angle.COMPLETE_BASKET: "Escanea y súmalo a tu compra.",
@@ -160,14 +170,31 @@ def offer_for(brief: CreativeBrief) -> str:
     return f"{brief.offer.text}{who} por {brief.offer.price_text}."
 
 
+def _angle_of(brief: CreativeBrief) -> Angle:
+    angle = brief.angle.angle
+    if angle is Angle.COMPLETE_BASKET and brief.held_brand is None:
+        return Angle.GENERIC
+    return angle
+
+
+def hook_options(brief: CreativeBrief) -> tuple[str, ...]:
+    """Approved hooks for this brief, the targeted one first: the angle's alternate line and
+    the lead brand's own tagline, when they differ. Option 0 is what airs without a test."""
+    angle = _angle_of(brief)
+    options = [teaser_for(brief, angle)]
+    for extra in (_ALTERNATE_HOOKS.get(angle), brief.brands[0].tagline):
+        if extra and extra not in options:
+            options.append(extra)
+    return tuple(options)
+
+
 class StockCopywriter:
     name = "stock"
 
-    def compose(self, brief: CreativeBrief) -> CopyDraft:
-        angle = brief.angle.angle
-        if angle is Angle.COMPLETE_BASKET and brief.held_brand is None:
-            angle = Angle.GENERIC
-        teaser = teaser_for(brief, angle)
+    def compose(self, brief: CreativeBrief, *, variant: int = 0) -> CopyDraft:
+        angle = _angle_of(brief)
+        options = hook_options(brief)
+        teaser = options[variant % len(options)]
         offer = offer_for(brief)
         close = _CLOSES.get(angle, _DEFAULT_CLOSE)
         spoken = f"{teaser} {offer}"
@@ -181,7 +208,8 @@ class StockCopywriter:
             model_version="stock-templates@2",
             reasoning=(
                 f"angle={angle.value} via {brief.angle.reason.value}; party={brief.party}; "
-                f"daypart={brief.daypart.value if brief.daypart else '-'}"
+                f"daypart={brief.daypart.value if brief.daypart else '-'}; "
+                f"hook={variant % len(options)}/{len(options)}"
             ),
         )
 

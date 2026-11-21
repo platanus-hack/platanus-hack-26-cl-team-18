@@ -68,6 +68,9 @@ class HeldProductTracker:
         self._min_hits = min_hits
         self._margin = person_margin
 
+    def reset(self) -> None:
+        self._window.clear()
+
     def update(
         self, markers: tuple[MarkerDetection, ...], tracks: list[TrackView]
     ) -> list[HeldProductView]:

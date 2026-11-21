@@ -164,4 +164,8 @@ def register_live_market(container: Container) -> DemoControls:
         # auctions and plays are the observations the rules learn from.
         set_autobid=default.controls.set_autobid,
         book_for=lambda screen_id: screen(screen_id).controls.book_view(),
+        # Each screen learns its own hooks (its room, its light); the API shows them all.
+        hook_results=lambda: [
+            result for runtime in runtimes() for result in runtime.controls.hook_results()
+        ],
     )

@@ -70,5 +70,8 @@ class InputActivity:
                     "player_connected": screen in players,
                     "last_keyterm_count": activity.keyterm_count,
                 }
-                for screen, activity in self._screens.items()
+                # A connected player in standby has no input yet; it is still connected.
+                for screen, activity in (
+                    self._screens | {p: _Activity() for p in players if p not in self._screens}
+                ).items()
             }

@@ -26,6 +26,7 @@ import {
     stepLabel,
 } from "./labels";
 import { LiveInputStatus } from "./LiveInputStatus";
+import { LivePanel } from "./LivePanel";
 import { coBrandLift, percentile, serverDecisionMs, traceSteps } from "./metrics";
 
 const pct = (ratio: number) => `${Math.round(ratio * 100)} %`;
@@ -85,6 +86,7 @@ export function ConsolePage() {
                     </>
                 }
             />
+            <LivePanel screen={screenFilter ?? "demo-01"} />
             <LiveInputStatus screen={screenFilter ?? "demo-01"} />
             {shownScreens.length === 0 ? (
                 <Card>

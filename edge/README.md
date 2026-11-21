@@ -190,6 +190,15 @@ cd edge && uv run python -m agent.speech --speech-mode --wav line.wav           
 # For the backend to use the topics: SPEECH_MODE_SCREENS='["demo-01"]' make dev
 ```
 
+**The console's "En vivo" switch.** Both agents send `agent.hello` on every
+connection and follow the `live.status` the backend pushes back
+(`agent/live.py`). Vision pauses (frames discarded unread, tracks forgotten,
+camera kept open for an instant resume) while `sensing` is off. Speech closes
+the microphone stream while `listening` is off (`agent/speech/live_feed.py`), so
+no audio reaches Scribe, and a phrase cut by the switch is discarded, never
+transcribed. `--await-live` starts both closed until the backend says go
+(`make demo-live` passes it); without it they start open, as before.
+
 The audio path, in `agent/speech/`:
 
 - **Capture:** `sources.py` delivers 32 ms frames at 16 kHz, mono, int16.

@@ -28,6 +28,37 @@
   public URL.
 - **Lighting check** at the venue: webcam exposure matters more than model
   choice.
+  Run `make edge-probe-objects` at the counter and hold each prop where the
+  judges will: every prop should read **PUBLISHED** (a held cup scores ~0.9,
+  the floor is 0.25). Add `ARGS="--gpu-url wss://…/infer"` to probe the GPU
+  service's YOLOE/TensorRT weights instead of the local ones.
+
+### The "En vivo" switch (start every round from standby)
+
+`make demo-live` starts the station in **standby**: the camera agent is loaded
+and warm but analyses nothing, the mic is closed, no AI job runs, and the
+screen shows the house ad. The panel at the top of `/console` has one button:
+
+- **Iniciar en vivo** wakes the whole loop: camera analysis (the first snapshot
+  reaches the backend ~0.3 s after the click), the mic on a speech-opted-in
+  screen (`--speech`), and warm AI copy, voice-overs and tags (with
+  `--paid-providers`; otherwise ads use approved stock copy, and the inputs row
+  says so).
+- **Silenciar micrófono** closes only the mic while staying live; spoken topics
+  are forgotten at once. The screen shows "Micrófono activo" whenever the mic
+  is open (ADR 0005).
+- **Detener** returns to standby. The screen goes back to the house ad after
+  the normal 3 s leave grace (D5.5), exactly as when everyone walks away, so
+  the play's attention ends and billing stays correct.
+
+The switch is enforced twice: the agents pause themselves (`--await-live`,
+`agent.hello` → `live.status`), and the backend drops anything sensed in
+standby at the socket (`/health` → `live.dropped_in_standby`). It works from
+the second laptop (ADR 0008 D7): `POST /api/live` is plain HTTP. Use
+`make demo-live ARGS="--start-live"` to skip standby. Tests, evals and
+`scripts/demo_replay.py` keep the old always-live default (`LIVE_STARTS_ON`).
+Code: `app/realtime/live_switch.py`, `edge/agent/live.py`,
+`web/src/features/console/LivePanel.tsx`.
 
 ## 2. Console layout (the "money shot")
 

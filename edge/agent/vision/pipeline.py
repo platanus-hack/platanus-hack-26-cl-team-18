@@ -21,6 +21,7 @@ from typing import Any, Protocol
 from pydantic import BaseModel
 
 from agent.contract import AudienceKeyframe, AudienceSnapshot, PerceptionTiming
+from agent.live import LiveGate
 from agent.sound.sources import SoundSceneSource
 from agent.vision.detector import Detector, Frame
 from agent.vision.geometry import head_box
@@ -49,6 +50,8 @@ type KeyframeEncoder = Callable[[Frame, FrameDetections], bytes]
 class VisionConfig:
     keyframe_interval: timedelta = timedelta(milliseconds=1500)
     idle_sleep_s: float = 0.005
+    # Standby (live switch off): how often to discard the camera's latest frame.
+    standby_poll_s: float = 0.05
 
 
 @dataclass(slots=True)
@@ -57,6 +60,8 @@ class VisionStats:
     stale_frames: int = 0
     snapshots: int = 0
     keyframes: int = 0
+    standby_frames: int = 0  # discarded unread while the live switch was off
+    pauses: int = 0
     last_inference_ms: float = 0.0
     detector: str = ""
 
@@ -77,8 +82,11 @@ class VisionPipeline:
         minor: MinorVote | None = None,
         child_props: ChildPropVote | None = None,
         sound: SoundSceneSource | None = None,
+        live: LiveGate | None = None,
     ) -> None:
         self._screen_id = screen_id
+        self._live = live
+        self._paused = False
         self._source = source
         self._detector = detector
         self._link = link
@@ -148,6 +156,9 @@ class VisionPipeline:
         """Loop until cancelled, or until a finite source (a clip) reports `finished`."""
         try:
             while True:
+                if self._live is not None and not self._live.sensing:
+                    await self._standby()
+                    continue
                 item = self._source.latest(self._serial)
                 if item is None:
                     if getattr(self._source, "finished", False):
@@ -166,6 +177,37 @@ class VisionPipeline:
                 self._keyframe_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await self._keyframe_task
+
+    async def _standby(self) -> None:
+        """Live switch off: forget the room, then discard frames unread until resumed.
+
+        The camera stays open (resuming is instant and keeps its exposure), but no
+        frame is detected, tracked, encoded or published.
+        """
+        if not self._paused:
+            self._paused = True
+            self.stats.pauses += 1
+            if self._keyframe_task is not None:
+                self._keyframe_task.cancel()
+                self._keyframe_task = None
+            self._tracker.reset()
+            self._minor.reset()
+            self._child_props.reset()
+            if self._held is not None:
+                self._held.reset()
+            self._snapshots.reset()
+            self._last_keyframe_at = None
+            logger.info("vision paused by the live switch")
+        item = self._source.latest(self._serial)
+        if item is not None:
+            self._serial = item[2]
+            self.stats.standby_frames += 1
+        assert self._live is not None
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(self._live.wait_sensing(), self._config.standby_poll_s)
+        if self._live.sensing:
+            self._paused = False
+            logger.info("vision resumed by the live switch")
 
     def _keyframe_due(self, at: datetime) -> bool:
         last = self._last_keyframe_at

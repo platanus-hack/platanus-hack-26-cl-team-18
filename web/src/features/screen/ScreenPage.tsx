@@ -12,6 +12,9 @@ import { VoicePlayer } from "./voice";
 
 const CROSSFADE_MS = 250; // matches --duration-crossfade
 
+/** Only `listening` matters on the glass: the ADR 0005 indicator while the mic is open. */
+const latestListening = (_listening: boolean, next: boolean) => next;
+
 const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 function toPlayable(
@@ -32,10 +35,11 @@ export function ScreenPage() {
     );
     // Attention drives the dwell stage; it lives beside the player machine, not in it.
     const [attention] = useState(() => createStore(latestAttention, null));
+    const [listening] = useState(() => createStore(latestListening, false));
     const [socket] = useState(
         () =>
             new TypedSocket<PlayerOutbound, PlayerInbound>({
-                url: `${backendWsUrl}/ws/screen/${encodeURIComponent(screenId)}?attention=1`,
+                url: `${backendWsUrl}/ws/screen/${encodeURIComponent(screenId)}?attention=1&live=1`,
                 schema: PlayerOutboundSchema,
                 onMessage: (message) => {
                     if (message.type === "system.error") {
@@ -43,7 +47,10 @@ export function ScreenPage() {
                         return;
                     }
                     if (message.screen_id !== screenId) return;
-                    if (message.type === "live.status") return;
+                    if (message.type === "live.status") {
+                        listening.dispatch(message.listening);
+                        return;
+                    }
                     if (message.type === "screen.attention") {
                         if (message.screen_id === screenId) {
                             attention.dispatch(toAttentionSample(message, Date.now()));
@@ -73,6 +80,7 @@ export function ScreenPage() {
         });
     });
     const state = useStore(store, (s) => s);
+    const micOpen = useStore(listening, (s) => s);
 
     useEffect(() => {
         socket.start();
@@ -225,6 +233,17 @@ export function ScreenPage() {
                     </div>
                 );
             })}
+            {micOpen && (
+                <div
+                    className="absolute bottom-[3vh] left-[3vh] flex items-center gap-2 rounded-full bg-ink px-4 py-2 text-compact font-medium text-white shadow-overlay"
+                    style={{ zIndex: "var(--z-overlay)" }}
+                    role="status"
+                    data-listening="on"
+                >
+                    <span className="size-2 rounded-full bg-danger" aria-hidden />
+                    Micrófono activo · solo temas, nada se graba
+                </div>
+            )}
         </main>
     );
 }

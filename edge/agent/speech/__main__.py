@@ -18,7 +18,10 @@ import sys
 from pathlib import Path
 
 from agent.backend_link import BackendLink
+from agent.contract import AgentHello, AgentRole
+from agent.live import LiveGate
 from agent.speech.keyterms import DEFAULT_KEYTERMS
+from agent.speech.live_feed import feed_while_listening
 from agent.speech.pipeline import SpeechPipeline
 from agent.speech.scribe import DEFAULT_URL, ScribeConfig, ScribeFatalError, ScribeRealtime
 from agent.speech.sources import MicSource, WavSource
@@ -67,7 +70,14 @@ async def run(args: argparse.Namespace) -> int:
         url=args.scribe_url or os.environ.get("ELEVENLABS_STT_URL") or DEFAULT_URL,
         keyterms=DEFAULT_KEYTERMS.prompt_terms(),
     )
-    link = BackendLink(args.backend)
+    # The console's "En vivo" switch (agent/live.py): the mic is open only while the
+    # backend says this screen is listening (live, mic on, speech opted in).
+    live = LiveGate(args.screen, initial=not args.await_live)
+    link = BackendLink(
+        args.backend,
+        hello=AgentHello(screen_id=args.screen, role=AgentRole.SPEECH),
+        on_status=live.apply,
+    )
     pipeline: SpeechPipeline | None = None
     scribe = ScribeRealtime(config, lambda event: pipeline.on_event(event) if pipeline else None)
     pipeline = SpeechPipeline(
@@ -79,15 +89,16 @@ async def run(args: argparse.Namespace) -> int:
         language=args.language,
     )
     source = WavSource(args.wav) if args.wav else MicSource(device=args.device)
-    print(f"● LISTENING on screen {args.screen} (speech mode on)", file=sys.stderr)
+    print(f"speech mode on for screen {args.screen}; mic follows the live switch", file=sys.stderr)
 
     async def feed() -> None:
-        gaps = 0
-        async for frame in source.frames():
-            if isinstance(source, MicSource) and source.discontinuities != gaps:
-                gaps = source.discontinuities
-                scribe.reset()  # never interpret the tail of a discontinuous phrase
-            pipeline.on_frame(frame)
+        def announce(listening: bool) -> None:
+            mark = f"● LISTENING on screen {args.screen}" if listening else "○ mic closed"
+            print(f"{mark} (live switch)", file=sys.stderr)
+
+        await feed_while_listening(
+            source, live, on_frame=pipeline.on_frame, on_cut=scribe.reset, on_state=announce
+        )
         pipeline.finish()
         if args.wav:
             await asyncio.sleep(args.linger)  # let the last transcript arrive
@@ -116,6 +127,11 @@ def main() -> int:
     parser.add_argument("--backend", default="ws://127.0.0.1:8000/ws/agent")
     parser.add_argument(
         "--speech-mode", action="store_true", help="explicit opt-in for this screen"
+    )
+    parser.add_argument(
+        "--await-live",
+        action="store_true",
+        help="keep the mic closed until the console's live switch turns listening on",
     )
     parser.add_argument("--wav", type=Path, help="replay a 16 kHz mono WAV instead of the mic")
     parser.add_argument("--device", default=None, help="sounddevice input device")

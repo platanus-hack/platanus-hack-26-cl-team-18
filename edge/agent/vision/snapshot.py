@@ -129,6 +129,16 @@ class SnapshotBuilder:
     def published(self) -> Facts | None:
         return self._published
 
+    def reset(self) -> None:
+        """Forget every observation (the live switch paused sensing); keep `seq`.
+
+        The backend drops sequence numbers it has already seen on this connection,
+        so the first snapshot after resuming must continue the count.
+        """
+        seq = self._seq
+        self.__init__(self._screen_id, self._config)  # type: ignore[misc]
+        self._seq = seq
+
     def build(
         self,
         *,
