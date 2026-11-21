@@ -239,5 +239,5 @@ it("previews the next ad while a swap waits, and explains the decision", async (
     expect(host.querySelector('[aria-label="Siguiente aviso"]')?.textContent).toContain(
         "Voltio · Trío $8.490",
     );
-    expect(host.textContent).toContain("La explicación aparece con la primera decisión");
+    expect(host.textContent).toContain("Sin decisión todavía");
 });

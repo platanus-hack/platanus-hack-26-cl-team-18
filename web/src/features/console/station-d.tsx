@@ -18,6 +18,7 @@ import { baskets, explain } from "./why";
 /** Detections older than this are not "what the camera sees" anymore. */
 const PERCEPTION_FRESH_MS = 3000;
 
+/** Bid and stock controls need the demo key; the camera boxes don't. */
 const hasDemoKey = () => (demoKey() ?? rememberedDemoKey()) !== null;
 
 function useNow(intervalMs: number): number {
@@ -213,16 +214,17 @@ export function AuctionSection({ view, screen }: { view: ScreenView; screen: str
     }
     const { shown, idle } = splitRows(bidRows(view.book, auction));
     const lines = baskets(auction);
+    const live = auction !== null;
     return (
         <Card className="flex flex-col gap-4 p-5" aria-label="La subasta">
             <div className="flex flex-wrap items-baseline justify-between gap-3">
                 <div className="flex items-baseline gap-3">
                     <h2 className="text-section font-semibold">La subasta</h2>
-                    <span className="text-compact text-muted">
-                        {auction
-                            ? `${auction.bids.length} pujas · subasta de canasta · ${new Date(auction.trace.cleared_at ?? auction.trace.measured_at ?? 0).toLocaleTimeString("es-CL", { hour12: false })}`
-                            : "esperando a alguien frente a la pantalla"}
-                    </span>
+                    {auction && (
+                        <span className="text-compact text-muted tabular-nums">
+                            {`${auction.bids.length} pujas · ${new Date(auction.trace.cleared_at ?? auction.trace.measured_at ?? 0).toLocaleTimeString("es-CL", { hour12: false })}`}
+                        </span>
+                    )}
                 </div>
                 {auction && auction.winners.length > 0 && (
                     <span className="text-compact tabular-nums">
@@ -234,32 +236,59 @@ export function AuctionSection({ view, screen }: { view: ScreenView; screen: str
                     </span>
                 )}
             </div>
-            <div className="grid gap-6 xl:grid-cols-[minmax(0,2.4fr)_minmax(0,1fr)]">
+            <div
+                className={
+                    lines.length > 0
+                        ? "grid gap-6 xl:grid-cols-[minmax(0,2.4fr)_minmax(0,1fr)]"
+                        : "grid gap-6"
+                }
+            >
                 <div className="overflow-x-auto">
-                    <table className="w-full min-w-[720px] border-collapse text-compact">
+                    <table
+                        className={
+                            live
+                                ? "w-full min-w-[720px] border-collapse text-compact"
+                                : "w-full border-collapse text-compact"
+                        }
+                    >
                         <thead>
                             <tr className="text-left text-muted">
                                 <th className="border-b border-border py-2 pr-2 pl-3 font-medium">
                                     Marca
                                 </th>
-                                <th className="border-b border-border p-2 text-right font-medium">
-                                    Puja por s
-                                </th>
-                                <th className="border-b border-border p-2 text-center font-medium">
+                                {live && (
+                                    <th className="border-b border-border p-2 text-right font-medium">
+                                        Puja por s
+                                    </th>
+                                )}
+                                <th
+                                    className={
+                                        live
+                                            ? "border-b border-border p-2 text-center font-medium"
+                                            : "border-b border-border p-2 text-right font-medium"
+                                    }
+                                >
                                     Multiplicador
                                 </th>
-                                <th className="border-b border-border p-2 font-medium">
-                                    Coincide con
-                                </th>
-                                <th className="border-b border-border p-2 text-right font-medium">
-                                    Valor por s
-                                </th>
-                                <th className="border-b border-border p-2 text-right font-medium">
-                                    Paga por s
-                                </th>
-                                <th className="border-b border-border py-2 pl-2 font-medium">
-                                    Resultado
-                                </th>
+                                {live && (
+                                    <>
+                                        <th className="border-b border-border p-2 font-medium">
+                                            Coincide con
+                                        </th>
+                                        <th className="border-b border-border p-2 text-right font-medium">
+                                            Valor por s
+                                        </th>
+                                        <th
+                                            className="border-b border-border p-2 text-right font-medium"
+                                            title="Cada ganadora paga lo justo para seguir ganando, nunca más que su puja."
+                                        >
+                                            Paga por s
+                                        </th>
+                                        <th className="border-b border-border py-2 pl-2 font-medium">
+                                            Resultado
+                                        </th>
+                                    </>
+                                )}
                             </tr>
                         </thead>
                         <tbody>
@@ -269,6 +298,7 @@ export function AuctionSection({ view, screen }: { view: ScreenView; screen: str
                                     row={row}
                                     screen={screen}
                                     controls={controls}
+                                    live={live}
                                     onError={setError}
                                 />
                             ))}
@@ -289,18 +319,15 @@ export function AuctionSection({ view, screen }: { view: ScreenView; screen: str
                     )}
                     {!controls && (
                         <p className="mt-2 pl-3 text-metadata text-muted">
-                            Para mover pujas y stock aquí, abre una vez /demo/&lt;clave&gt; en este
-                            navegador.
+                            Solo lectura: abre una vez /demo/&lt;clave&gt; para editar.
                         </p>
                     )}
                 </div>
-                <div className="flex flex-col gap-2.5">
-                    <span className="font-mono text-metadata tracking-wider text-muted uppercase">
-                        Canastas evaluadas
-                    </span>
-                    {lines.length === 0 ? (
-                        <p className="text-compact text-muted">Aparecen con la primera subasta.</p>
-                    ) : (
+                {lines.length > 0 && (
+                    <div className="flex flex-col gap-2.5">
+                        <span className="font-mono text-metadata tracking-wider text-muted uppercase">
+                            Canastas evaluadas
+                        </span>
                         <ol className="flex flex-col gap-2" aria-label="Canastas evaluadas">
                             {lines.map((line) => (
                                 <li
@@ -329,11 +356,8 @@ export function AuctionSection({ view, screen }: { view: ScreenView; screen: str
                                 </li>
                             ))}
                         </ol>
-                    )}
-                    <p className="text-metadata leading-relaxed text-muted">
-                        Cada ganadora paga lo justo para seguir ganando, nunca más que su puja.
-                    </p>
-                </div>
+                    </div>
+                )}
             </div>
         </Card>
     );
@@ -343,11 +367,13 @@ function AuctionRow({
     row,
     screen,
     controls,
+    live,
     onError,
 }: {
     row: BidRow;
     screen: string;
     controls: boolean;
+    live: boolean;
     onError: (message: string | null) => void;
 }) {
     const run = (action: Promise<unknown>) => {
@@ -408,10 +434,18 @@ function AuctionRow({
                     </span>
                 </span>
             </td>
-            <td className="border-b border-border-subtle p-2 text-right tabular-nums">
-                {row.bidPerAs ? money(row.bidPerAs) : "—"}
-            </td>
-            <td className="border-b border-border-subtle p-2 text-center">
+            {live && (
+                <td className="border-b border-border-subtle p-2 text-right tabular-nums">
+                    {row.bidPerAs ? money(row.bidPerAs) : "—"}
+                </td>
+            )}
+            <td
+                className={
+                    live
+                        ? "border-b border-border-subtle p-2 text-center"
+                        : "border-b border-border-subtle p-2 text-right"
+                }
+            >
                 <span className="inline-flex items-center rounded-control border border-border bg-surface tabular-nums">
                     {controls && (
                         <Button
@@ -449,50 +483,61 @@ function AuctionRow({
                     </Badge>
                 )}
             </td>
-            <td className="border-b border-border-subtle p-2">
-                {row.match ? (
-                    <span className="flex flex-col gap-0.5">
-                        <span>{row.match}</span>
-                        <span className="text-metadata text-muted">{row.matchKind}</span>
-                    </span>
-                ) : (
-                    <span className="text-muted">—</span>
-                )}
-            </td>
-            <td className="border-b border-border-subtle p-2 text-right">
-                {row.valuePerS ? (
-                    <span className="inline-flex flex-col items-end gap-1 font-medium tabular-nums">
-                        {money(row.valuePerS)}
-                        <span aria-hidden className="block h-1 w-24 rounded-full bg-border-subtle">
-                            <span
-                                className={
-                                    won
-                                        ? "block h-1 rounded-full bg-accent"
-                                        : "block h-1 rounded-full bg-(--palette-gris-oscuro)"
-                                }
-                                style={{ width: `${Math.round(row.valueShare * 100)}%` }}
-                            />
-                        </span>
-                    </span>
-                ) : (
-                    <span className="text-muted">—</span>
-                )}
-            </td>
-            <td className="border-b border-border-subtle p-2 text-right font-semibold text-success tabular-nums">
-                {row.pays ? money(row.pays) : <span className="font-normal text-muted">—</span>}
-            </td>
-            <td className="border-b border-border-subtle py-2 pl-2">
-                {row.result ? (
-                    <span className="flex flex-col gap-0.5">
-                        <Badge tone={row.result.tone}>{row.result.label}</Badge>
-                        {row.reason && (
-                            <span className="text-metadata text-muted">{row.reason}</span>
+            {live && (
+                <>
+                    <td className="border-b border-border-subtle p-2">
+                        {row.match ? (
+                            <span className="flex flex-col gap-0.5">
+                                <span>{row.match}</span>
+                                <span className="text-metadata text-muted">{row.matchKind}</span>
+                            </span>
+                        ) : (
+                            <span className="text-muted">—</span>
                         )}
-                    </span>
-                ) : (
-                    <span className="text-metadata text-muted">—</span>
-                )}
-            </td>
+                    </td>
+                    <td className="border-b border-border-subtle p-2 text-right">
+                        {row.valuePerS ? (
+                            <span className="inline-flex flex-col items-end gap-1 font-medium tabular-nums">
+                                {money(row.valuePerS)}
+                                <span
+                                    aria-hidden
+                                    className="block h-1 w-24 rounded-full bg-border-subtle"
+                                >
+                                    <span
+                                        className={
+                                            won
+                                                ? "block h-1 rounded-full bg-accent"
+                                                : "block h-1 rounded-full bg-(--palette-gris-oscuro)"
+                                        }
+                                        style={{ width: `${Math.round(row.valueShare * 100)}%` }}
+                                    />
+                                </span>
+                            </span>
+                        ) : (
+                            <span className="text-muted">—</span>
+                        )}
+                    </td>
+                    <td className="border-b border-border-subtle p-2 text-right font-semibold text-success tabular-nums">
+                        {row.pays ? (
+                            money(row.pays)
+                        ) : (
+                            <span className="font-normal text-muted">—</span>
+                        )}
+                    </td>
+                    <td className="border-b border-border-subtle py-2 pl-2">
+                        {row.result ? (
+                            <span className="flex flex-col gap-0.5">
+                                <Badge tone={row.result.tone}>{row.result.label}</Badge>
+                                {row.reason && (
+                                    <span className="text-metadata text-muted">{row.reason}</span>
+                                )}
+                            </span>
+                        ) : (
+                            <span className="text-metadata text-muted">—</span>
+                        )}
+                    </td>
+                </>
+            )}
         </tr>
     );
 }
@@ -505,14 +550,10 @@ export function TagsPanel({ view }: { view: ScreenView }) {
         <Card className="flex flex-col gap-3.5 p-5" aria-label="Etiquetas">
             <div className="flex items-baseline justify-between">
                 <h2 className="text-section font-semibold">Etiquetas</h2>
-                <span className="text-metadata text-muted">intereses IAB del momento</span>
+                <span className="text-metadata text-muted">IAB</span>
             </div>
             {segments.length === 0 ? (
-                <p className="text-compact text-muted">
-                    {moment
-                        ? "Sin intereses claros en este grupo."
-                        : "Aparecen cuando alguien mira la pantalla."}
-                </p>
+                <p className="text-compact text-muted">Sin intereses claros.</p>
             ) : (
                 segments.map((segment) => (
                     <div key={segment.segment_id} className="flex flex-col gap-1.5">
@@ -539,7 +580,7 @@ export function TagsPanel({ view }: { view: ScreenView }) {
                     </div>
                 ))
             )}
-            {moment && (
+            {moment && (moment.held_products.length > 0 || moment.minor_likely.value) && (
                 <div className="flex flex-wrap gap-2 border-t border-border-subtle pt-3 text-metadata">
                     {moment.held_products.map((product) => (
                         <span
@@ -552,11 +593,11 @@ export function TagsPanel({ view }: { view: ScreenView }) {
                                 product.category}
                         </span>
                     ))}
-                    <span className="rounded-full border border-border-strong px-2.5 py-0.5">
-                        {moment.minor_likely.value
-                            ? "Posible menor: categorías restringidas bloqueadas"
-                            : "Sin posible menor"}
-                    </span>
+                    {moment.minor_likely.value && (
+                        <span className="rounded-full border border-border-strong px-2.5 py-0.5">
+                            Posible menor: categorías restringidas bloqueadas
+                        </span>
+                    )}
                 </div>
             )}
         </Card>
@@ -578,9 +619,7 @@ export function WhyPanel({ view }: { view: ScreenView }) {
                 )}
             </div>
             {!why ? (
-                <p className="text-compact text-muted">
-                    La explicación aparece con la primera decisión: cuando alguien mire la pantalla.
-                </p>
+                <p className="text-compact text-muted">Sin decisión todavía.</p>
             ) : (
                 <>
                     <p className="text-title leading-snug font-medium tracking-tight">

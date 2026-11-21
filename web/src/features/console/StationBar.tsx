@@ -95,7 +95,7 @@ export function StationBar({
                     )}
                 </div>
                 <div className="flex items-center gap-2">
-                    {connection.status !== "open" && (
+                    {connection.status !== "open" && !unreachable && (
                         <span
                             className="text-metadata text-warning"
                             title="Conexión de esta consola"
@@ -115,7 +115,7 @@ export function StationBar({
                 </div>
             </div>
             {status && <Dots view={stationView(status, health)} />}
-            {(unreachable || failed) && (
+            {((unreachable && status !== null) || failed) && (
                 <p className="text-compact text-danger" role="status">
                     {unreachable
                         ? "Sin conexión: mostrando el último estado conocido."
@@ -193,7 +193,21 @@ function Dots({ view }: { view: ReturnType<typeof stationView> }) {
             </ul>
             {view.warnings.map((warning) => (
                 <p key={warning} className="text-compact text-warning" role="status">
-                    {warning}
+                    {warning.split(/(\/screen\?id=\S+)/).map((part, index) =>
+                        part.startsWith("/screen?") ? (
+                            <a
+                                key={index}
+                                href={part}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="font-mono underline underline-offset-2"
+                            >
+                                {part}
+                            </a>
+                        ) : (
+                            part
+                        ),
+                    )}
                 </p>
             ))}
         </div>
