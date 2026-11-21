@@ -130,3 +130,8 @@ class BrandKit:
     stock_copy: str
     accent_color: str
     voice_id: str | None = None  # brand voice for solo creatives; None -> narrator
+    # The brand's own signature line ("Voltio. Una vuelta más."): approved copy that may air
+    # verbatim, so it also counts as approved text for the guard.
+    tagline: str | None = None
+    # How the brand sounds, in a few words ("deportivo", "directo"): steers AI copy only.
+    voice: tuple[str, ...] = ()

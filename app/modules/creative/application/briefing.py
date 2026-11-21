@@ -79,6 +79,8 @@ def assemble_brief(
             name=catalog.kits[brand_id].name,
             category=category,
             stock_copy=catalog.kits[brand_id].stock_copy,
+            tagline=catalog.kits[brand_id].tagline,
+            voice=catalog.kits[brand_id].voice,
         )
         for brand_id, category in basket
     )

@@ -210,6 +210,8 @@ def seed_market(
             logo_url=_brand_logo(brand.slug, brand.name, brand.color),
             stock_copy=brand.stock_copy,
             accent_color=brand.color,
+            tagline=brand.tagline,
+            voice=brand.voice,
         )
         for brand in demo_catalog.BRANDS
     )

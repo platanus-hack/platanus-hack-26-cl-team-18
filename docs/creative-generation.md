@@ -535,6 +535,17 @@ an AI draft can only replace stock copy if it keeps them.
   same scenes with the can recoloured to Rayo's lavender by a local hue mask (`prompts.json` →
   `recolors`). Composing the lead brand's product first still needs new photography.
 
+**Brand voice.** A `BrandKit` carries a `tagline`, the brand's own approved line such as
+"Voltio. Una vuelta más.", and `voice` tone words such as ("deportivo", "directo"). Seeds are in
+`demo_catalog.py`.
+
+- When nothing specific is known about the moment (the angle comes from the category or the
+  default) and one person is looking, the stock hook is the lead brand's tagline. Rivals in one
+  category no longer get the same line.
+- A real signal (segment, speech, held product, queue) or a group keeps the moment hook.
+- The guard treats taglines as approved text.
+- The prompt writes in the lead brand's voice and may use a tagline verbatim, never paraphrased.
+
 **Layout** (`web/src/features/screen/CreativeView.tsx`, `creative.css`, `ad-theme.ts`), after the
 Relvo brand deck (`relvo_10abril` pp. 18–25):
 

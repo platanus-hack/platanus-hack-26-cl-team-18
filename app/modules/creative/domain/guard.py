@@ -189,7 +189,7 @@ def check_copy(draft: CopyDraft, brief: CreativeBrief) -> GuardVerdict:
     offer = brief.offer
     approved_text = normalize(
         " ".join(
-            [*(b.stock_copy for b in brief.brands)]
+            [*(b.stock_copy for b in brief.brands), *(b.tagline or "" for b in brief.brands)]
             + ([offer.label, offer.text, *offer.claims] if offer else [])
         )
     )

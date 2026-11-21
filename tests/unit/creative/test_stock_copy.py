@@ -5,13 +5,13 @@ from dataclasses import replace
 import pytest
 
 from app.modules.creative.application.stock_copy import StockCopywriter
-from app.modules.creative.domain.angle import Angle
-from app.modules.creative.domain.brief import Daypart, daypart_for_hour
+from app.modules.creative.domain.angle import Angle, AngleReason
+from app.modules.creative.domain.brief import CreativeBrief, Daypart, daypart_for_hour
 from app.modules.creative.domain.draft import CopyDraft, CopySource
 from app.modules.creative.domain.guard import ViolationKind, check_copy
 from app.modules.creative.domain.lexicon import ANGLE_KEYWORDS, any_term, normalize
 from app.modules.creative.domain.scoring import score_draft
-from tests.unit.creative.factory import MIGA, PATIO, VOLTIO, brief
+from tests.unit.creative.factory import MIGA, PATIO, RAYO, VOLTIO, brief
 
 WRITER = StockCopywriter()
 ANGLES = [a for a in Angle if a is not Angle.SOCIAL]  # SOCIAL needs an alcohol basket
@@ -148,3 +148,34 @@ def test_an_offer_smaller_than_the_group_is_offered_to_share() -> None:
     draft = WRITER.compose(crowd)
     assert "para compartir" in draft.offer and "todo el grupo" not in draft.all_text()
     assert check_copy(draft, crowd).passed
+
+
+def _with_tagline(b: CreativeBrief, tagline: str) -> CreativeBrief:
+    lead, *rest = b.brands
+    return replace(b, brands=(replace(lead, tagline=tagline, voice=("directo",)), *rest))
+
+
+def test_with_nothing_specific_known_the_lead_brand_speaks_in_its_own_line() -> None:
+    weak = brief(VOLTIO, PATIO, angle=Angle.ENERGY, reason=AngleReason.CATEGORY)
+    voltio = _with_tagline(weak, "Voltio. Una vuelta más.")
+    rayo = _with_tagline(
+        brief(RAYO, PATIO, angle=Angle.ENERGY, reason=AngleReason.CATEGORY),
+        "Rayo. Rápido y sin vueltas.",
+    )
+    assert WRITER.compose(voltio).teaser == "Voltio. Una vuelta más."
+    assert (
+        WRITER.compose(rayo).teaser == "Rayo. Rápido y sin vueltas."
+    )  # rivals no longer sound alike
+    assert check_copy(WRITER.compose(voltio), voltio).passed
+
+
+@pytest.mark.parametrize(
+    ("reason", "party"),
+    [(AngleReason.SEGMENT, 1), (AngleReason.SPEECH, 1), (AngleReason.CATEGORY, 3)],
+)
+def test_a_real_signal_or_a_group_keeps_the_moment_hook(reason: AngleReason, party: int) -> None:
+    b = _with_tagline(
+        brief(VOLTIO, PATIO, party=party, angle=Angle.ENERGY, reason=reason),
+        "Voltio. Una vuelta más.",
+    )
+    assert WRITER.compose(b).teaser != "Voltio. Una vuelta más."

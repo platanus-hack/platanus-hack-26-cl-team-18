@@ -59,6 +59,8 @@ class BrandBrief:
     name: str
     category: str
     stock_copy: str  # approved fallback line from the brand kit
+    tagline: str | None = None  # the brand's own signature line (approved, may air verbatim)
+    voice: tuple[str, ...] = ()  # tone words for AI copy
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

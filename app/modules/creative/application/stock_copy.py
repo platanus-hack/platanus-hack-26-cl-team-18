@@ -14,7 +14,7 @@ guard-clean and cliché-free by construction (tests/unit/creative/test_stock_cop
 from __future__ import annotations
 
 from app.modules.creative.application.ports.copywriter import WrittenCopy
-from app.modules.creative.domain.angle import Angle
+from app.modules.creative.domain.angle import Angle, AngleReason
 from app.modules.creative.domain.brief import CreativeBrief, Daypart
 from app.modules.creative.domain.draft import CopyDraft, CopySource
 
@@ -115,9 +115,17 @@ def _join(names: tuple[str, ...]) -> str:
     return " + ".join(names)
 
 
+# Signals too weak to write a moment-specific hook: the brand speaks in its own words.
+_WEAK_SIGNALS = frozenset({AngleReason.CATEGORY, AngleReason.DEFAULT})
+
+
 def teaser_for(brief: CreativeBrief, angle: Angle) -> str:
-    """Hour first (with the head count when it can be said), then the counted group, then
-    the angle's general hook."""
+    """The lead brand's own line when nothing specific is known about the moment and one
+    person is looking; else hour first (with the head count when it can be said), then the
+    counted group, then the angle's general hook."""
+    lead = brief.brands[0]
+    if lead.tagline and not brief.is_group and brief.angle.reason in _WEAK_SIGNALS:
+        return lead.tagline
     held = brief.held_brand or brief.names[0]
     partners = tuple(name for name in brief.names if name != held) or brief.names
     count = _GROUP_WORDS.get(brief.addressed_party or 0)

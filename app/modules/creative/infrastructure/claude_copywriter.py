@@ -90,6 +90,9 @@ and end the line with the price ("Voltio + Café Patio x3 para los 3 por $8.490.
 screen sets the final price apart in large type. If `offer` is null, build the line from \
 `approved_lines` and never mention a price or an offer.
 - close: one instruction. Scan, then redeem at the counter ("canjea en caja").
+- Brand voice: write in the lead brand's `voice` (the first brand); partners keep \
+their names, not their tone. A brand's `tagline` is its own approved line: use it \
+verbatim or not at all, never paraphrased.
 `baseline` is the current stock copy: beat it, keep its facts.
 Also return `confidence` (0 to 1) that the copy follows every rule, and `reasoning`: \
 one short sentence on the choice.\
@@ -109,7 +112,10 @@ def brief_payload(brief: CreativeBrief) -> dict[str, object]:
     baseline = StockCopywriter().compose(brief)
     offer = brief.offer
     return {
-        "brands": [{"name": b.name, "category": b.category} for b in brief.brands],
+        "brands": [
+            {"name": b.name, "category": b.category, "voice": list(b.voice), "tagline": b.tagline}
+            for b in brief.brands
+        ],
         "party": brief.party,
         "address_group_as": (
             f"para los {brief.addressed_party}"

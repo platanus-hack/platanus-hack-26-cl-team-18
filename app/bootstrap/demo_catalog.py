@@ -39,6 +39,10 @@ class DemoBrand:
     rate_clp_per_as: str
     color: str
     stock_copy: str
+    # Brand voice (additive; pinned rates and offers are untouched): the brand's own
+    # signature line and the tone AI copy writes in.
+    tagline: str | None = None
+    voice: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -59,6 +63,8 @@ BRANDS: tuple[DemoBrand, ...] = (
         rate_clp_per_as="8",
         color="#c6f26b",
         stock_copy="Voltio · Energía para tu próximo entrenamiento.",
+        tagline="Voltio. Una vuelta más.",
+        voice=("deportivo", "directo", "breve"),
     ),
     DemoBrand(
         slug="cafe-patio",
@@ -69,6 +75,8 @@ BRANDS: tuple[DemoBrand, ...] = (
         rate_clp_per_as="5",
         color="#f5bb84",
         stock_copy="Café Patio · Tu pausa después de entrenar.",
+        tagline="Café Patio. Tu café al paso.",
+        voice=("cálido", "cercano", "pausado"),
     ),
     DemoBrand(
         slug="malta-sur",
@@ -79,6 +87,8 @@ BRANDS: tuple[DemoBrand, ...] = (
         rate_clp_per_as="12",
         color="#f6d15a",
         stock_copy="Malta Sur · Cerveza artesanal.",
+        tagline="Malta Sur. Hecha con calma.",
+        voice=("sereno", "adulto", "sobrio"),
     ),
     DemoBrand(
         slug="rayo",
@@ -89,6 +99,8 @@ BRANDS: tuple[DemoBrand, ...] = (
         rate_clp_per_as="6.5",
         color="#b9adff",
         stock_copy="Rayo · Energía para tu día.",
+        tagline="Rayo. Rápido y sin vueltas.",
+        voice=("eléctrico", "urbano", "rápido"),
     ),
     # --- docs/demo.md catalog --------------------------------------------------------
     DemoBrand(
@@ -100,6 +112,8 @@ BRANDS: tuple[DemoBrand, ...] = (
         rate_clp_per_as="4",
         color="#e8a3c0",
         stock_copy="Miga · Recién horneado, para tu café.",
+        tagline="Miga. Pan dulce de barrio.",
+        voice=("casero", "tierno", "sencillo"),
     ),
     DemoBrand(
         slug="brasa-burger",
@@ -110,6 +124,8 @@ BRANDS: tuple[DemoBrand, ...] = (
         rate_clp_per_as="7",
         color="#ff7a45",
         stock_copy="Brasa Burger · A la parrilla, lista en 2 min.",
+        tagline="Brasa Burger. A la parrilla, sin atajos.",
+        voice=("contundente", "directo"),
     ),
     DemoBrand(
         slug="toro-burger",
@@ -120,6 +136,8 @@ BRANDS: tuple[DemoBrand, ...] = (
         rate_clp_per_as="6",
         color="#d94f4f",
         stock_copy="Toro Burger · Doble carne, cero espera.",
+        tagline="Toro Burger. Grande, sin rodeos.",
+        voice=("audaz", "informal"),
     ),
     DemoBrand(
         slug="cola-sur",
@@ -130,6 +148,8 @@ BRANDS: tuple[DemoBrand, ...] = (
         rate_clp_per_as="4.5",
         color="#8c2f39",
         stock_copy="Cola Sur · Helada, para acompañar.",
+        tagline="Cola Sur. Bien helada.",
+        voice=("fresco", "liviano"),
     ),
     DemoBrand(
         slug="pacifica",
@@ -140,6 +160,8 @@ BRANDS: tuple[DemoBrand, ...] = (
         rate_clp_per_as="4",
         color="#3f88c5",
         stock_copy="Pacífica · Burbujas bien frías.",
+        tagline="Pacífica. Burbujas bien frías.",
+        voice=("limpio", "sereno"),
     ),
     DemoBrand(
         slug="crunchi",
@@ -150,6 +172,8 @@ BRANDS: tuple[DemoBrand, ...] = (
         rate_clp_per_as="3.5",
         color="#f2c14e",
         stock_copy="Crunchi · El crujido que acompaña.",
+        tagline="Crunchi. El que se escucha.",
+        voice=("ligero", "ingenioso"),
     ),
     DemoBrand(
         slug="agua-cumbre",
@@ -160,6 +184,8 @@ BRANDS: tuple[DemoBrand, ...] = (
         rate_clp_per_as="3",
         color="#7fd1e8",
         stock_copy="Agua Cumbre · Hidratación de altura.",
+        tagline="Agua Cumbre. Agua de montaña.",
+        voice=("claro", "sereno"),
     ),
 )
 
