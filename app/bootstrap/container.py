@@ -20,8 +20,12 @@ from app.modules.ai.application.service.llm import AIService
 from app.modules.ai.infrastructure.adapters.llm.factory import LLMNotConfigured, build_llm_provider
 from app.modules.auction.application.ports.auction_log import AuctionLog
 from app.modules.auction.infrastructure.auction_log import InMemoryAuctionLog, PostgresAuctionLog
+from app.modules.audience.application.ports import AudienceTagger
+from app.modules.audience.application.ports.topics import TopicExtractor
+from app.modules.audience.infrastructure.catalog.loader import load_catalog
 from app.modules.audience.infrastructure.recognition_store import RecognitionStore
 from app.modules.audience.infrastructure.recognition_vlm import RecognitionVlm
+from app.modules.audience.infrastructure.tagging.claude import ClaudeAudienceTagger
 from app.modules.common.application.clock import BaseClock
 from app.modules.common.application.id_generator import IdGenerator
 from app.modules.common.infrastructure.clock.system_clock import SystemClock
@@ -55,6 +59,8 @@ class Container:
     recognition: RecognitionStore = field(default_factory=RecognitionStore)
     # Warm, opt-in VLM enrichment of recognition tracklets (never in prod).
     vlm: RecognitionVlm | None = None
+    # Claude vision behind AudienceTagger: keyframes -> IAB segments (AUDIENCE_AI, warm).
+    tagger: AudienceTagger | None = None
     demo: DemoControls | None = None
     auction_log: AuctionLog = field(default_factory=InMemoryAuctionLog)
     ledger: ChargeLedger = field(default_factory=InMemoryChargeLedger)
@@ -63,8 +69,7 @@ class Container:
     startup: list[Callable[[], Awaitable[None]]] = field(default_factory=list)
     writer: WriteBehindWriter | None = None
     redemption_ledger: Any = None  # RedemptionLedger; in memory unless DATABASE_URL is set
-    keyframe_tagger: Any = None  # KeyframeTagger (AUDIENCE_AI)
-    topic_extractor: Any = None  # TopicExtractor (AUDIENCE_AI)
+    topic_extractor: TopicExtractor | None = None  # speech topics (AUDIENCE_AI)
     # Async cleanups run at shutdown (HTTP clients, ...).
     closers: list[Callable[[], Awaitable[None]]] = field(default_factory=list)
 
@@ -80,8 +85,8 @@ def build_container(
     voice_synthesizer: VoiceSynthesizer | None = None,
     copywriter: CopyWriter | None = None,
     scheduler: Scheduler | None = None,
-    keyframe_tagger: Any = None,
-    topic_extractor: Any = None,
+    audience_tagger: AudienceTagger | None = None,
+    topic_extractor: TopicExtractor | None = None,
 ) -> Container:
     container = Container(
         settings=settings,
@@ -94,7 +99,7 @@ def build_container(
     build_voiceovers(container, voice_synthesizer)
     build_recognition_vlm(container)
     build_copywriter(container, copywriter)
-    build_audience_ai(container, tagger=keyframe_tagger, topics=topic_extractor)
+    build_audience_ai(container, tagger=audience_tagger, topics=topic_extractor)
     build_records(container)
     register_contexts(container)
     return container
@@ -118,10 +123,10 @@ def register_contexts(container: Container) -> None:
             speech_ttl=timedelta(seconds=container.settings.speech_topic_ttl_s),
             swap_holds=container.settings.swap_holds_enabled,
             scheduler=container.scheduler,
+            tagger=container.tagger,
             auction_log=container.auction_log,
             ledger=container.ledger,
             budget_clp=container.settings.demo_budget_clp,
-            keyframe_tagger=container.keyframe_tagger,
             topic_extractor=container.topic_extractor,
             redemption_ledger=container.redemption_ledger,
             public_base_url=container.settings.public_base_url,
@@ -167,24 +172,32 @@ def build_copywriter(container: Container, copywriter: CopyWriter | None = None)
     container.copywriter = ClaudeCopywriter(provider, profile)
 
 
-def build_audience_ai(container: Container, *, tagger: Any = None, topics: Any = None) -> None:
-    """Warm audience AI behind ports; overrides are for tests and offline rehearsal."""
+def build_audience_ai(
+    container: Container,
+    *,
+    tagger: AudienceTagger | None = None,
+    topics: TopicExtractor | None = None,
+) -> None:
+    """Warm audience AI (AUDIENCE_AI): keyframe tagging and speech topics, one Claude client.
+
+    The tagger feeds the AudienceClassifier (IAB segments, held products, minor flag);
+    without it the console shows the VLM as degraded and markers/cues still work.
+    `tagger`/`topics` override the Claude adapters (tests, offline rehearsal).
+    """
     if tagger is not None or topics is not None:
-        container.keyframe_tagger, container.topic_extractor = tagger, topics
+        container.tagger, container.topic_extractor = tagger, topics
         return
-    if not container.settings.audience_ai:
-        return
+    settings = container.settings
+    if not settings.audience_ai or settings.app_env == "test":
+        return  # unit tests never call live providers
     from dotenv import dotenv_values
 
     from app.modules.ai.domain.model_capabilities import DEFAULT_EFFORT, ModelProfile, parse_effort
     from app.modules.ai.infrastructure.adapters.llm.anthropic import DEFAULT_MODEL
-    from app.modules.ai.infrastructure.adapters.llm.factory import (
-        LLMNotConfigured,
-        build_llm_provider,
-    )
-    from app.modules.audience.infrastructure.claude_tagger import ClaudeKeyframeTagger
     from app.modules.audience.infrastructure.claude_topics import ClaudeTopicExtractor
 
+    # AppSettings reads `.env` into its own fields only; the LLM factory reads a
+    # mapping, so give it `.env` overlaid by the real environment.
     env = {k: v for k, v in dotenv_values(".env").items() if v is not None} | dict(os.environ)
     try:
         provider = build_llm_provider(env)
@@ -195,7 +208,11 @@ def build_audience_ai(container: Container, *, tagger: Any = None, topics: Any =
     model = env.get("ANTHROPIC_MODEL", "").strip() or DEFAULT_MODEL
     effort = env.get("ANTHROPIC_EFFORT", "").strip()
     profile = ModelProfile(model, parse_effort(effort) if effort else DEFAULT_EFFORT)
-    container.keyframe_tagger = ClaudeKeyframeTagger(provider, profile)
+    container.tagger = ClaudeAudienceTagger(
+        ai=AIService(provider),
+        catalog=load_catalog().catalog,
+        model_version=profile.describe(),
+    )
     container.topic_extractor = ClaudeTopicExtractor(provider, profile)
 
 

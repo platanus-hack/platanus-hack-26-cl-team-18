@@ -37,15 +37,20 @@ from app.contract.messages import (
 )
 from app.modules.auction.application.desk import AuctionDesk
 from app.modules.auction.application.ports.auction_log import AuctionLog, AuctionRecord
-from app.modules.auction.domain.opportunity import AdOpportunity, HeldProduct, Layout
+from app.modules.auction.domain.opportunity import (
+    AdOpportunity,
+    HeldProduct as BidHeldProduct,
+    Layout,
+)
 from app.modules.auction.domain.result import AuctionResult, NoFillReason
 from app.modules.auction.domain.swap import Trigger
 from app.modules.auction.infrastructure.auction_log import InMemoryAuctionLog
 from app.modules.auction.infrastructure.engines.in_process import InProcessBundleEngine
 from app.modules.audience import AudienceMomentSnapshot
-from app.modules.audience.application.fixture_tagging import classify_snapshot
-from app.modules.audience.application.ports.tagger import KeyframeTagger
+from app.modules.audience.application.classifier import AudienceClassifier, DegradedSignal
+from app.modules.audience.application.ports import AudienceTagger
 from app.modules.audience.application.ports.topics import TopicExtractor
+from app.modules.audience.domain.catalog import CueRule
 from app.modules.audience.domain.speech_evidence import (
     SpeechEvidence,
     SpeechTopic,
@@ -53,7 +58,8 @@ from app.modules.audience.domain.speech_evidence import (
     topics_from_keyterms,
 )
 from app.modules.audience.domain.value_objects.ids import MomentId
-from app.modules.audience.domain.value_objects.segment import SegmentId
+from app.modules.audience.domain.value_objects.segment import SegmentId, SegmentSource
+from app.modules.audience.infrastructure.catalog.loader import load_catalog
 from app.modules.campaigns.application.live_book import (
     LiveCampaignBook,
     MultiplierOutcome,
@@ -142,6 +148,7 @@ def register_demo(
     speech_ttl: timedelta = timedelta(seconds=60),
     swap_holds: bool = False,
     scheduler: Scheduler = thread_timer,
+    tagger: AudienceTagger | None = None,
     auction_log: AuctionLog | None = None,
     ledger: ChargeLedger | None = None,
     copywriter: CopyWriter | None = None,
@@ -149,7 +156,6 @@ def register_demo(
     hourly_budget_usd: Decimal = Decimal(2),
     budget_clp: int = 50_000,
     startup: list[Callable[[], Awaitable[None]]] | None = None,
-    keyframe_tagger: KeyframeTagger | None = None,
     topic_extractor: TopicExtractor | None = None,
     redemption_ledger: RedemptionLedger | None = None,
     public_base_url: str = "http://localhost:5173",
@@ -160,10 +166,11 @@ def register_demo(
     logo = Path(__file__).resolve().parents[2].joinpath("project-logo.png").read_bytes()
     logo_url = "data:image/png;base64," + b64encode(logo).decode("ascii")
 
-    fitness = SegmentId.create("DEMO_FITNESS")
-    coffee = SegmentId.create("DEMO_COFFEE")
-    beer = SegmentId.create("DEMO_BEER")
-    food = SegmentId.create("DEMO_FOOD")
+    # Real IAB Audience Taxonomy 1.1 IDs (source in the audience catalog JSON).
+    fitness = SegmentId.create("408")  # Interest | Healthy Living | Fitness and Exercise
+    coffee = SegmentId.create("977")  # Purchase Intent | CPG | Edible | Beverages | Coffee
+    beer = SegmentId.create("369")  # Interest | Food & Drink | Alcoholic Beverages
+    food = SegmentId.create("1404")  # Purchase Intent | Food and Beverage Services | Fast Food
     kits = tuple(
         BrandKit(
             brand_id=BrandId.create(ids.new_uuid7()),
@@ -180,9 +187,10 @@ def register_demo(
         )
     )
     kits_by_id = {kit.brand_id: kit for kit in kits}
-    # Stable brand slugs: the prop markers (edge/props/markers.json) and loop files use them.
+    # Stable brand slugs: prop markers (edge/props/markers.json, ADR 0008 D2), the
+    # audience catalog's brand_refs and the bundle loop files all use them.
     slug_of = {kit.brand_id: _slug(kit.name) for kit in kits}
-    brand_of_slug = {slug: brand for brand, slug in slug_of.items()}
+    brand_by_slug = {slug: brand for brand, slug in slug_of.items()}
     voltio, patio, rayo = kits[0].brand_id, kits[1].brand_id, kits[3].brand_id
     # Every mutual-partner pair gets an approved basket (docs/demo.md), so Rayo competes
     # for the energy slot inside a basket and prices it. Offers are sized to the group
@@ -248,33 +256,35 @@ def register_demo(
     delivery = DeliveryDesk(ledger=ledger or InMemoryChargeLedger(), ids=ids, budgets=book)
     redemptions = RedemptionDesk(ids=ids, ledger=redemption_ledger or InMemoryRedemptionLedger())
     loops = BundleLoopLibrary(media_dir) if media_dir is not None else None
-    # Held products: from prop markers in the snapshot (hot) and the keyframe tagger (warm).
-    held_now: tuple[HeldProduct, ...] = ()
-    tagged_held: dict[BrandId, tuple[Percentage, datetime]] = {}
-    keyframe_busy = False
     campaign_of = {bidder.campaign_id: bidder for bidder in bidders}
-    vision_catalog = {
-        # Simulator fixture labels (scripts/replay_audience.py, evals/scenarios).
-        "sports ball": fitness,
-        "tap handle fixture": beer,
-        # Real COCO labels the perception agent emits (edge/agent/vision/snapshot.py).
-        # Without these a live camera never maps to a segment and only the house ad plays.
-        "bottle": fitness,  # the gym-bottle prop
-        "cup": coffee,
-        "wine glass": beer,
-        # Held demo props, read from their ArUco markers (edge/props/markers.json, ADR 0008 D2).
-        "product:voltio": fitness,
-        "product:rayo": fitness,
-        "product:cafe-patio": coffee,
-        "product:malta-sur": beer,
-    }
-    sound_catalog = {"coffee service fixture": coffee}
-    segment_labels = {
-        fitness: "Sports & fitness",
-        coffee: "Coffee",
-        beer: "Beer",
-        food: "Food & dining",
-    }
+    # Demo cues at full weight replace any real catalog cue with the same label, so
+    # scripted scenes and the physical props stay deterministic; every other real
+    # catalog cue still applies. Held props ("product:<slug>", ADR 0008 D2) are not
+    # cues: the classifier reads them as held products that boost their partners.
+    loaded = load_catalog()
+    fixture_cues = tuple(
+        CueRule(source=source, cue=cue, segment_id=segment, weight=Percentage.create(100))
+        for source, cue, segment in (
+            # Simulator fixture labels (scripts/replay_audience.py, evals/scenarios).
+            (SegmentSource.VISION, "sports ball", fitness),
+            (SegmentSource.VISION, "tap handle fixture", beer),
+            (SegmentSource.SOUND, "coffee service fixture", coffee),
+            # COCO labels the live agent emits for the demo props
+            # (edge/agent/vision/snapshot.py); at catalog weight a single cup or
+            # bottle stays below the enter threshold and only the house ad plays.
+            (SegmentSource.VISION, "bottle", fitness),  # the gym-bottle prop
+            (SegmentSource.VISION, "cup", coffee),
+            (SegmentSource.VISION, "wine glass", beer),
+        )
+    )
+    fixture_keys = {(rule.source, rule.cue) for rule in fixture_cues}
+    audience_catalog = loaded.catalog.with_cues(
+        (
+            *(rule for rule in loaded.catalog.cues if (rule.source, rule.cue) not in fixture_keys),
+            *fixture_cues,
+        )
+    )
+    segment_labels = {segment.segment_id: segment.label for segment in audience_catalog.segments}
     # Canonical keyterms the agent reports (edge/agent/speech/keyterms.py) -> segments.
     keyterm_catalog = {
         "gym": fitness,
@@ -329,6 +339,36 @@ def register_demo(
     speech = SpeechEvidence()
     last_snapshot: tuple[AudienceSnapshot, Received] | None = None
     voice_degraded = False
+    vlm_degraded = False
+
+    def vlm_findings_landed(wire_screen_id: str) -> None:
+        # Re-run the decision on the latest observation with the VLM findings merged in.
+        with lock:
+            latest = last_snapshot
+        if latest is not None and wire_screen_id == DEMO_SCREEN:
+            decide(latest[0], Received(received_at=clock.now_utc()), reconsider=True)
+
+    def vlm_degradation(wire_screen_id: str, signal: DegradedSignal, active: bool) -> None:
+        nonlocal vlm_degraded
+        with lock:
+            if vlm_degraded == active:
+                return
+            vlm_degraded = active
+        hub.broadcast_console_threadsafe(
+            ConsoleDegradation(
+                screen_id=wire_screen_id,
+                flags=[DegradationFlag.VLM_UNAVAILABLE] if active else [],
+            )
+        )
+
+    classifier = AudienceClassifier(
+        catalog=audience_catalog,
+        reliability=loaded.reliability,
+        tagger=tagger,
+        warm=warm,
+        on_findings=vlm_findings_landed,
+        on_degraded=vlm_degradation,
+    )
     # The on-air play's exposure lease: (creative_id, result, looking, leases held).
     lease: tuple[str, AuctionResult, int, int] | None = None
 
@@ -337,7 +377,7 @@ def register_demo(
 
     def decide(snapshot: AudienceSnapshot, received: Received, *, reconsider: bool) -> None:
         nonlocal current_creative, current_moment, latest_observed_at, latest_console
-        nonlocal last_snapshot, held_now
+        nonlocal last_snapshot
         if snapshot.screen_id != DEMO_SCREEN:
             return
         measured_at = UtcTimestamp.create(snapshot.measured_at.astimezone(UTC))
@@ -362,7 +402,6 @@ def register_demo(
                     measured_at.value,
                     (tracklet.id for tracklet in snapshot.tracklets if tracklet.looking),
                 )
-                held_now = held_products(snapshot, at=received.received_at)
                 looks = [t.dwell_s for t in snapshot.tracklets if t.looking]
                 hub.send_to_screen_threadsafe(
                     ScreenAttention(
@@ -373,27 +412,27 @@ def register_demo(
                         measured_at=measured_at.value,
                     )
                 )
+            classification = classifier.classify(snapshot, at=received.received_at)
             segments = merge_speech(
-                classify_snapshot(
-                    snapshot,
-                    vision_catalog=vision_catalog,
-                    sound_catalog=sound_catalog,
-                ),
+                classification.segments,
                 speech,
                 at=UtcTimestamp.create(received.received_at),
                 looking=snapshot.looking,
             )
-            minor_likely = snapshot.minor_likely.value
+            minor_likely = classification.minor_likely
+            held = classification.held_products
             if current_moment is not None and (
                 snapshot.people,
                 snapshot.looking,
                 segments,
                 minor_likely,
+                held,
             ) == (
                 current_moment.people,
                 current_moment.looking,
                 current_moment.segments,
                 current_moment.minor_likely,
+                current_moment.held_products,
             ):
                 if not reconsider:
                     latest_observed_at = observed_at
@@ -408,6 +447,7 @@ def register_demo(
                 looking=snapshot.looking,
                 segments=segments,
                 minor_likely=minor_likely,
+                held_products=held,
             )
             if not reconsider:
                 latest_observed_at = observed_at
@@ -442,8 +482,16 @@ def register_demo(
                 reserve=reserve,
                 approved_baskets=offer_book.baskets(),
                 out_of_stock=stock.out_of_stock(DEMO_SCREEN),
-                held_products=held_now,
                 max_play_seconds=Decimal(MAX_PLAY_SECONDS),
+                # Complete the basket (ADR 0008 D2): a held brand boosts its partners.
+                held_products=tuple(
+                    BidHeldProduct(
+                        brand_id=brand_by_slug[product.brand_ref],
+                        confidence=product.confidence,
+                    )
+                    for product in moment.held_products
+                    if product.brand_ref is not None and product.brand_ref in brand_by_slug
+                ),
             ),
             trigger,
             now=clock.now_utc(),
@@ -719,68 +767,6 @@ def register_demo(
         return changed
 
     # ------------------------------------------------------------ held products, tags
-
-    def held_products(snapshot: AudienceSnapshot, *, at: datetime) -> tuple[HeldProduct, ...]:
-        """Prop markers in this snapshot, plus fresh keyframe tags (ADR 0008 D2)."""
-        best: dict[BrandId, Percentage] = {}
-        for item in snapshot.objects:
-            if not item.label.startswith(HELD_PREFIX):
-                continue
-            brand = brand_of_slug.get(item.label[len(HELD_PREFIX) :])
-            if brand is not None:
-                best[brand] = max(
-                    best.get(brand, Percentage.create(0)),
-                    Percentage.create(Decimal(str(item.score)) * 100),
-                    key=lambda p: p.value,
-                )
-        for brand, (confidence, seen_at) in list(tagged_held.items()):
-            if at - seen_at > TAG_TTL:
-                del tagged_held[brand]
-            elif brand not in best or best[brand].value < confidence.value:
-                best[brand] = confidence
-        return tuple(
-            HeldProduct(brand_id=brand, confidence=confidence)
-            for brand, confidence in sorted(best.items(), key=lambda item: str(item[0]))
-        )
-
-    def receive_keyframe(header: AudienceKeyframe, received: Received) -> None:
-        """Warm VLM tags from the live agent's face-blurred keyframe (objects only)."""
-        nonlocal keyframe_busy
-        if (
-            keyframe_tagger is None
-            or warm is None
-            or header.screen_id != DEMO_SCREEN
-            or header.session_id is not None  # recognition-stream crops: RecognitionVlm's
-            or received.payload is None
-        ):
-            return
-        with lock:
-            if keyframe_busy:
-                return  # one tagging call in flight per screen; newer frames are dropped
-            keyframe_busy = True
-        jpeg = received.payload
-        brand_names = [kits_by_id[brand].name for brand in kits_by_id]
-
-        async def job() -> None:
-            nonlocal keyframe_busy
-            try:
-                tags = await keyframe_tagger.tag(
-                    jpeg, object_labels=list(vision_catalog), brand_names=brand_names
-                )
-            finally:
-                with lock:
-                    keyframe_busy = False
-            at = clock.now_utc()
-            by_name = {kits_by_id[brand].name: brand for brand in kits_by_id}
-            changed = False
-            with lock:
-                for name, confidence in tags.held_brands:
-                    tagged_held[by_name[name]] = (Percentage.create(confidence * 100), at)
-                    changed = True
-            if changed:
-                reauction(Trigger.HELD_PRODUCTS_CHANGED)
-
-        warm.submit_threadsafe("vlm", f"keyframe:{header.screen_id}:{header.seq}", job)
 
     def extract_topics(utterance: AudienceUtterance, received: Received) -> None:
         if topic_extractor is None or warm is None:
@@ -1103,13 +1089,25 @@ def register_demo(
             if latest_console:
                 hub.broadcast_console_threadsafe(*latest_console, book_view(), sink=sink)
 
+    def receive_keyframe(keyframe: AudienceKeyframe, received: Received) -> None:
+        # Face-blurred JPEG, in memory only (never stored or logged); tagged on the warm path.
+        # Recognition-stream crops (session_id set) belong to RecognitionVlm.
+        if (
+            keyframe.screen_id == DEMO_SCREEN
+            and keyframe.session_id is None
+            and received.payload is not None
+        ):
+            classifier.observe_keyframe(
+                keyframe, jpeg=received.payload, received_at=received.received_at
+            )
+
     router.on(AudienceSnapshot, receive_snapshot)
+    router.on(AudienceKeyframe, receive_keyframe)
     router.on(AudienceUtterance, receive_utterance)
     router.on(PlaybackReport, receive_playback)
     router.on_player_connected(player_connected)
     router.on_console_connected(console_connected)
     router.on(PlayerDisplayed, receive_displayed)
-    router.on(AudienceKeyframe, receive_keyframe)
     return DemoControls(
         book_view=book_view,
         set_multiplier=set_multiplier,
@@ -1120,8 +1118,6 @@ def register_demo(
 
 
 _CEILING = RoundingPolicy.create(money_rounding=ROUND_CEILING)
-HELD_PREFIX = "product:"  # edge/agent/vision/held.py: a held prop's marker label
-TAG_TTL = timedelta(seconds=20)  # a VLM-tagged held product counts this long
 
 
 def _slug(name: str) -> str:

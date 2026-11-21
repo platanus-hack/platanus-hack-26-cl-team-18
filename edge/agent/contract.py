@@ -382,6 +382,14 @@ class SegmentScore(_Model):
     sources: list[SignalSource] = Field(default_factory=list)
 
 
+class HeldProductScore(_Model):
+    """A product someone holds (prop marker or label read): the object, never the person."""
+
+    category: Annotated[str, Field(min_length=1, max_length=64)]
+    brand_ref: Annotated[str, Field(min_length=1, max_length=64)] | None = None
+    score: Score
+
+
 class ConsoleMoment(_Message):
     type: Literal["console.moment"] = "console.moment"
     screen_id: ScreenId
@@ -391,6 +399,7 @@ class ConsoleMoment(_Message):
     segments: list[SegmentScore]
     minor_likely: MinorLikely
     trace: LatencyTrace
+    held_products: list[HeldProductScore] = Field(default_factory=list, max_length=16)
 
 
 class BidLine(_Model):

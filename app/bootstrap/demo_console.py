@@ -10,6 +10,7 @@ from app.contract.messages import (
     ConsoleMoment,
     Exclusion,
     ExclusionReason,
+    HeldProductScore,
     LatencyTrace,
     MoneyDTO,
     SegmentScore,
@@ -90,6 +91,14 @@ def decision_messages(
             ],
             minor_likely=snapshot.minor_likely,
             trace=trace,
+            held_products=[
+                HeldProductScore(
+                    category=product.category,
+                    brand_ref=product.brand_ref,
+                    score=float(product.confidence.to_ratio()),
+                )
+                for product in moment.held_products
+            ],
         ),
         ConsoleAuction(
             screen_id=screen_id,
