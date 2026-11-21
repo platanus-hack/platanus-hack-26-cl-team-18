@@ -1,11 +1,11 @@
 import { cn } from "@/lib/cn";
-import { demoHref, demoKey } from "@/lib/demo";
+import { demoHref, demoKey, rememberedDemoKey } from "@/lib/demo";
 import { Inbox } from "lucide-react";
 import type { ReactNode } from "react";
 
 /** The real station. Demo tools appear only inside the hidden `/demo/<key>` surface. */
 const STATION_NAV = [
-    { href: "/console", label: "Consola" },
+    { href: "/", label: "Consola" },
     { href: "/screen?id=demo-01", label: "Pantalla" },
 ];
 
@@ -30,7 +30,8 @@ export function AppShell({
     width?: "wide" | "narrow";
 }) {
     const path = window.location.pathname;
-    const nav = navFor(demoKey(path));
+    // The demo tools show up on the operator's own browser once it opened /demo/<key>.
+    const nav = navFor(demoKey(path) ?? rememberedDemoKey());
     return (
         <div className="paper-theme">
             <header className="sticky top-0 z-(--z-overlay) border-b border-border bg-surface">
@@ -43,7 +44,9 @@ export function AppShell({
                         className="-mx-1 flex min-w-0 gap-1 overflow-x-auto"
                     >
                         {nav.map(({ href, label }) => {
-                            const current = path === href.split("?")[0];
+                            const current =
+                                path === href.split("?")[0] ||
+                                (href === "/" && path === "/console");
                             return (
                                 <a
                                     key={href}

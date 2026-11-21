@@ -1,17 +1,8 @@
-import { demoHref, demoRoute, type DemoPage } from "@/lib/demo";
+import { demoHref, demoRoute, rememberDemoKey, type DemoPage } from "@/lib/demo";
 import { ErrorBoundary } from "@/shared/ui/ErrorBoundary";
-import { Button } from "@/shared/ui/button";
 import { Card } from "@/shared/ui/card";
 import { AppShell, PageHeader } from "@/shared/ui/page";
-import {
-    Activity,
-    Bug,
-    ChevronRight,
-    Megaphone,
-    Monitor,
-    SlidersHorizontal,
-    Store,
-} from "lucide-react";
+import { Bug, ChevronRight, Megaphone, SlidersHorizontal, Store } from "lucide-react";
 import { lazy, Suspense } from "react";
 
 // Each route is its own chunk: the kiosk player never downloads console code.
@@ -28,8 +19,9 @@ const CampaignsPage = lazy(() =>
     import("@/features/campaigns").then((m) => ({ default: m.CampaignsPage })),
 );
 
-/** The real station: the player and the operator console. Nothing else is public. */
+/** The real station: the player, and the operator console, which is also the home page. */
 const ROUTES: Record<string, () => React.JSX.Element> = {
+    "/": () => <ConsolePage />,
     "/screen": () => <ScreenPage />,
     "/console": () => <ConsolePage />,
 };
@@ -41,21 +33,6 @@ const DEMO_ROUTES: Record<DemoPage, () => React.JSX.Element> = {
     campaigns: () => <CampaignsPage />,
     dev: () => <DevPage />,
 };
-
-const STATION_TOOLS = [
-    {
-        href: "/console",
-        icon: Activity,
-        title: "Consola",
-        description: "En vivo, audiencia, subasta, latencia y cobros de cada pantalla.",
-    },
-    {
-        href: "/screen?id=demo-01",
-        icon: Monitor,
-        title: "Pantalla",
-        description: "El reproductor que ve la gente en la tienda.",
-    },
-];
 
 function demoTools(key: string) {
     return [
@@ -86,7 +63,7 @@ function demoTools(key: string) {
     ];
 }
 
-function ToolList({ tools }: { tools: readonly (typeof STATION_TOOLS)[number][] }) {
+function ToolList({ tools }: { tools: readonly ReturnType<typeof demoTools>[number][] }) {
     return (
         <Card className="divide-y divide-border-subtle">
             {tools.map(({ href, icon: Icon, title, description }) => (
@@ -125,29 +102,10 @@ function DemoHub({ demo }: { demo: string }) {
     );
 }
 
-function Index() {
-    return (
-        <AppShell>
-            <PageHeader
-                title="Avisos en canasta para pantallas en tienda"
-                description="Dos marcas complementarias comparten la pantalla y pagan solo por segundo de atención."
-                actions={
-                    <Button asChild variant="primary">
-                        <a href="/console">Abrir consola</a>
-                    </Button>
-                }
-            />
-            <ToolList tools={STATION_TOOLS} />
-            <p className="text-compact text-muted">
-                Sin identidad: no se guardan imágenes ni audio.
-            </p>
-        </AppShell>
-    );
-}
-
 export function App() {
     const path = window.location.pathname.replace(/\/+$/, "") || "/";
     const demo = demoRoute(path);
+    if (demo) rememberDemoKey(demo.key); // this browser now shows the demo tools in the nav
     const page = demo ? (
         demo.page ? (
             DEMO_ROUTES[demo.page]()
@@ -155,7 +113,7 @@ export function App() {
             <DemoHub demo={demo.key} />
         )
     ) : (
-        (ROUTES[path]?.() ?? <Index />)
+        (ROUTES[path]?.() ?? <ConsolePage />)
     );
     return (
         <ErrorBoundary label="app">

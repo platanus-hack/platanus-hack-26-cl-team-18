@@ -42,3 +42,23 @@ export function demoHeaders(pathname?: string): Record<string, string> {
     const key = demoKey(pathname);
     return key === null ? {} : { "X-Demo-Key": key };
 }
+
+const REMEMBERED = "team18.demoKey";
+
+/** Remember the key in this browser after a visit to `/demo/<key>` (operator laptop only). */
+export function rememberDemoKey(key: string): void {
+    try {
+        window.localStorage.setItem(REMEMBERED, key);
+    } catch {
+        // Private mode or blocked storage: the demo links just stay hidden.
+    }
+}
+
+/** The demo key this browser learned, if any; never part of the code or the page. */
+export function rememberedDemoKey(): string | null {
+    try {
+        return window.localStorage.getItem(REMEMBERED);
+    } catch {
+        return null;
+    }
+}
