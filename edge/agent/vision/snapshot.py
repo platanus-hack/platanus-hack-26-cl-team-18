@@ -7,6 +7,8 @@ Two jobs, both deterministic (time comes from `measured_at`, never the clock):
    (500 ms by default, docs/architecture.md §3). YOLO flickers between 2 and 3
    people from frame to frame; the backend has no debounce of its own, so this
    is where a passer-by or a missed detection stops triggering a re-auction.
+   In a crowd the facts may never hold still; after `max_stale` the most
+   frequent facts of the last second are published, so counts never freeze.
 2. **Rate-limit the sends.** A snapshot goes out at once when the published
    facts change, otherwise as a heartbeat, never faster than `max_rate_hz`.
 
@@ -17,6 +19,7 @@ the backend joins them with the playback window to measure attention.
 
 from __future__ import annotations
 
+from collections import Counter, deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -50,6 +53,11 @@ class SnapshotConfig:
     # fraction of the person box: held or carried, not on a shelf behind them.
     object_person_pad: float = 0.15
     debounce: timedelta = timedelta(milliseconds=500)
+    # In a crowd the raw facts may never hold still for `debounce`. After this long
+    # without a publish, publish the most frequent facts of the last `vote_window`
+    # instead of freezing on a stale count (found on a real café clip).
+    max_stale: timedelta = timedelta(milliseconds=1500)
+    vote_window: timedelta = timedelta(seconds=1)
     max_rate_hz: float = 10.0
     heartbeat: timedelta = timedelta(seconds=1)
 
@@ -102,6 +110,8 @@ class SnapshotBuilder:
         self._published: Facts | None = None
         self._candidate: Facts | None = None
         self._candidate_since: datetime | None = None
+        self._published_at: datetime | None = None
+        self._recent: deque[tuple[datetime, Facts]] = deque()
         self._last_sent_at: datetime | None = None
         self._last_sent_key: tuple[int, int, frozenset[str], frozenset[str]] | None = None
 
@@ -149,17 +159,42 @@ class SnapshotBuilder:
         return snapshot
 
     def _observe(self, facts: Facts, now: datetime) -> None:
+        self._recent.append((now, facts))
+        while self._recent and now - self._recent[0][0] > self._config.vote_window:
+            self._recent.popleft()
         if self._candidate is None or facts.key != self._candidate.key:
             self._candidate, self._candidate_since = facts, now
         else:
             self._candidate = facts  # same facts, fresher scores
         if self._published is None:
-            self._published = facts
+            self._publish(facts, now)
             return
-        assert self._candidate_since is not None
-        stable = now - self._candidate_since >= self._config.debounce
-        if self._candidate.key == self._published.key or stable:
-            self._published = self._candidate
+        assert self._candidate_since is not None and self._published_at is not None
+        if self._candidate.key == self._published.key:
+            self._published = self._candidate  # refresh scores, not news
+        elif now - self._candidate_since >= self._config.debounce:
+            self._publish(self._candidate, now)
+            return
+        if now - self._published_at >= self._config.max_stale:
+            # Re-check every max_stale: publish the vote if it disagrees, else confirm.
+            vote = self._vote()
+            if vote.key != self._published.key:
+                self._publish(vote, now)
+            else:
+                self._published_at = now
+
+    def _vote(self) -> Facts:
+        """The most frequent facts in the recent window; ties go to the newest."""
+        counts = Counter(f.key for _, f in self._recent)
+        best = max(counts.values())
+        for _, facts in reversed(self._recent):
+            if counts[facts.key] == best:
+                return facts
+        raise AssertionError("vote over an empty window")
+
+    def _publish(self, facts: Facts, now: datetime) -> None:
+        self._published = facts
+        self._published_at = now
 
     def _due(self, now: datetime, published: Facts) -> bool:
         if self._last_sent_at is None:

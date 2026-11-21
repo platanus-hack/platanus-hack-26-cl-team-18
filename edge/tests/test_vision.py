@@ -375,6 +375,44 @@ def test_published_counts_never_change_faster_than_the_debounce() -> None:
     assert all(gap >= timedelta(milliseconds=500) for gap in gaps)
 
 
+def test_counts_do_not_freeze_when_a_crowd_never_holds_still() -> None:
+    """Regression from a real café clip: churn kept the count stuck at 3 for 9 s."""
+    builder, tracker = _builder(SnapshotConfig(debounce=timedelta(milliseconds=500)))
+    xs = [100, 300, 500, 700, 900, 1100]
+    _feed(builder, tracker, ms(0), *(person(x, width=150) for x in xs[:3]))
+    published = []
+    for i in range(1, 50):  # 5 or 6 people, alternating every 200 ms: never stable 500 ms
+        count = 5 if (i // 2) % 2 else 6
+        snap = _feed(
+            builder,
+            PersonTracker(FAST),  # fresh tracker: raw count == detections
+            ms(100 * i),
+            *(person(x, width=150) for x in xs[:count]),
+        )
+        if snap is not None:
+            published.append(snap.people)
+    assert published and published[-1] in (5, 6)  # never frozen at the stale 3
+
+
+def test_vote_publishes_the_most_frequent_facts() -> None:
+    builder, _ = _builder(
+        SnapshotConfig(
+            debounce=timedelta(milliseconds=500),
+            max_stale=timedelta(milliseconds=300),
+            vote_window=timedelta(seconds=1),
+        )
+    )
+
+    def feed(t: int, n: int) -> AudienceSnapshot | None:
+        return _feed(builder, PersonTracker(FAST), ms(t), *(person(150 * i) for i in range(n)))
+
+    feed(0, 1)
+    last = None
+    for i, n in enumerate([4, 4, 3, 4, 4, 3, 4]):  # 4 dominates, never stable 500 ms
+        last = feed(100 * (i + 1), n) or last
+    assert builder.published is not None and builder.published.people == 4
+
+
 def test_tracks_need_two_hits_before_they_count() -> None:
     tracker = PersonTracker()
     assert tracker.update(frame(T0, person(400))) == []
