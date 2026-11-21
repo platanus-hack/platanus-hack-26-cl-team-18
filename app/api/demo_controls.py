@@ -27,7 +27,8 @@ router = APIRouter(prefix="/api", tags=["demo"], dependencies=[Depends(require_d
 
 def _controls(request: Request) -> DemoControls:
     container: Container = request.app.state.container
-    if container.demo is None or container.settings.app_env == "prod":
+    # The key (require_demo_key) decides who reaches this; prod included (strong key).
+    if container.demo is None:
         raise HTTPException(status_code=404, detail="the demo market is not running")
     return container.demo
 

@@ -55,9 +55,34 @@ def test_no_configured_key_means_no_demo_surface(tmp_path: Path) -> None:
         assert c.get("/api/book", headers={"X-Demo-Key": "anything"}).status_code == 404
 
 
-def test_production_never_serves_it_even_with_the_key(tmp_path: Path) -> None:
-    with client(tmp_path, app_env="prod", demo_key=KEY, live_ads_enabled=False) as c:
+PROD_KEY = "0123456789abcdef0123456789abcdef"
+
+
+def test_production_serves_the_market_controls_only_with_a_strong_key(tmp_path: Path) -> None:
+    with client(tmp_path, app_env="prod", demo_key=PROD_KEY) as c:
+        assert c.get("/api/campaigns/catalog").status_code == 404
+        assert c.get("/api/campaigns/catalog", headers={"X-Demo-Key": "x"}).status_code == 404
+        assert c.get("/api/campaigns/catalog", headers={"X-Demo-Key": PROD_KEY}).status_code == 200
+        assert (
+            c.get("/api/book?screen_id=demo-01", headers={"X-Demo-Key": PROD_KEY}).status_code
+            == 200
+        )
+
+
+def test_production_refuses_a_short_key(tmp_path: Path) -> None:
+    with client(tmp_path, app_env="prod", demo_key=KEY) as c:
         assert c.get("/api/campaigns/catalog", headers={"X-Demo-Key": KEY}).status_code == 404
+
+
+def test_production_never_serves_dev_even_with_the_key(tmp_path: Path) -> None:
+    with client(tmp_path, app_env="prod", demo_key=PROD_KEY) as c:
+        headers = {"X-Demo-Key": PROD_KEY}
+        assert c.post("/dev/push", json=PUSH, headers=headers).status_code == 404
+        with (
+            c.websocket_connect(f"/ws/dev?key={PROD_KEY}") as ws,
+            pytest.raises(WebSocketDisconnect),
+        ):
+            ws.receive_json()
 
 
 def test_the_real_station_needs_no_key(tmp_path: Path) -> None:

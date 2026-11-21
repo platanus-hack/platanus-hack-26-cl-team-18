@@ -26,4 +26,5 @@ secret_names = [
   # accept audience snapshots from anyone. Declared now because names added
   # after the first apply are ignored.
   "AGENT_TOKEN",
+  "DEMO_KEY", # 24+ chars (openssl rand -hex 16): bids, stock and campaigns in prod
 ]

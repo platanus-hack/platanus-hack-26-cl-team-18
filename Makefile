@@ -6,7 +6,7 @@ TF  := scripts/tf.sh $(ENV)
 TF_ROOTS := terraform/modules/render-app terraform/modules/render-static-site terraform/envs/prod
 LOCAL_DATABASE_URL := postgresql://team18:team18@localhost:5432/team18
 
-.PHONY: help help-all up station demo-live install edge-install edge-check eval-speech-robustness edge-yoloe edge-probe-objects test-live test-sandbox dev web-install web-dev web-check contract contract-check lint format typecheck test check migrate migrate-status db-up db-down db-reset \
+.PHONY: help help-all up station demo-live install edge-install edge-check eval-speech-robustness edge-yoloe edge-probe-objects test-live test-sandbox dev web-install web-dev web-check contract contract-check lint format typecheck test check migrate migrate-status campaign-budgets db-up db-down db-reset \
         live-preflight bundle-loops bundle-loops-local \
         eval eval-baseline eval-creative eval-creative-baseline eval-campaigns eval-replay eval-perception eval-record eval-rehearsal eval-beats eval-video-fetch eval-video eval-pipeline eval-demo-video demo-warmup eval-browser \
         tf-init tf-fmt tf-fmt-check tf-validate tf-test tf-check tf-plan tf-apply tf-output tf-lock
@@ -159,6 +159,9 @@ migrate: ## Apply pending SQL migrations to DATABASE_URL
 
 migrate-status: ## Show applied/pending migrations for DATABASE_URL
 	uv run python scripts/migrate.py status
+
+campaign-budgets: ## Show campaign budgets/spend/bids in DATABASE_URL (top up: scripts/campaign_budget.py)
+	uv run python scripts/campaign_budget.py status
 
 # Local Postgres goes through the same migrate.py ledger as Render's pre-deploy,
 # so `make migrate` against it never re-runs an applied file.

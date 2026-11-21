@@ -98,6 +98,9 @@ Terraform is only for infrastructure changes.
    - Caveat: after the group exists, a new entry in `secret_names` is **not**
      added, because `ignore_changes` also covers new keys. Add the key in the
      dashboard, and list it in `secret_names` as documentation.
+   - `DEMO_KEY` (24+ chars, `openssl rand -hex 16`) unlocks the market controls
+     in prod: bids, autobid, stock and campaign drafts at `/demo/<key>`. Unset
+     or shorter, prod serves none of them; `/dev` is never served in prod.
 2. **Config lives in tracked files only.** That means `variables.tf` defaults
    plus the tracked `terraform.tfvars`. No `*.auto.tfvars`, no untracked
    overrides, no "I set it on my laptop": a value nobody else can see gets

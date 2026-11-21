@@ -47,7 +47,7 @@ class AppSettings(BaseSettings):
     # Never in prod, whatever this says: the stream has no auth.
     # The demo surface (app/api/demo_access.py): bids, stock, campaign drafts, `/dev`
     # QA and `/dev/push`, reached from the hidden `/demo/<key>` web hub. Unset: off.
-    # Never served in prod; app_env=test needs no key.
+    # In prod only with a key of 24+ chars, and never `/dev`; app_env=test needs no key.
     demo_key: SecretStr | None = None
     dev_console: bool = True
     # Opt-in: relay the face-blurred keyframe the VLM gets to `/dev` (in memory, never

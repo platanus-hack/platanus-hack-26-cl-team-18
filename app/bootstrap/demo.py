@@ -91,6 +91,7 @@ from app.modules.campaigns.application.live_book import (
     MultiplierOutcome,
     UnknownCampaign,
 )
+from app.modules.campaigns.application.ports.registry import CampaignRegistry
 from app.modules.campaigns.application.stock import StockBoard
 from app.modules.campaigns.domain.autobid import AutoBidGoal
 from app.modules.campaigns.domain.book import (
@@ -101,6 +102,7 @@ from app.modules.campaigns.domain.book import (
     CampaignId,
     SegmentBid,
 )
+from app.modules.campaigns.infrastructure.registry import InMemoryCampaignRegistry
 from app.modules.common.application.clock import BaseClock
 from app.modules.common.application.id_generator import IdGenerator
 from app.modules.common.domain.value_objects.money import Money
@@ -207,6 +209,7 @@ def seed_market(
     auction_log: AuctionLog | None = None,
     ledger: ChargeLedger | None = None,
     redemption_ledger: RedemptionLedger | None = None,
+    registry: CampaignRegistry | None = None,
     catalog: demo_catalog.Catalog = demo_catalog.FICTIONAL,
 ) -> LiveMarket:
     # Keep the project mark on the house ad. The fictional brands have fixed
@@ -221,9 +224,16 @@ def seed_market(
     # the rest get a generated wordmark. Never an AI-drawn logo.
     logo = Path(__file__).resolve().parents[2].joinpath("project-logo.png").read_bytes()
     logo_url = "data:image/png;base64," + b64encode(logo).decode("ascii")
+    # Stable ids, budgets and live bids come from the registry (Postgres in prod), so
+    # charges keep pointing at the same campaign and spend survives a restart.
+    registry = registry or InMemoryCampaignRegistry(ids)
+    stored = registry.open(
+        [brand.slug for brand in catalog.brands],
+        budget=Money.create(currency="CLP", amount=budget_clp),
+    )
     kits = tuple(
         BrandKit(
-            brand_id=BrandId.create(ids.new_uuid7()),
+            brand_id=stored[brand.slug].brand_id,
             name=brand.name,
             logo_url=_brand_logo(brand.slug, brand.name, brand.color),
             stock_copy=brand.stock_copy,
@@ -255,7 +265,7 @@ def seed_market(
     # Rates are CLP per attention-second (docs/auction-plan.md D4b).
     bidders = tuple(
         Bidder(
-            campaign_id=CampaignId.create(ids.new_uuid7()),
+            campaign_id=stored[brand.slug].campaign_id,
             brand_id=brand_by_slug[brand.slug],
             category=brand.category,
             age_restricted=brand.age_restricted,
@@ -266,11 +276,19 @@ def seed_market(
                 for segment in brand.segments
             ),
             partners=frozenset(brand_by_slug[slug] for slug in catalog.partners_of(brand.slug)),
-            budget_remaining=Money.create(currency="CLP", amount=budget_clp),
+            live_multiplier=stored[brand.slug].multiplier,
+            budget_remaining=stored[brand.slug].budget,
         )
         for brand in catalog.brands
     )
-    book = LiveCampaignBook(bidders)
+    book = LiveCampaignBook(
+        bidders,
+        spent={campaign.campaign_id: campaign.spent for campaign in stored.values()},
+        multiplier_seqs={
+            campaign.campaign_id: campaign.multiplier_seq for campaign in stored.values()
+        },
+        on_multiplier=registry.multiplier_changed,
+    )
     return LiveMarket(
         kits=kits,
         offers=offer_book,

@@ -84,6 +84,8 @@ class Container:
     startup: list[Callable[[], Awaitable[None]]] = field(default_factory=list)
     writer: WriteBehindWriter | None = None
     redemption_ledger: Any = None  # RedemptionLedger; in memory unless DATABASE_URL is set
+    # CampaignRegistry: stable campaign ids, budgets and live bids (Postgres when set).
+    campaign_registry: Any = None
     topic_extractor: TopicExtractor | None = None  # speech topics (AUDIENCE_AI)
     loop_keys: tuple[str, ...] = ()
     campaign_generator: CampaignGenerator | None = None
@@ -233,6 +235,15 @@ def build_records(container: Container) -> None:
     from app.modules.delivery.infrastructure.redemptions import PostgresRedemptionLedger
 
     container.redemption_ledger = PostgresRedemptionLedger(writer)
+    from app.modules.campaigns.infrastructure.registry import PostgresCampaignRegistry
+    from app.modules.common.application.id_generator import IdGenerator
+
+    container.campaign_registry = PostgresCampaignRegistry(
+        lambda: psycopg2.connect(dsn, connect_timeout=5),
+        writer,
+        ids=IdGenerator(),
+        clock=container.clock,
+    )
 
     async def close_writer() -> None:
         writer.close()

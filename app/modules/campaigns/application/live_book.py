@@ -6,7 +6,7 @@ delivery (charges) all touch it. Postgres is the record, not the hot read.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
@@ -48,20 +48,42 @@ class BookEntry:
     multiplier_seq: int
 
 
+type MultiplierRecorder = Callable[[CampaignId, BidMultiplier, int], None]
+
+
 class LiveCampaignBook:
-    def __init__(self, bidders: Iterable[Bidder]) -> None:
+    """`budget_remaining` on a bidder is its budget; `spent` and `multiplier_seqs` restore
+    what a previous process already booked (the campaign registry). `on_multiplier` hears
+    every applied multiplier, under the book's lock, so it must never block."""
+
+    def __init__(
+        self,
+        bidders: Iterable[Bidder],
+        *,
+        spent: Mapping[CampaignId, Money] | None = None,
+        multiplier_seqs: Mapping[CampaignId, int] | None = None,
+        on_multiplier: MultiplierRecorder | None = None,
+    ) -> None:
         self._lock = Lock()
         self._entries: dict[CampaignId, BookEntry] = {}
         self._seen: dict[CampaignId, dict[int, BidMultiplier]] = {}
+        self._on_multiplier = on_multiplier
         self.version = 0
+        spent = spent or {}
+        multiplier_seqs = multiplier_seqs or {}
         for bidder in bidders:
-            account = (
-                None
-                if bidder.budget_remaining is None
-                else BudgetAccount.open(bidder.campaign_id, bidder.budget_remaining)
-            )
+            account = None
+            if bidder.budget_remaining is not None:
+                budget = bidder.budget_remaining
+                account = BudgetAccount(
+                    campaign_id=bidder.campaign_id,
+                    budget=budget,
+                    spent=spent.get(bidder.campaign_id, Money.zero(currency=budget.currency)),
+                )
             self._entries[bidder.campaign_id] = BookEntry(
-                bidder=bidder, account=account, multiplier_seq=0
+                bidder=bidder,
+                account=account,
+                multiplier_seq=multiplier_seqs.get(bidder.campaign_id, 0),
             )
 
     def snapshot(self, *, excluding_hold: str | None = None) -> tuple[Bidder, ...]:
@@ -143,6 +165,8 @@ class LiveCampaignBook:
                 multiplier_seq=seq,
             )
             self.version += 1
+            if self._on_multiplier is not None:
+                self._on_multiplier(campaign_id, multiplier, seq)
             return MultiplierOutcome.APPLIED
 
     def reserve(self, key: str, holds: dict[CampaignId, Money], *, at: datetime) -> None:

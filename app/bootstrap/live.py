@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from threading import RLock
 from typing import TYPE_CHECKING
 
-from app.bootstrap.demo import DEMO_SCREEN, DemoControls, _slug, register_demo, seed_market
+from app.bootstrap.demo import (
+    DEMO_SCREEN,
+    DemoControls,
+    LiveMarket,
+    _slug,
+    register_demo,
+    seed_market,
+)
 from app.bootstrap.demo_catalog import catalog_named
 from app.contract.messages import (
     AdvertiserBidMultiplier,
@@ -20,6 +28,7 @@ from app.contract.messages import (
     StockSet,
 )
 from app.modules.campaigns.application.live_book import MultiplierOutcome
+from app.modules.campaigns.application.ports.registry import CampaignRegistry
 from app.modules.creative.application.campaigns import CampaignGenerator
 from app.modules.creative.application.loops import bundle_key
 from app.realtime.hub import Sink
@@ -28,6 +37,8 @@ from app.realtime.warm_worker import GatedWarm
 
 if TYPE_CHECKING:
     from app.bootstrap.container import Container
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,14 +56,25 @@ def register_live_market(container: Container) -> DemoControls:
 
     settings = container.settings
     ids = IdGenerator()
-    market = seed_market(
-        ids=ids,
-        budget_clp=settings.demo_budget_clp,
-        auction_log=container.auction_log,
-        ledger=container.ledger,
-        redemption_ledger=container.redemption_ledger,
-        catalog=catalog_named(settings.demo_catalog),
-    )
+
+    def market_with(registry: CampaignRegistry | None) -> LiveMarket:
+        return seed_market(
+            ids=ids,
+            budget_clp=settings.demo_budget_clp,
+            auction_log=container.auction_log,
+            ledger=container.ledger,
+            redemption_ledger=container.redemption_ledger,
+            registry=registry,
+            catalog=catalog_named(settings.demo_catalog),
+        )
+
+    try:
+        market = market_with(container.campaign_registry)
+    except Exception:
+        # The screen is never blank: a database down at boot means fresh in-memory
+        # campaigns for this process (spend and bids from before are not restored).
+        logger.exception("Campaign registry unavailable: campaigns start in memory")
+        market = market_with(None)
     slugs = {kit.brand_id: _slug(kit.name) for kit in market.kits}
     container.campaign_generator = CampaignGenerator(
         kits=market.kits,
