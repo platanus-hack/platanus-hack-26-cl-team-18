@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import re
@@ -71,6 +72,7 @@ class VoiceoverStats:
     synthesized: int = 0
     characters: int = 0
     failures: int = 0
+    coalesced: int = 0  # callers that joined a synthesis already in flight
     disabled_by: VoiceFailure | None = None
 
 
@@ -87,6 +89,9 @@ class VoiceoverService:
         self._profile = profile
         self._budget = budget
         self.stats = VoiceoverStats()
+        # Single flight per cache key: startup prewarm and live moments often ask for
+        # the same offer line at once; only the first pays, the rest await its result.
+        self._in_flight: dict[str, asyncio.Future[str | None]] = {}
 
     def key_for(self, copy: str, voice_id: str) -> str:
         return cache_key(spoken_line(copy), voice_id, self._profile)
@@ -109,6 +114,16 @@ class VoiceoverService:
         if (url := self._store.url_if_cached(key, self._profile.extension)) is not None:
             self.stats.cache_hits += 1
             return url
+        if (pending := self._in_flight.get(key)) is not None:
+            self.stats.coalesced += 1
+            return await asyncio.shield(pending)
+        task = asyncio.ensure_future(self._synthesize(key, line, voice_id))
+        self._in_flight[key] = task
+        task.add_done_callback(lambda _: self._in_flight.pop(key, None))
+        # Shielded: a caller that gives up (moment moved on) must not cancel the shared call.
+        return await asyncio.shield(task)
+
+    async def _synthesize(self, key: str, line: str, voice_id: str) -> str | None:
         if self.stats.disabled_by is not None:
             return None  # provider calls are off (auth, quota or budget); cached lines still play
         if self._budget is not None and self._budget.remaining() < len(line):

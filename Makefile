@@ -7,7 +7,7 @@ TF_ROOTS := terraform/modules/render-app terraform/modules/render-static-site te
 LOCAL_DATABASE_URL := postgresql://team18:team18@localhost:5432/team18
 
 .PHONY: help install edge-install edge-check test-live test-sandbox dev web-install web-dev web-check contract contract-check lint format typecheck test check migrate migrate-status db-up db-down db-reset \
-        eval eval-baseline eval-creative eval-creative-baseline eval-replay eval-perception eval-record eval-rehearsal \
+        eval eval-baseline eval-creative eval-creative-baseline eval-replay eval-perception eval-record eval-rehearsal eval-video-fetch eval-video eval-pipeline demo-warmup \
         tf-init tf-fmt tf-fmt-check tf-validate tf-test tf-check tf-plan tf-apply tf-output tf-lock
 
 help: ## Show this help
@@ -92,6 +92,18 @@ eval-record: ## Record a live rehearsal from :8000 until Ctrl-C (OUT=path.jsonl)
 
 eval-rehearsal: ## Score a recorded rehearsal (REC=path.jsonl)
 	uv run python -m evals rehearsal $(REC)
+
+eval-video-fetch: ## Download the CC stock clips in evals/video/clips.json (gitignored)
+	uv run python -m evals.video.fetch
+
+eval-video: ## Stock video -> edge agent -> live backend -> ad-fit report (ARGS="--perceiver standin --only ID --reuse")
+	uv run python -m evals.video.run $(ARGS)
+
+eval-pipeline: ## End-to-end ad pipeline journeys: stage waterfall + bottleneck (ARGS="--cold --copy-scale 2")
+	uv run python -m evals pipeline $(ARGS)
+
+demo-warmup: ## Demo day: warm AI copy + voice-over caches on the running backend (same daypart as the demo)
+	uv run python -m evals warmup $(ARGS)
 
 migrate: ## Apply pending SQL migrations to DATABASE_URL
 	uv run python scripts/migrate.py

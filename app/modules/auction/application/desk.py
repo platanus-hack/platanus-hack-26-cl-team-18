@@ -104,6 +104,11 @@ class AuctionDesk:
         self._pending = None
         return result
 
+    def displayed(self, at: datetime) -> None:
+        """The player confirmed the on-air creative is visible: holds count from here."""
+        if self._on_air is not None and at > self._on_air.displayed_at:
+            self._on_air = replace(self._on_air, displayed_at=at)
+
     @property
     def hold_pending(self) -> bool:
         return self._pending is not None

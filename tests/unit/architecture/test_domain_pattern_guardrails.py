@@ -62,6 +62,7 @@ APPEND_ONLY_TABLES = {
     "outbox_event",
     "auction",
     "charge",
+    "redemption",
     # Add tables whose rows are history: audit log, sensor readings, ...
 }
 
@@ -73,6 +74,7 @@ APPEND_ONLY_TABLES = {
 IMMUTABLE_ROW_TABLES: set[str] = {
     "auction",
     "charge",
+    "redemption",
     # Add tables whose rows are immutable facts, e.g. raw sensor readings.
 }
 

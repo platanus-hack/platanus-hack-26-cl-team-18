@@ -12,9 +12,11 @@ Two jobs, both deterministic (time comes from `measured_at`, never the clock):
 2. **Rate-limit the sends.** A snapshot goes out at once when the published
    facts change, otherwise as a heartbeat, never faster than `max_rate_hz`.
 
-Counts and objects in a snapshot are the **published** (debounced) facts.
-Tracklets are the **live** per-person samples of the current frame, because
-the backend joins them with the playback window to measure attention.
+Counts, objects, held products, `minor_likely` and the sound scene in a
+snapshot are the **published** (debounced) facts: they all live in `Facts.key`,
+so none of them bypasses the debounce or the crowd vote. Tracklets are the
+**live** per-person samples of the current frame, because the backend joins
+them with the playback window to measure attention.
 """
 
 from __future__ import annotations
@@ -23,8 +25,10 @@ from collections import Counter, deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from agent.contract import AudienceSnapshot, DetectedObject, MinorLikely, Tracklet
+from agent.contract import AudienceSnapshot, DetectedObject, MinorLikely, SoundScene, Tracklet
+from agent.sound.scene import SceneLabel
 from agent.vision.held import HELD_LABEL_PREFIX, HeldProductView
+from agent.vision.minor import NO_READING, MinorReading
 from agent.vision.tracking import TrackView
 from agent.vision.types import ObjectDetection
 
@@ -62,21 +66,28 @@ class SnapshotConfig:
     heartbeat: timedelta = timedelta(seconds=1)
 
 
+type FactsKey = tuple[int, int, frozenset[str], frozenset[str], bool, frozenset[str]]
+
+
 @dataclass(frozen=True, slots=True)
 class Facts:
     people: int
     looking: int
     objects: tuple[tuple[str, float], ...]  # (label, best score), sorted by label
     held: tuple[HeldProductView, ...]
+    minor: MinorReading = NO_READING
+    sound: tuple[SceneLabel, ...] = ()
 
     @property
-    def key(self) -> tuple[int, int, frozenset[str], frozenset[str]]:
-        """What counts as a change: scores may wobble without it being news."""
+    def key(self) -> FactsKey:
+        """What counts as a change: scores and confidences may wobble without it being news."""
         return (
             self.people,
             self.looking,
             frozenset(label for label, _ in self.objects),
             frozenset(h.brand_id for h in self.held),
+            self.minor.value,
+            frozenset(s.label for s in self.sound),
         )
 
 
@@ -85,6 +96,8 @@ def frame_facts(
     objects: tuple[ObjectDetection, ...],
     held: list[HeldProductView],
     config: SnapshotConfig,
+    minor: MinorReading = NO_READING,
+    sound: tuple[SceneLabel, ...] = (),
 ) -> Facts:
     reach = [t.box.expanded(config.object_person_pad) for t in tracks]
     best: dict[str, float] = {}
@@ -99,6 +112,8 @@ def frame_facts(
         looking=sum(t.looking for t in tracks),
         objects=tuple(sorted(best.items())),
         held=tuple(held),
+        minor=minor,
+        sound=tuple(sound),
     )
 
 
@@ -113,7 +128,7 @@ class SnapshotBuilder:
         self._published_at: datetime | None = None
         self._recent: deque[tuple[datetime, Facts]] = deque()
         self._last_sent_at: datetime | None = None
-        self._last_sent_key: tuple[int, int, frozenset[str], frozenset[str]] | None = None
+        self._last_sent_key: FactsKey | None = None
 
     @property
     def published(self) -> Facts | None:
@@ -126,9 +141,16 @@ class SnapshotBuilder:
         tracks: list[TrackView],
         objects: tuple[ObjectDetection, ...],
         held: list[HeldProductView],
+        minor: MinorReading = NO_READING,
+        sound: tuple[SceneLabel, ...] = (),
     ) -> AudienceSnapshot | None:
-        """Feed one frame. Returns the snapshot to send now, or None."""
-        facts = frame_facts(tracks, objects, held, self._config)
+        """Feed one frame. Returns the snapshot to send now, or None.
+
+        `minor` is the already-voted moment reading (`agent.vision.minor`) and
+        `sound` the latest sound-scene labels (`agent.sound`); both are debounced
+        here like every other fact.
+        """
+        facts = frame_facts(tracks, objects, held, self._config, minor, sound)
         self._observe(facts, measured_at)
         published = self._published
         assert published is not None
@@ -150,8 +172,12 @@ class SnapshotBuilder:
                 for t in tracks[:64]
             ],
             objects=detected[:64],
-            # The coarse minor-likely flag comes from the warm VLM path, never from here.
-            minor_likely=MinorLikely(value=False, confidence=0.0),
+            sound_scene=[SoundScene(label=s.label, score=s.score) for s in published.sound][:16],
+            # Only the moment's boolean and confidence leave the device (invariant 2:
+            # it can only block age-restricted ads). The warm VLM path supplements it.
+            minor_likely=MinorLikely(
+                value=published.minor.value, confidence=published.minor.confidence
+            ),
         )
         self._seq += 1
         self._last_sent_at = measured_at

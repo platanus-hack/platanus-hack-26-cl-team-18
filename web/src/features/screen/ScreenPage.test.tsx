@@ -11,6 +11,7 @@ const harness = vi.hoisted(() => ({
     prepare: vi.fn<(_url: string, _signal: AbortSignal) => Promise<void>>(),
     play: vi.fn(),
     stop: vi.fn(),
+    send: vi.fn(),
 }));
 vi.mock("@/lib/ws/typed-socket", () => ({
     TypedSocket: class {
@@ -19,7 +20,7 @@ vi.mock("@/lib/ws/typed-socket", () => ({
         }
         start() {}
         stop() {}
-        send() {}
+        send = harness.send;
     },
 }));
 vi.mock("./voice", () => ({
@@ -50,6 +51,7 @@ beforeEach(async () => {
     harness.prepare.mockReset();
     harness.play.mockClear();
     harness.stop.mockClear();
+    harness.send.mockClear();
     host = document.createElement("div");
     document.body.append(host);
     root = createRoot(host);
@@ -313,5 +315,87 @@ describe("screen display and voice lifecycle", () => {
         await show("silent-ad", "/broken.mp3");
         expect(visibleCopy()).toContain("silent-ad");
         expect(harness.play).not.toHaveBeenCalled();
+    });
+});
+
+describe("glass-to-glass and attention-driven stages", () => {
+    const displayedSends = () =>
+        harness.send.mock.calls
+            .map(([sent]) => sent as { type: string; creative_id: string; seq: number })
+            .filter((sent) => sent.type === "player.displayed");
+
+    function attention(looking: number, dwell: number): PlayerOutbound {
+        return {
+            type: "screen.attention",
+            v: 1,
+            screen_id: "demo-01",
+            creative_id: null,
+            looking,
+            dwell_s: dwell,
+            measured_at: new Date().toISOString(),
+        };
+    }
+
+    it("sends player.displayed once per new creative, not on an in-place upgrade", async () => {
+        harness.send.mockClear();
+        const ready = message("shown", null);
+        await show("shown", null);
+        await act(async () => {
+            harness.receive({ ...ready, type: "creative.upgraded", upgrade_kind: "copy" });
+            await vi.advanceTimersByTimeAsync(500);
+        });
+        await show("next", null);
+        expect(displayedSends().map((m) => [m.creative_id, m.seq])).toEqual([
+            ["shown", 2],
+            ["next", 3],
+        ]);
+    });
+
+    it("follows attention instead of the timer, holding while nobody looks", async () => {
+        const ready = message("dwell", null);
+        ready.spec.stages = [
+            { name: "teaser", copy_text: "teaser" },
+            { name: "offer", copy_text: "offer" },
+            { name: "close", copy_text: "close" },
+        ];
+        await act(async () => {
+            harness.receive(ready);
+            await vi.advanceTimersByTimeAsync(250);
+        });
+        for (let i = 0; i < 10; i++) {
+            await act(async () => {
+                harness.receive(attention(0, 0)); // nobody looking: hold
+                await vi.advanceTimersByTimeAsync(1000);
+            });
+        }
+        expect(visibleCopy()).toContain("teaser");
+        await act(async () => {
+            harness.receive(attention(2, 4));
+            await vi.advanceTimersByTimeAsync(200);
+        });
+        expect(visibleCopy()).toContain("offer");
+        await act(async () => {
+            harness.receive(attention(2, 9));
+            await vi.advanceTimersByTimeAsync(200);
+        });
+        expect(visibleCopy()).toContain("close");
+        expect(visibleCopy()).toContain("QR · válido 10 min"); // no qr_url: text-only
+    });
+
+    it("renders the scannable QR and its code at the close stage", async () => {
+        const spec = {
+            ...HOUSE_AD.spec,
+            stages: [{ name: "close" as const, copy_text: "Escanea" }],
+            qr_url: "data:image/svg+xml;base64,PHN2Zy8+",
+            redemption_code: "AB12CD",
+        };
+        await act(async () => {
+            root.render(<CreativeView spec={spec} playKey="qr" />);
+            await Promise.resolve();
+        });
+        const qr = host.querySelector<HTMLImageElement>('img[alt="QR para canjear la oferta"]');
+        expect(qr?.src).toBe(spec.qr_url);
+        expect(host.textContent).toContain("AB12CD");
+        expect(host.textContent).toContain("válido 10 min");
     });
 });

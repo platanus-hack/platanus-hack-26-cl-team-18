@@ -22,6 +22,8 @@ jobs:
       # Product evals on a live backend: gates + baseline ratchet (docs/evals.md).
       # The scorecard goes to the job summary and is kept as an artifact.
       - run: uv run python -m evals --soak 300
+      # Full ad pipeline (copy + voice + billing) with replayed provider timing.
+      - run: uv run python -m evals pipeline --dwell 3
       - if: always()
         uses: actions/upload-artifact@v4
         with:

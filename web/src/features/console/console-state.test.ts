@@ -1,6 +1,6 @@
 import { ConsoleOutboundSchema } from "@/contract";
 import { describe, expect, it } from "vitest";
-import { consoleReducer, initialConsoleState } from "./console-state";
+import { consoleReducer, initialConsoleState, REDEMPTION_WINDOW } from "./console-state";
 import {
     coBrandLift,
     glassToGlassMs,
@@ -130,6 +130,45 @@ describe("market and receipts", () => {
             ["c1", "0"],
             ["c1", "26"],
         ]);
+    });
+
+    const redemption = (code: string, screen = "demo-01") =>
+        ConsoleOutboundSchema.parse({
+            type: "console.redemption",
+            v: 1,
+            screen_id: screen,
+            auction_id: "a1",
+            code,
+            brands: ["Voltio", "Brasa"],
+            offer_text: "Dúo $5.990",
+            redeemed_at: "2026-11-21T12:00:00Z",
+        });
+
+    it("keeps the last redemptions newest first, per screen", () => {
+        let state = initialConsoleState;
+        for (let i = 0; i < REDEMPTION_WINDOW + 2; i++) {
+            state = consoleReducer(state, {
+                type: "message",
+                message: redemption(`CODE${String(i).padStart(2, "0")}`),
+            });
+        }
+        state = consoleReducer(state, { type: "message", message: redemption("OTHER1", "s2") });
+        const codes = state.screens["demo-01"]?.redemptions.map((r) => r.code);
+        expect(codes).toHaveLength(REDEMPTION_WINDOW);
+        expect(codes?.[0]).toBe("CODE11");
+        expect(codes).not.toContain("CODE01");
+        expect(state.screens["s2"]?.redemptions.map((r) => r.brands)).toEqual([
+            ["Voltio", "Brasa"],
+        ]);
+    });
+
+    it("a redemption before any receipt leaves the receipts empty", () => {
+        const state = consoleReducer(initialConsoleState, {
+            type: "message",
+            message: redemption("AB12CD"),
+        });
+        expect(state.screens["demo-01"]?.receipts).toEqual([]);
+        expect(state.screens["demo-01"]?.redemptions[0]?.code).toBe("AB12CD");
     });
 
     it("stores the live book per screen", () => {

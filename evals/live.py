@@ -15,6 +15,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import uvicorn
 from pydantic import TypeAdapter
@@ -24,6 +25,8 @@ from app.bootstrap.container import build_container
 from app.config.settings import AppSettings
 from app.contract.messages import CONSOLE_OUTBOUND, PLAYER_OUTBOUND
 from app.main import create_app
+from app.modules.creative.application.ports.copywriter import CopyWriter
+from app.modules.creative.application.ports.voice import VoiceSynthesizer
 
 START_TIMEOUT_S = 10.0
 
@@ -44,33 +47,57 @@ class LiveBackend:
 
 
 @contextmanager
-def live_backend(*, media_dir: Path | None = None) -> Iterator[LiveBackend]:
-    """Boot a fresh simulator backend (fresh in-memory state) and tear it down."""
+def serve(app: Any) -> Iterator[str]:
+    """Run any ASGI app with uvicorn on a free loopback port; yields ``host:port``."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind(("127.0.0.1", 0))
+    port = sock.getsockname()[1]
+    server = uvicorn.Server(
+        uvicorn.Config(app, log_level="warning", lifespan="on", ws_ping_interval=None)
+    )
+    thread = threading.Thread(target=server.run, kwargs={"sockets": [sock]}, daemon=True)
+    thread.start()
+    deadline = time.monotonic() + START_TIMEOUT_S
+    while not server.started:
+        if not thread.is_alive() or time.monotonic() > deadline:
+            raise RuntimeError("eval server failed to start")
+        time.sleep(0.01)
+    try:
+        yield f"127.0.0.1:{port}"
+    finally:
+        server.should_exit = True
+        thread.join(timeout=5)
+        sock.close()
+
+
+@contextmanager
+def live_backend(
+    *,
+    media_dir: Path | None = None,
+    copywriter: CopyWriter | None = None,
+    voice_synthesizer: VoiceSynthesizer | None = None,
+    **settings_overrides: Any,
+) -> Iterator[LiveBackend]:
+    """Boot a fresh simulator backend (fresh in-memory state) and tear it down.
+
+    ``copywriter`` / ``voice_synthesizer`` plug real or replayed providers into
+    the composition root's own override points, so the full generation stack
+    (studio, guard, cache, voice-over service, warm worker) runs unmodified.
+    """
     with tempfile.TemporaryDirectory(prefix="evals-media-") as tmp:
         settings = AppSettings(
-            app_env="test", demo_simulator=True, media_dir=media_dir or Path(tmp)
+            app_env="test",
+            demo_simulator=True,
+            media_dir=media_dir or Path(tmp) / "media",
+            elevenlabs_budget_file=Path(tmp) / "elevenlabs-budget.json",
+            **settings_overrides,
         )
-        app = create_app(container=build_container(settings))
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.bind(("127.0.0.1", 0))
-        port = sock.getsockname()[1]
-        server = uvicorn.Server(
-            uvicorn.Config(app, log_level="warning", lifespan="on", ws_ping_interval=None)
+        container = build_container(
+            settings, copywriter=copywriter, voice_synthesizer=voice_synthesizer
         )
-        thread = threading.Thread(target=server.run, kwargs={"sockets": [sock]}, daemon=True)
-        thread.start()
-        deadline = time.monotonic() + START_TIMEOUT_S
-        while not server.started:
-            if not thread.is_alive() or time.monotonic() > deadline:
-                raise RuntimeError("eval backend failed to start")
-            time.sleep(0.01)
-        try:
-            yield LiveBackend(http_url=f"http://127.0.0.1:{port}", ws_url=f"ws://127.0.0.1:{port}")
-        finally:
-            server.should_exit = True
-            thread.join(timeout=5)
-            sock.close()
+        with serve(create_app(container=container)) as host:
+            yield LiveBackend(http_url=f"http://{host}", ws_url=f"ws://{host}")
 
 
 PLAYER_MESSAGES: TypeAdapter = PLAYER_OUTBOUND

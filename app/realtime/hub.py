@@ -27,14 +27,16 @@ from app.contract.messages import (
     ConsoleLatency,
     ConsoleMoment,
     ConsoleReceipt,
+    ConsoleRedemption,
     CreativeReady,
     CreativeUpgraded,
     ErrorMessage,
+    ScreenAttention,
 )
 
 logger = logging.getLogger(__name__)
 
-PlayerMessage = CreativeReady | CreativeUpgraded | ErrorMessage
+PlayerMessage = CreativeReady | CreativeUpgraded | ErrorMessage | ScreenAttention
 ConsoleMessage = (
     ConsoleMoment
     | ConsoleAuction
@@ -45,6 +47,7 @@ ConsoleMessage = (
     | ErrorMessage
     | ConsoleBook
     | ConsoleReceipt
+    | ConsoleRedemption
 )
 
 SEND_TIMEOUT_S = 1.0
@@ -64,6 +67,9 @@ class HubStats:
 class ConnectionHub:
     def __init__(self) -> None:
         self._players: dict[str, set[Sink]] = defaultdict(set)
+        # Players that asked for `screen.attention` (?attention=1); others never see it,
+        # so consumers reading the creative stream in order are unaffected.
+        self._attention: set[Sink] = set()
         self._consoles: set[Sink] = set()
         self._console_send_lock = asyncio.Lock()
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -74,10 +80,13 @@ class ConnectionHub:
 
     # ----------------------------------------------------------- registration
 
-    def add_player(self, screen_id: str, sink: Sink) -> None:
+    def add_player(self, screen_id: str, sink: Sink, *, attention: bool = False) -> None:
         self._players[screen_id].add(sink)
+        if attention:
+            self._attention.add(sink)
 
     def remove_player(self, screen_id: str, sink: Sink) -> None:
+        self._attention.discard(sink)
         sinks = self._players.get(screen_id)
         if sinks is not None:
             sinks.discard(sink)
@@ -109,6 +118,8 @@ class ConnectionHub:
         if target is None:
             raise ValueError("send_to_screen needs a screen_id")
         subscribers = self._players.get(target, ())
+        if isinstance(message, ScreenAttention):
+            subscribers = {s for s in subscribers if s in self._attention}
         recipients = subscribers if sink is None else (sink,) if sink in subscribers else ()
         dead = await self._fan_out(recipients, message.model_dump_json())
         for disconnected in dead:

@@ -87,7 +87,7 @@ def test_unknown_and_malformed_frames() -> None:
 def test_config_url_carries_the_protocol_parameters_and_never_the_key() -> None:
     cfg = ScribeConfig(api_key="secret", keyterms=("hambre", "café"))
     url = cfg.connect_url()
-    assert "model_id=scribe_v2_realtime" in url
+    assert "model_id=scribe_v3_live" in url
     assert "audio_format=pcm_16000" in url and "commit_strategy=manual" in url
     assert "language_code=es" in url and url.count("keyterms=") == 2
     assert "secret" not in url and "secret" not in repr(cfg)

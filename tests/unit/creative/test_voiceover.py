@@ -106,3 +106,42 @@ def test_media_store_is_atomic_and_rejects_traversal(tmp_path: Path) -> None:
         store.put("a" * 32, "mp3", b"")
     store.put("a" * 32, "mp3", b"data")
     assert [p.name for p in (tmp_path / "voiceovers").iterdir()] == ["a" * 32 + ".mp3"]
+
+
+class SlowSynth(FakeSynth):
+    """Holds every synthesis open until released, like a real provider round trip."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.release = anyio.Event()
+
+    async def synthesize(self, request: VoiceRequest) -> SynthesizedVoice:
+        await self.release.wait()
+        return await super().synthesize(request)
+
+
+def test_concurrent_requests_for_one_line_share_a_single_synthesis(tmp_path: Path) -> None:
+    """Startup prewarm and a live moment asking for the same offer line must pay once.
+
+    Found by the pipeline eval (evals/pipeline.py): on a cold start the same
+    line was synthesized twice, spending characters twice.
+    """
+    synth = SlowSynth()
+    voiceovers = service(tmp_path, synth)
+    urls: list[str | None] = []
+
+    async def run() -> None:
+        async def ask() -> None:
+            urls.append(await voiceovers.voiceover_url("Dúo: Voltio y Café Patio", VOICE))
+
+        async with anyio.create_task_group() as group:
+            group.start_soon(ask)
+            group.start_soon(ask)
+            await anyio.sleep(0.01)
+            synth.release.set()
+
+    anyio.run(run)
+    assert len(synth.requests) == 1
+    assert urls[0] is not None and urls == [urls[0], urls[0]]
+    assert voiceovers.stats.synthesized == 1
+    assert voiceovers.stats.coalesced == 1

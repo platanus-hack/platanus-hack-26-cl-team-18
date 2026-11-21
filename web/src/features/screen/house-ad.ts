@@ -34,5 +34,7 @@ export const HOUSE_AD: Playable = {
         offer: null,
         angle: null,
         copy_source: null,
+        redemption_code: null,
+        redeem_url: null,
     },
 };

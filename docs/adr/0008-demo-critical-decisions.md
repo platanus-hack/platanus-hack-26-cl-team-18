@@ -171,6 +171,20 @@ The merge of `0a69119` brought a second, standalone vision slice
   3. **ByteTrack** behind the tracker interface if the IoU tracker shows ID
      switches in crowds (measure with `make eval-perception` first).
 
+### D13. A pose heuristic supplements the VLM path for `minor_likely`; it only blocks
+
+`edge/agent/vision/minor.py` flags a tracked person as child-sized from two
+pose cues: stature against peers on the same floor line, and ear-to-shoulder
+width. A 7-of-12-frame vote then feeds the 500 ms fact debounce. Only the
+moment's boolean and a confidence capped at 0.9 leave the device. No
+per-person data is kept or logged, and there is no face analysis or age
+estimate. Invariant 2 still holds: the flag can only block age-restricted ads.
+Thresholds live in `MinorConfig` and can be set with `--minor-threshold`,
+`--minor-window` and `--minor-hits`. In the same change, `edge/agent/sound/`
+adds an always-on sound scene built from coarse acoustic features (no words,
+no audio stored or sent), enabled with `--sound`. Its "coffee service
+fixture" label is a demo heuristic.
+
 ## Consequences
 
 - Two hand-offs (D2) are needed before beat 3 works end to end.

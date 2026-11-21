@@ -85,6 +85,28 @@ SPECS: dict[str, Spec] = {
     "loopback_round_trip_max_ms": Spec("info", "lower", label="Round trip max (ms)"),
     "glass_to_glass_samples": Spec("info", label="Glass-to-glass samples"),
     "soak_decisions_per_s": Spec("info", label="Soak throughput (decisions/s)"),
+    # Pipeline journeys (evals/pipeline.py): gen = live generation, demo = warmed caches.
+    "house_ad_billed": Spec("gate", "lower", 0, label="Pipeline: house-ad plays billed"),
+    "voice_duplicate_syntheses": Spec(
+        "gate", "lower", 0, label="Pipeline: same line synthesized twice"
+    ),
+    "gen_hot_decision_p95_ms": Spec("gate", "lower", 30, label="Gen: hot decision p95 (ms)"),
+    "gen_complete_ad_p95_ms": Spec(
+        "gate", "lower", 3000, label="Gen: moment → complete ad p95 (ms)"
+    ),
+    "gen_billing_receipt_rate": Spec("gate", "higher", 1, label="Gen: paid plays with a receipt"),
+    "gen_attention_error_mean": Spec(
+        "gate", "lower", 0.05, label="Gen: attention-seconds error vs truth"
+    ),
+    "demo_complete_ad_p95_ms": Spec(
+        "gate", "lower", 300, label="Demo: moment → complete ad p95 (ms, cache-hit target)"
+    ),
+    "demo_voice_provider_calls": Spec(
+        "gate", "lower", 0, label="Demo: live TTS calls after warm-up"
+    ),
+    "demo_copy_provider_calls": Spec(
+        "gate", "lower", 0, label="Demo: live LLM calls after warm-up"
+    ),
     "video_clips": Spec("info", label="Video: clips"),
     "video_ad_precision": Spec("info", label="Video: ad precision (fitting / paid time)"),
     "video_sensible_ad_reach": Spec("info", label="Video: sensible-ad reach (fitting / clip time)"),

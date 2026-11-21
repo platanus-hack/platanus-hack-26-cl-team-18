@@ -73,10 +73,28 @@ def main(argv: list[str] | None = None) -> int:
     creative.add_argument("--record", action="store_true", help="live: overwrite recordings.json")
     creative.add_argument("--update-baseline", dest="creative_baseline", action="store_true")
 
+    pipeline = sub.add_parser(
+        "pipeline", help="end-to-end ad pipeline journeys: stage waterfall + bottleneck"
+    )
+    pipeline.add_argument("--dwell", type=float, default=5.0, help="seconds per moment")
+    pipeline.add_argument("--copy-scale", type=float, default=1.0, help="x recorded Claude latency")
+    pipeline.add_argument("--tts-latency-ms", type=float, default=350.0)
+    pipeline.add_argument("--cold", action="store_true", help="also run a cold-boot journey")
+
+    warmup = sub.add_parser(
+        "warmup", help="demo-day: warm copy + voice caches on a running backend"
+    )
+    warmup.add_argument("--server", default="ws://127.0.0.1:8000")
+    warmup.add_argument("--scenes", nargs="*", help="scene names (default: the demo journey)")
+
     args = parser.parse_args(argv)
     command = args.command or "suite"
     if command == "suite":
         return _run_suite(args)
+    if command == "pipeline":
+        return _run_pipeline(args)
+    if command == "warmup":
+        return _run_warmup(args)
     if command == "replay":
         return _run_replay(args)
     if command == "perception":
@@ -185,6 +203,8 @@ def _finish(
     sections: list[dict[str, Any]],
     violations: list[m.Violation],
     failures: list[str],
+    *,
+    extra_markdown: str = "",
 ) -> int:
     baseline = sc.load_baseline() if suite == "scenarios" else {}
     verdicts = sc.judge(metrics, baseline)
@@ -197,7 +217,7 @@ def _finish(
         failures=failures,
     )
     history = sc.load_history(args.out, suite=suite) + [report]
-    markdown = sc.render_markdown(report, history)
+    markdown = sc.render_markdown(report, history) + extra_markdown
     if not getattr(args, "no_save", False):
         path = sc.save_run(report, markdown, args.out)
         print(f"results: {path}", file=sys.stderr)
@@ -213,6 +233,63 @@ def _finish(
         print(f"baseline updated: {sc.BASELINE_FILE}", file=sys.stderr)
         return 0
     return 1 if sc.failed(verdicts) else 0
+
+
+def _run_pipeline(args: argparse.Namespace) -> int:
+    from evals import pipeline as pl
+
+    modes = [("gen", False, False), ("demo", False, True)] + (
+        [("cold", True, False)] if args.cold else []
+    )
+    metrics: dict[str, Any] = {}
+    extra = ""
+    for prefix, cold, warmup in modes:
+        run = pl.run_journey(
+            dwell_s=args.dwell,
+            copy_scale=args.copy_scale,
+            tts_latency_ms=args.tts_latency_ms,
+            cold=cold,
+            warmup=warmup,
+        )
+        analysis = pl.analyse(run)
+        title = {"gen": "Generation mode", "demo": "Demo mode (warmed)", "cold": "Cold boot"}[
+            prefix
+        ]
+        extra += f"\n# {title}\n\n" + pl.render(run, analysis)
+        metrics.update({f"{prefix}_{k}": v for k, v in analysis["metrics"].items()})
+        metrics[f"{prefix}_bottleneck"] = analysis["bottleneck"]
+    gates = {
+        "house_ad_billed": sum(metrics.get(f"{p}_house_ad_billed", 0) or 0 for p, _, _ in modes),
+        "voice_duplicate_syntheses": sum(
+            metrics.get(f"{p}_voice_duplicate_syntheses", 0) or 0 for p, _, _ in modes
+        ),
+    }
+    metrics.update(gates)
+    args.update_baseline = False
+    return _finish(args, "pipeline", metrics, [], [], [], extra_markdown=extra)
+
+
+def _run_warmup(args: argparse.Namespace) -> int:
+    from evals import pipeline as pl
+    from evals.live import LiveBackend
+    from evals.scenario import load_scenes
+
+    scenes = load_scenes()
+    names = args.scenes or list(dict.fromkeys(pl.JOURNEY))
+    server = args.server.rstrip("/")
+    results = pl.warm_up(LiveBackend(http_url="", ws_url=server), [scenes[n] for n in names])
+    for r in results:
+        if not r.paid:
+            state = "house ad (nothing to warm)"
+        else:
+            voice = "voice-over cached" if r.voice_ms is not None else "NO voice-over"
+            copy = "AI copy cached" if r.copy_ms is not None else "stock copy (AI copy off/slow)"
+            state = f"{voice} · {copy}"
+        print(f"{r.scene:16} {state}")
+    missing = [r.scene for r in results if r.paid and r.voice_ms is None]
+    if missing:
+        print(f"not warmed (check ElevenLabs config): {', '.join(missing)}")
+    return 1 if missing else 0
 
 
 def _section(run: RunRecord, beat: str) -> dict[str, Any]:

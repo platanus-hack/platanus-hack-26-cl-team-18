@@ -22,6 +22,11 @@ class AppSettings(BaseSettings):
     database_url: SecretStr | None = None
     # Each seeded demo campaign's budget (CLP). Small values exercise budget exhaustion.
     demo_budget_clp: int = Field(default=50_000, gt=0)
+    # Where phones reach the backend through the tunnel (QR → {public_base_url}/r/{code}).
+    public_base_url: str = "http://localhost:5173"
+    # Warm audience AI (Claude): keyframe tags (objects/held products only) and speech
+    # topics for utterances the keyterm matcher missed. Off: keyterms and markers only.
+    audience_ai: bool = False
     # Minimum ad seconds (docs/auction-plan.md D5): hold a swap so ads aren't strobed.
     # None = on, except app_env=test (fixed-clock tests get immediate swaps unless
     # they opt in and inject a scheduler).
@@ -63,6 +68,10 @@ class AppSettings(BaseSettings):
     # Hard cap on TTS characters this install may ever spend (persisted across restarts).
     # The account has ~10k credits: leave headroom for rehearsal and live tests.
     elevenlabs_char_budget: int = Field(default=2000, ge=0)
+    # Synthesize every approved offer line at startup (cold path) so plays are cache hits.
+    # Off by default because it spends credits (~281 for the demo's 7 lines, once; then
+    # cached on disk). Start once with VOICEOVER_PREWARM=true before a rehearsal.
+    voiceover_prewarm: bool = False
     # Outside media_dir on purpose: /media is publicly served.
     elevenlabs_budget_file: Path = Path("var/elevenlabs-budget.json")
     # ------------------------------------------------------------ creative (docs/creative-generation.md)

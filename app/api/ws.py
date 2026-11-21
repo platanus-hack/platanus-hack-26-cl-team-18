@@ -160,7 +160,7 @@ async def screen_socket(ws: WebSocket, screen_id: str) -> None:
         return
     c = _container(ws)
     await ws.accept()
-    c.hub.add_player(screen_id, ws)
+    c.hub.add_player(screen_id, ws, attention=ws.query_params.get("attention") == "1")
     gate = SeqGate()
     try:
         await c.router.player_connected(screen_id, ws)

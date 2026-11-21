@@ -254,6 +254,19 @@ export const ConsoleReceiptSchema = z.strictObject({
 });
 export type ConsoleReceipt = z.infer<typeof ConsoleReceiptSchema>;
 
+// A basket's QR was redeemed: credited to every brand in it (architecture §6.2).
+export const ConsoleRedemptionSchema = z.strictObject({
+  v: z.literal(1),
+  type: z.literal("console.redemption"),
+  screen_id: z.string().min(1).max(64).regex(/^[A-Za-z0-9_.:-]+$/),
+  auction_id: z.string().min(1).max(64),
+  code: z.string().regex(/^[A-Z0-9]{4,12}$/),
+  brands: z.array(z.string().max(80)),
+  offer_text: z.string().max(160).nullable(),
+  redeemed_at: z.iso.datetime({ offset: true }),
+});
+export type ConsoleRedemption = z.infer<typeof ConsoleRedemptionSchema>;
+
 export const CopySourceKindSchema = z.enum(["stock", "ai", "cache"]);
 export type CopySourceKind = z.infer<typeof CopySourceKindSchema>;
 
@@ -296,6 +309,8 @@ export const CreativeSpecSchema = z.strictObject({
   offer: CreativeOfferSchema.nullable(),
   angle: z.string().max(32).nullable(),
   copy_source: CopySourceKindSchema.nullable(),
+  redemption_code: z.string().regex(/^[A-Z0-9]{4,12}$/).nullable(),
+  redeem_url: z.string().max(500).nullable(),
 });
 export type CreativeSpec = z.infer<typeof CreativeSpecSchema>;
 
@@ -345,6 +360,17 @@ export const PlaybackReportSchema = z.strictObject({
   ended_at: z.iso.datetime({ offset: true }),
 });
 export type PlaybackReport = z.infer<typeof PlaybackReportSchema>;
+
+// The player made a creative visible (crossfade done): closes glass-to-glass latency.
+export const PlayerDisplayedSchema = z.strictObject({
+  v: z.literal(1),
+  type: z.literal("player.displayed"),
+  screen_id: z.string().min(1).max(64).regex(/^[A-Za-z0-9_.:-]+$/),
+  creative_id: z.string().min(1).max(64),
+  seq: z.number().int().gte(0),
+  displayed_at: z.iso.datetime({ offset: true }),
+});
+export type PlayerDisplayed = z.infer<typeof PlayerDisplayedSchema>;
 
 export const RecognitionAttributeSchema = z.strictObject({
   name: z.string().min(1).max(64),
@@ -425,6 +451,21 @@ export const RecognitionSnapshotSchema = z.strictObject({
 });
 export type RecognitionSnapshot = z.infer<typeof RecognitionSnapshotSchema>;
 
+// Who is watching now (aggregate only): the player advances dwell stages on it.
+// 
+// `dwell_s` is the longest current look among looking viewers; 0 when nobody looks,
+// so the player holds its stage instead of advancing on a timer (architecture §6.1).
+export const ScreenAttentionSchema = z.strictObject({
+  v: z.literal(1),
+  type: z.literal("screen.attention"),
+  screen_id: z.string().min(1).max(64).regex(/^[A-Za-z0-9_.:-]+$/),
+  creative_id: z.string().min(1).max(64).nullable(),
+  looking: z.number().int().gte(0),
+  dwell_s: z.number().gte(0.0),
+  measured_at: z.iso.datetime({ offset: true }),
+});
+export type ScreenAttention = z.infer<typeof ScreenAttentionSchema>;
+
 // A clerk's stock toggle for one brand at one screen. A stock-out re-auctions.
 export const StockSetSchema = z.strictObject({
   v: z.literal(1),
@@ -438,15 +479,15 @@ export type StockSet = z.infer<typeof StockSetSchema>;
 export const AgentInboundSchema = z.discriminatedUnion("type", [AudienceSnapshotSchema, AudienceKeyframeSchema, AudienceUtteranceSchema, RecognitionSnapshotSchema]);
 export type AgentInbound = z.infer<typeof AgentInboundSchema>;
 
-export const PlayerInboundSchema = z.discriminatedUnion("type", [PlaybackReportSchema]);
+export const PlayerInboundSchema = z.discriminatedUnion("type", [PlaybackReportSchema, PlayerDisplayedSchema]);
 export type PlayerInbound = z.infer<typeof PlayerInboundSchema>;
 
-export const PlayerOutboundSchema = z.discriminatedUnion("type", [CreativeReadySchema, CreativeUpgradedSchema, ErrorMessageSchema]);
+export const PlayerOutboundSchema = z.discriminatedUnion("type", [CreativeReadySchema, CreativeUpgradedSchema, ErrorMessageSchema, ScreenAttentionSchema]);
 export type PlayerOutbound = z.infer<typeof PlayerOutboundSchema>;
 
-export const ConsoleOutboundSchema = z.discriminatedUnion("type", [ConsoleMomentSchema, ConsoleAuctionSchema, ConsoleLatencySchema, ConsoleDegradationSchema, CreativeReadySchema, CreativeUpgradedSchema, ErrorMessageSchema, ConsoleBookSchema, ConsoleReceiptSchema]);
+export const ConsoleOutboundSchema = z.discriminatedUnion("type", [ConsoleMomentSchema, ConsoleAuctionSchema, ConsoleLatencySchema, ConsoleDegradationSchema, CreativeReadySchema, CreativeUpgradedSchema, ErrorMessageSchema, ConsoleBookSchema, ConsoleReceiptSchema, ConsoleRedemptionSchema]);
 export type ConsoleOutbound = z.infer<typeof ConsoleOutboundSchema>;
 
-export const MESSAGE_TYPES = ["audience.snapshot", "audience.keyframe", "audience.utterance", "creative.ready", "creative.upgraded", "playback.report", "console.moment", "console.auction", "console.latency", "console.degradation", "system.error", "advertiser.bid_multiplier", "stock.set", "console.book", "console.receipt", "recognition.snapshot"] as const;
+export const MESSAGE_TYPES = ["audience.snapshot", "audience.keyframe", "audience.utterance", "creative.ready", "creative.upgraded", "playback.report", "console.moment", "console.auction", "console.latency", "console.degradation", "system.error", "advertiser.bid_multiplier", "stock.set", "console.book", "console.receipt", "recognition.snapshot", "player.displayed", "screen.attention", "console.redemption"] as const;
 
 export type MessageType = (typeof MESSAGE_TYPES)[number];

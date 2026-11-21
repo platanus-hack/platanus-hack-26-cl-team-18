@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.api import demo_controls, dev, health, recognition, ws
+from app.api import demo_controls, dev, health, recognition, redeem, ws
 from app.bootstrap.container import Container, build_container
 from app.config.logging_setup import configure_logging
 from app.config.settings import AppSettings
@@ -36,10 +36,15 @@ def create_app(
                 built.recognition.prune(built.clock.now_utc())
 
         expiry_task = asyncio.create_task(expire_recognition())
+        startup_tasks: list[asyncio.Future[None]] = [
+            asyncio.ensure_future(hook()) for hook in built.startup
+        ]
         try:
             yield
         finally:
             expiry_task.cancel()
+            for task in startup_tasks:
+                task.cancel()
             try:
                 await expiry_task
             except asyncio.CancelledError:
@@ -65,6 +70,7 @@ def create_app(
     app.include_router(ws.router)
     app.include_router(recognition.router)
     app.include_router(demo_controls.router)
+    app.include_router(redeem.router)
     if settings.app_env != "prod":
         app.include_router(dev.router)
     settings.media_dir.mkdir(parents=True, exist_ok=True)

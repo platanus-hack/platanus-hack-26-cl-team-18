@@ -24,21 +24,22 @@ rehearsal ──► make eval-record ──► make eval-rehearsal ──► new
 | **Soak** | No missing creative, invariants and latency under a fast random walk | None | `python -m evals --soak N` | `make eval`, CI |
 | **Perception on real video** | The agent counts people, sees held products and flags minors on recorded clips | **No mocked frames** | `make eval-perception` | On purpose, before demo |
 | **Real-video replay** | Real perception output through the live backend: flicker, fill, latency | None | `make eval-replay` | On purpose |
+| **Stock-video ad fit** | On real footage of real people, the ad the screen chose *makes sense* for the scene, and a must-never brand never airs | **None** (CC stock clips → edge agent → live backend) | `make eval-video` | Before every demo, after any catalog or auction change |
+| **Ad pipeline journeys** | The whole ad system end to end (auction → stock/cached copy → AI copy → voice-over → play → receipt), timed per stage, with the bottleneck named | Provider *timing* replayed (recorded Claude latencies, TTS knob); everything else real, incl. the ElevenLabs HTTP adapter against the sandbox server | `make eval-pipeline` | CI, and after any change to creative, voice or billing |
 | **Rehearsal scoring** | What actually happened in a run-through, glass to glass | None | `make eval-record` / `make eval-rehearsal` | Every rehearsal |
 
 ### Known-gap ledger (strict xfail)
 
 A property the engine *should* satisfy but doesn't yet is written as a test
-marked `xfail(strict=True)` that cites the requirement. Today:
+marked `xfail(strict=True)` that cites the requirement. When the fix lands
+the test XPASSes, strict mode fails the build, and the fixer deletes the
+marker. A fixed gap can never come back unnoticed.
 
-- **R-P5/R-P6** (`docs/auction-plan.md`): price per AS can exceed the bid
-  when several viewers match, because the price is money per screen-second.
-- **R-P4**: the reserve floor can charge a winner more than its own slot
-  value. Pinned by `reserve_floor_case()`: two CLP 15 bids win a duo on
-  affinity and each pays CLP 10 for a slot worth 7.5.
-
-When the fix lands the test XPASSes, strict mode fails the build, and the
-fixer deletes the marker. A fixed gap can never come back unnoticed.
+The ledger worked as intended on its first two entries: **R-P5/R-P6** (price
+per AS above the bid) and **R-P4** (the reserve floor charging more than the
+slot value, pinned by `reserve_floor_case()`) were found by the properties,
+held as strict xfails, and fixed by the auction rework, which removed the
+markers. The ledger is empty today.
 
 The creative generation engine has its own offline suite (targeting,
 safety, quality, latency and cost): `make eval-creative`, documented in
@@ -55,7 +56,7 @@ is committed.
 | Kind | Rule | Metrics |
 |---|---|---|
 | **Gate** | Absolute bound. It never moves; failing one fails the run. | invariant violations = 0, scenario checks failed = 0, soak missing creatives = 0, server decision p95 ≤ 30 ms, agent→player round trip p95 ≤ 100 ms, glass-to-glass p50 ≤ 1.5 s / p95 ≤ 2.5 s, perception minor windows missed = 0 |
-| **Ratchet** | Versus `baseline.json`, in its declared direction. Worse fails; better asks for `make eval-baseline`. | scenario pass rate, fill rate, basket rate, mean coverage, basket value lift, cleared revenue / single-brand value |
+| **Ratchet** | Versus `baseline.json`, in its declared direction. Worse fails; better asks for `make eval-baseline`. | scenario pass rate, fill rate, basket rate, mean coverage, basket value lift, basket revenue lift (Σ bundle_revenue / Σ single_brand_revenue − 1, same units) |
 | **Info** | Tracked and shown with history, never judged against the baseline. | p50/max latencies, exclusions by reason, brands per play, throughput |
 
 Latency is gated absolutely, not against the baseline, because wall-clock
@@ -69,14 +70,16 @@ re-derives "competitors together" (from bid categories), "minor targeted"
 messages. A bug that drops the engine's own `age_restricted` flag is still
 caught.
 
-### Baseline (2026-11-21, `e880589`)
+### Baseline (2026-11-21, after the auction rework, `d10b16e`)
 
-All 6 scenarios and 62 checks pass, with 0 violations. Server decision p95 is
-about 0.6 ms and the loopback round trip p95 is about 7 ms. Coverage is 1.0
-and basket value lift is +20 %. **Cleared revenue is 0.46× the single-brand
-value**: auction-plan §2.1 gap 1, now a number that should go up when the
-pricing fix lands. Glass-to-glass is `n/a` until the player reports
-`displayed_at` (see §6).
+All 6 scenarios pass, with 0 violations and 0 soak errors. Server decision
+p95 is about 2 ms and the loopback round trip p95 is about 11 ms. Coverage is
+0.97 (looking-viewer coverage, R-O4), basket value lift is +7.5 % (the unpaid
+pair bonus is gone, R-P2), and **basket revenue lift is +4.7 %** against the
+single-brand counterfactual. Before the rework the first baseline (`e880589`)
+showed cleared prices at only 0.46× the single-brand value, which is how the
+evals surfaced auction-plan §2.1 gap 1. Glass-to-glass is `n/a` until the
+player reports `displayed_at` (see §6).
 
 ## 3. Add a scenario (a data change)
 
@@ -150,6 +153,116 @@ looking (must not sell); a kid joins a beer moment (safety); the group turns
 away (attention → $0); dim room; a queue of 5 or more. Record on the demo
 webcam at the demo settings (`docs/stack.md`).
 
+### 4.1 Stock-video ad fit: "does the ad make sense?"
+
+Before we have our own clips, freely licensed stock footage of real people
+(Wikimedia Commons: CC BY, CC BY-SA, CC0, each credited in the report) is run
+through the **production perception agent** and the **live backend**, and
+every screen change is judged against a human expectation for that scene.
+
+```sh
+make eval-video-fetch        # once: 8 clips (~200 MB) into the gitignored videos dir
+make eval-video              # edge agent (needs `cd edge && uv sync --extra vision`)
+make eval-video ARGS="--perceiver standin --only coffee-counter --reuse"
+open evals/results/video/index.html
+```
+
+- **Clips** are declared in `evals/video/clips.json`: source page, license,
+  artist, window (`start_s`, `duration_s`), a one-line `scene`, and
+  `expect.sensible_brands` / `expect.never_brands`. That judgement is written
+  by a person who has looked at the frames, and it is data, not code.
+- **Perception** is `edge/agent/vision` in record mode (CPU, YOLO26, about
+  200 ms/frame). `evals/video/perceive.py` is a self-contained `uv` script
+  stand-in (`--perceiver standin`) that also cuts the review keyframes: one
+  downscaled frame per fact change, **every detected head blurred**, written
+  only to gitignored results.
+- **Replay** runs in real time through a fresh live backend, so debounce,
+  holds and swaps behave as live.
+- **Report** (`evals/results/video/index.html`): per clip, a timeline bar of
+  what the screen showed, and per change the blurred frame, what perception
+  saw (people, looking, held/near objects), what the audience context
+  understood (segments), the ad and its copy, and a verdict (✓ makes sense,
+  ? off-target, ✗ must never, house ad, "missed opportunity").
+- **Metrics:** paid share, **ad precision** (fitting paid time / paid time),
+  **sensible-ad reach** (fitting paid time / clip time), screen changes per
+  minute, raw vs published fact changes (the agent's smoothing), CPU time
+  per frame, and objects "seen but not understood" (seen in ≥ 30 % of
+  samples with no segment ever formed: a catalog gap, not a model gap). The
+  **gate** is `inappropriate_ad_seconds = 0`.
+
+**First result (2026-11-21, 8 clips, edge agent):** perception works on real
+footage. In the café clip it sees cups 80 % and laptops 93 % of the time and
+counts up to 7 people near the screen. **The screen still never sells:**
+paid share is 0 % on every clip, because the demo's vision catalog maps only
+`sports ball` and `tap handle fixture`, so `cup`, `laptop` and `backpack`
+form no segment. It is never wrong (0 must-never seconds), but it never
+reaches anyone (sensible reach 0 %). Fix the catalog, then rerun this eval:
+ad precision and reach become the numbers to push up.
+
+### 4.2 The ad pipeline, end to end: find the bottleneck, fix it, measure again
+
+`make eval-pipeline` (`evals/pipeline.py`) boots a backend with the **whole
+ad system** switched on: creative studio (guard, score, copy cache, ROI
+budget), warm worker, voice-over service with its disk cache and character
+budget, the real ElevenLabs HTTP adapter (against `tests/sandbox/fake_elevenlabs.py`
+on loopback), attention tracking and billing. The eval plays agent, player
+and console through the demo journey (co-brand → fitness → beer → minor →
+co-brand → coffee → co-brand → walk away), sending 5 Hz snapshots with live
+tracklets and a `playback.report` when each ad leaves the screen. One reader
+thread per socket stamps every message on arrival.
+
+Only provider **timing** is replayed. Copy latency is drawn from the 21
+recorded real Claude calls (p50 640 ms, max 2.6 s; `--copy-scale` stresses
+it). TTS latency is an explicit assumption (`--tts-latency-ms`, default 350)
+until a live measurement replaces it.
+
+It runs three modes and reports a waterfall per mode: hot decision, creative
+on the player, first voice-over, AI copy on air, complete ad (AI copy + its
+voice-over), and playback report → receipt. Each with p50/p95, the critical
+path split and the **bottleneck**, plus our own overhead around the provider
+(queue, guard, score, push).
+
+| Mode | What it is | Complete ad p50 / p95 | Bottleneck |
+|---|---|---|---|
+| `gen` | Warm boot, every group seen for the first time | ~700 / ~1050 ms | AI copy (98 % of the path) |
+| `cold` (`--cold`) | Live right after a restart | ~700 / ~1050 ms | AI copy; startup voice prewarm races live lines |
+| **`demo`** | After `make demo-warmup` | **~16 / ~20 ms** | none left (hot path, ~15 ms) |
+
+**Gates:** demo complete ad p95 < 300 ms (the cache-hit target), 0 live LLM
+and 0 live TTS calls after warm-up, generation complete ad p95 < 3 s, hot
+decision p95 < 30 ms, every paid play gets a receipt, the house ad is never
+billed, attention-seconds within 5 % of truth, and the same voice line is
+never synthesized twice.
+
+**Loop 1 (2026-11-21), what it found and what changed:**
+
+1. *TTS stampede (fixed).* On a cold start, the startup voice prewarm and a
+   live moment synthesized the same offer line at once and paid twice
+   (the warm worker only dedupes its own jobs). `VoiceoverService` now runs a
+   single flight per cache key (`test_concurrent_requests_for_one_line_share_a_single_synthesis`).
+   The gate `voice_duplicate_syntheses = 0` keeps it fixed.
+2. *AI copy is the whole wait (mitigated for the demo).* 98 % of the time to
+   the complete ad is the LLM. Our own overhead is about 10 ms. The copy cache
+   already serves a returning group in about 15 ms, but nothing filled it
+   before the demo (`studio.prewarm` exists and has no caller). `make demo-warmup`
+   (`python -m evals warmup`) plays every scripted scene once on the running
+   backend. That cut the complete ad from about 700 ms to 16 ms, first audio
+   from about 350 ms to 16 ms, and live provider calls during the demo to 0.
+   Run it after the last restart, in the same daypart (the copy cache is in
+   memory, and the daypart is part of its key). Voice-overs persist on disk.
+3. *Single-brand ads had no pre-made voice.* The startup prewarm covers
+   basket offers only, so solo lines ("Voltio. Energía…") were synthesized
+   live (audio about 350 ms late). Warm-up covers them. **Proposed** for the
+   owners of `demo.py`: add solo stock lines to `prewarm_voiceovers`, call
+   `studio.prewarm` at startup, and persist the copy cache to disk so a
+   restart doesn't lose the warm-up.
+4. *Stress* (`--copy-scale`, `--dwell`): at 2× Claude latency the complete ad
+   stays under 2.1 s p95. At **4×, the 2.5 s copy timeout fires**: only 33 %
+   of moments get AI copy, and tokens are still billed. With **1.5 s moments
+   and 2× latency, half the groups leave before their AI copy lands**. Stale
+   results are dropped (0 late upgrades, the screen stays correct), but that
+   spend is wasted. Warm-up removes both for the scripted demo.
+
 ## 5. Rehearsals are data
 
 ```sh
@@ -167,17 +280,31 @@ whether the demo is getting tighter. The same numbers can close the pitch
 
 ## 6. Next, by value for the demo
 
-1. **Player reports `displayed_at`** (in `playback.report`, or a small
-   `creative.displayed` ack): it switches on the glass-to-glass gate, the
-   headline latency claim. Until then it shows `n/a`, never a made-up number.
-2. **Vision replay mode** in `edge/` (§4 contract) plus the golden clips.
-3. **Copy guard evals:** a fixed set of recorded LLM responses (competitor
+1. **Glass-to-glass from the real player.** The backend books
+   `displayed_at = ready_at` (`demo.py`), so the headline latency claim is
+   unmeasured. `playback.report.started_at` already carries the player's
+   real display time. Next: drive the actual web player in headless Chromium
+   (Playwright's Chromium is cached on the dev laptop) from the pipeline
+   journey, and gate `measured_at → started_at` p50 < 1.5 s / p95 < 2.5 s,
+   including image decode and the 250 ms crossfade.
+2. **Spend that never airs.** Count LLM/TTS calls whose result was dropped
+   as stale, per journey, and gate it in demo mode. Feed it into the ROI
+   planner, e.g. skip copy upgrades when expected dwell < p50 copy latency.
+3. **Map real COCO labels in the vision catalog** (`cup`, `bottle`,
+   `backpack`, …; §4.1 shows the gap), then record our own golden clips with
+   the agent's replay mode (done) and label them (§4).
+4. **More billing gates** (the pipeline already gates receipts per paid play,
+   house ad never billed, attention within 5 %): a glance under 1 s bills 0,
+   Σ receipt totals equal the ledger, and a stock-out of an on-air brand
+   swaps immediately (examples in
+   `tests/unit/api/test_auction_loop_e2e.py`).
+5. **Copy guard evals:** a fixed set of recorded LLM responses (competitor
    names, invented claims, changed prices) that the copy validator must
    reject. Recorded fixtures, never live calls in CI.
-4. **Visual regression of the player:** headless Chromium screenshots per
+6. **Visual regression of the player:** headless Chromium screenshots per
    scenario layout, so a broken logo or overflowing copy fails before the
    judges see it.
-5. **Chaos scenario:** kill the GPU service mid-run and measure failover time
+7. **Chaos scenario:** kill the GPU service mid-run and measure failover time
    and "never blank" (ADR 0007); unplug test as a number.
-6. **Per-step trace budgets:** when a step gets its own timestamp (warm copy,
+8. **Per-step trace budgets:** when a step gets its own timestamp (warm copy,
    TTS, video upgrade), add its p95 as a gate here in the same PR.

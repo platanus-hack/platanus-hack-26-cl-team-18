@@ -181,6 +181,9 @@ class CreativeSpec(_Model):
     # Why this ad: the angle the copy answers (hunger, queue, ...) and who wrote it.
     angle: Annotated[str, Field(max_length=32)] | None = None
     copy_source: CopySourceKind | None = None
+    # The basket's redemption code (QR → /r/{code}); `qr_url` is its rendered QR image.
+    redemption_code: Annotated[str, Field(pattern=r"^[A-Z0-9]{4,12}$")] | None = None
+    redeem_url: Annotated[str, Field(max_length=500)] | None = None
 
 
 # ---------------------------------------------------------------- agent -> backend
@@ -341,6 +344,34 @@ class PlaybackReport(_Message):
         return self
 
 
+class PlayerDisplayed(_Message):
+    """The player made a creative visible (crossfade done): closes glass-to-glass latency."""
+
+    type: Literal["player.displayed"] = "player.displayed"
+    screen_id: ScreenId
+    creative_id: EntityId
+    seq: Seq
+    displayed_at: AwareDatetime
+
+
+# ---------------------------------------------------------------- backend -> player
+
+
+class ScreenAttention(_Message):
+    """Who is watching now (aggregate only): the player advances dwell stages on it.
+
+    `dwell_s` is the longest current look among looking viewers; 0 when nobody looks,
+    so the player holds its stage instead of advancing on a timer (architecture §6.1).
+    """
+
+    type: Literal["screen.attention"] = "screen.attention"
+    screen_id: ScreenId
+    creative_id: EntityId | None = None
+    looking: Annotated[int, Field(ge=0)]
+    dwell_s: Annotated[float, Field(ge=0.0)]
+    measured_at: AwareDatetime
+
+
 # ---------------------------------------------------------------- backend -> console
 
 
@@ -499,6 +530,18 @@ class ConsoleReceipt(_Message):
     total: MoneyDTO
 
 
+class ConsoleRedemption(_Message):
+    """A basket's QR was redeemed: credited to every brand in it (architecture §6.2)."""
+
+    type: Literal["console.redemption"] = "console.redemption"
+    screen_id: ScreenId
+    auction_id: EntityId
+    code: Annotated[str, Field(pattern=r"^[A-Z0-9]{4,12}$")]
+    brands: list[Annotated[str, Field(max_length=80)]]
+    offer_text: Annotated[str, Field(max_length=160)] | None = None
+    redeemed_at: AwareDatetime
+
+
 # ---------------------------------------------------------------- any direction
 
 
@@ -517,9 +560,10 @@ AgentInbound = Annotated[
     AudienceSnapshot | AudienceKeyframe | AudienceUtterance | RecognitionSnapshot,
     Field(discriminator="type"),
 ]
-PlayerInbound = Annotated[PlaybackReport, Field(discriminator="type")]
+PlayerInbound = Annotated[PlaybackReport | PlayerDisplayed, Field(discriminator="type")]
 PlayerOutbound = Annotated[
-    CreativeReady | CreativeUpgraded | ErrorMessage, Field(discriminator="type")
+    CreativeReady | CreativeUpgraded | ErrorMessage | ScreenAttention,
+    Field(discriminator="type"),
 ]
 ConsoleOutbound = Annotated[
     ConsoleMoment
@@ -530,16 +574,17 @@ ConsoleOutbound = Annotated[
     | CreativeUpgraded
     | ErrorMessage
     | ConsoleBook
-    | ConsoleReceipt,
+    | ConsoleReceipt
+    | ConsoleRedemption,
     Field(discriminator="type"),
 ]
 
 AGENT_INBOUND: TypeAdapter[
     AudienceSnapshot | AudienceKeyframe | AudienceUtterance | RecognitionSnapshot
 ] = TypeAdapter(AgentInbound)
-PLAYER_INBOUND: TypeAdapter[PlaybackReport] = TypeAdapter(PlayerInbound)
-PLAYER_OUTBOUND: TypeAdapter[CreativeReady | CreativeUpgraded | ErrorMessage] = TypeAdapter(
-    PlayerOutbound
+PLAYER_INBOUND: TypeAdapter[PlaybackReport | PlayerDisplayed] = TypeAdapter(PlayerInbound)
+PLAYER_OUTBOUND: TypeAdapter[CreativeReady | CreativeUpgraded | ErrorMessage | ScreenAttention] = (
+    TypeAdapter(PlayerOutbound)
 )
 CONSOLE_OUTBOUND: TypeAdapter[
     ConsoleMoment
@@ -551,6 +596,7 @@ CONSOLE_OUTBOUND: TypeAdapter[
     | ErrorMessage
     | ConsoleBook
     | ConsoleReceipt
+    | ConsoleRedemption
 ] = TypeAdapter(ConsoleOutbound)
 
 AnyMessage = (
@@ -570,6 +616,9 @@ AnyMessage = (
     | ConsoleBook
     | ConsoleReceipt
     | RecognitionSnapshot
+    | PlayerDisplayed
+    | ScreenAttention
+    | ConsoleRedemption
 )
 
 # Order is the generated TS order; append new messages at the end.
@@ -590,13 +639,16 @@ ALL_MESSAGES: tuple[type[_Message], ...] = (
     ConsoleBook,
     ConsoleReceipt,
     RecognitionSnapshot,
+    PlayerDisplayed,
+    ScreenAttention,
+    ConsoleRedemption,
 )
 
 # Socket unions exported to TS, by name.
 SOCKET_UNIONS: dict[str, tuple[type[_Message], ...]] = {
     "AgentInbound": (AudienceSnapshot, AudienceKeyframe, AudienceUtterance, RecognitionSnapshot),
-    "PlayerInbound": (PlaybackReport,),
-    "PlayerOutbound": (CreativeReady, CreativeUpgraded, ErrorMessage),
+    "PlayerInbound": (PlaybackReport, PlayerDisplayed),
+    "PlayerOutbound": (CreativeReady, CreativeUpgraded, ErrorMessage, ScreenAttention),
     "ConsoleOutbound": (
         ConsoleMoment,
         ConsoleAuction,
@@ -607,5 +659,6 @@ SOCKET_UNIONS: dict[str, tuple[type[_Message], ...]] = {
         ErrorMessage,
         ConsoleBook,
         ConsoleReceipt,
+        ConsoleRedemption,
     ),
 }

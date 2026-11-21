@@ -57,7 +57,7 @@ failover) and the hosted generation APIs (warm).
 | Tracking location | **Local** (ByteTrack on returned detections) | Keeps the GPU service stateless, so failover keeps the tracks |
 | Keyframe | Blur faces (Gaussian on head boxes), resize to **512 px long side**, JPEG quality 80, ≤ 1 per 1.5 s or on moment change | Small image = fewer vision tokens = faster tagging |
 | Audio | `sounddevice` 16 kHz mono int16 → **Silero VAD** (ONNX, 32 ms chunks) | Only speech segments are streamed, which saves bandwidth and latency |
-| Speech-to-text | **ElevenLabs Scribe v2 Realtime** over WebSocket (`/v1/speech-to-text/realtime`), streamed straight from the agent | Published ~150 ms median to a committed transcript; Spanish. Switch to Scribe v3 Live only if the day-1 benchmark shows equal or better latency |
+| Speech-to-text | **ElevenLabs Scribe v3 Live** (`scribe_v3_live`) over WebSocket (`/v1/speech-to-text/realtime`), streamed straight from the agent, our VAD commits after 320 ms of silence | Measured from Santiago: keyterm → partial ~200 ms (v2: ~1.2 s), speech end → final ~230 ms, WER 0 on the demo line (ADR 0005, latency amendment) |
 | Keyterm hits | **Our own matcher on partial transcripts** (not committed ones) against a per-campaign keyterm list incl. Chilean variants ("hambre", "bajón", "gym", "café"…) | Fires the intent signal about 100–300 ms earlier than waiting for the commit |
 | Echo guard | Hardware AEC plus: drop transcripts during our own voice-over playback windows (backend sends `player.audio_window`), and drop utterances fuzzy-matching the current voice-over text | Prevents the screen from re-targeting itself |
 

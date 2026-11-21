@@ -336,6 +336,18 @@ function ReceiptPanel({ view }: { view: ScreenView }) {
                     )}
                 </div>
             )}
+            {view.redemptions.length > 0 && (
+                <ul className="mt-3 flex flex-col gap-1" aria-label="Redemptions">
+                    {view.redemptions.map((r) => (
+                        <li key={`${r.code}:${r.redeemed_at}`}>
+                            <StatusBadge
+                                tone="success"
+                                label={`Canjeado · ${r.brands.join(" + ")} · ${r.code}`}
+                            />
+                        </li>
+                    ))}
+                </ul>
+            )}
         </Panel>
     );
 }

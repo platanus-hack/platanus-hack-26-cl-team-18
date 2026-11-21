@@ -154,7 +154,7 @@ def test_redacted_keyframe_enriches_snapshot_via_websocket(
             return VisualDetails(
                 details=[
                     VisualDetail(
-                        kind="upper_clothing",
+                        kind="object",
                         value="black hoodie",
                         evidence="visible fabric",
                         associated_item="hoodie",

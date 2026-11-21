@@ -21,6 +21,7 @@ export default defineConfig({
             "/media": backend,
             "/dev": backend,
             "/api": backend,
+            "/r": backend,
         },
     },
     build: {

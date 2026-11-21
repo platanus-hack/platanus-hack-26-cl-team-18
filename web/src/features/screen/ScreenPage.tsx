@@ -1,4 +1,4 @@
-import { PlayerOutboundSchema, type PlaybackReport, type PlayerOutbound } from "@/contract";
+import { PlayerOutboundSchema, type PlayerInbound, type PlayerOutbound } from "@/contract";
 import { backendWsUrl, screenIdFromLocation } from "@/lib/config";
 import { createStore, useStore } from "@/lib/store";
 import { TypedSocket } from "@/lib/ws/typed-socket";
@@ -7,6 +7,7 @@ import { CreativeView } from "./CreativeView";
 import { HOUSE_AD } from "./house-ad";
 import { frontCreative, initialPlayerState, playerReducer, type Playable } from "./player-machine";
 import { preloadCreative } from "./preload";
+import { latestAttention, toAttentionSample } from "./stages";
 import { VoicePlayer } from "./voice";
 
 const CROSSFADE_MS = 250; // matches --duration-crossfade
@@ -29,14 +30,22 @@ export function ScreenPage() {
     const [store] = useState(() =>
         createStore(playerReducer, initialPlayerState(HOUSE_AD, Date.now())),
     );
+    // Attention drives the dwell stage; it lives beside the player machine, not in it.
+    const [attention] = useState(() => createStore(latestAttention, null));
     const [socket] = useState(
         () =>
-            new TypedSocket<PlayerOutbound, PlaybackReport>({
-                url: `${backendWsUrl}/ws/screen/${encodeURIComponent(screenId)}`,
+            new TypedSocket<PlayerOutbound, PlayerInbound>({
+                url: `${backendWsUrl}/ws/screen/${encodeURIComponent(screenId)}?attention=1`,
                 schema: PlayerOutboundSchema,
                 onMessage: (message) => {
                     if (message.type === "system.error") {
                         console.warn(`[screen] backend rejected a frame: ${message.code}`);
+                        return;
+                    }
+                    if (message.type === "screen.attention") {
+                        if (message.screen_id === screenId) {
+                            attention.dispatch(toAttentionSample(message, Date.now()));
+                        }
                         return;
                     }
                     store.dispatch({
@@ -145,6 +154,19 @@ export function ScreenPage() {
         });
     }, [completed, screenId, socket]);
 
+    // Close glass-to-glass: once per creative made visible (never on an in-place upgrade).
+    const displayed = state.displayed;
+    useEffect(() => {
+        socket.send({
+            type: "player.displayed",
+            v: 1,
+            screen_id: screenId,
+            creative_id: displayed.creativeId,
+            seq: displayed.seq,
+            displayed_at: new Date(displayed.displayedAt).toISOString(),
+        });
+    }, [displayed, screenId, socket]);
+
     return (
         <main className="relative h-screen w-screen cursor-none overflow-hidden bg-canvas">
             {(["a", "b"] as const).map((layer) => {
@@ -163,7 +185,11 @@ export function ScreenPage() {
                         }}
                         aria-hidden={!isFront}
                     >
-                        <CreativeView spec={creative.spec} playKey={creative.creativeId} />
+                        <CreativeView
+                            spec={creative.spec}
+                            playKey={creative.creativeId}
+                            readAttention={attention.getState}
+                        />
                     </div>
                 );
             })}

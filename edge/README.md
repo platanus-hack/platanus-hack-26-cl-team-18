@@ -129,8 +129,10 @@ The frame path, in `agent/vision/` (ADR 0004, 0007, 0008):
   goes out at once when the published facts change, otherwise as a 1 s
   heartbeat, at most 10 Hz. If a crowd never holds still, the most frequent
   facts of the last second are published every 1.5 s, so counts never freeze. Counts are the published facts; tracklets are the
-  live samples used for attention. `minor_likely` is always false here: it
-  comes from the warm VLM path.
+  live samples used for attention. `minor_likely` comes from a pose
+  heuristic (`minor.py`, ADR 0008 D13) that only blocks; the sound scene
+  (`agent/sound`, `--sound` or `--sound-wav`) sends labels, never audio. Both
+  are debounced facts.
 - **Record mode** (ADR 0008 D11): `--record` reads the clip on clip time
   (`ClipSource`: sampled at `--sample-fps`, not paced, no wall clock) and
   writes the eval replay contract `{"t_s", "snapshot"}` per line, plus a

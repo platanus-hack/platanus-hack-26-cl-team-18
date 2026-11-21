@@ -19,6 +19,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import os
 import statistics
 import time
 from datetime import datetime, timedelta
@@ -26,9 +27,10 @@ from pathlib import Path
 
 from agent.backend_link import BackendLink
 from agent.vision.adapters import ArucoMarkerDetector, UltralyticsDetector
-from agent.vision.detector import CompositeDetector, Frame
+from agent.vision.detector import CompositeDetector, Detector, FailoverDetector, Frame
 from agent.vision.held import HeldProductTracker, MarkerCatalog
 from agent.vision.pipeline import JsonlRecorder, Link, VisionPipeline, blur_encoder
+from agent.vision.remote import RemoteGpuDetector
 from agent.vision.snapshot import SnapshotBuilder, SnapshotConfig
 from agent.vision.types import FrameDetections
 
@@ -73,7 +75,17 @@ async def run(args: argparse.Namespace) -> int:
         device=args.device,
     )
     catalog = MarkerCatalog.from_file(Path(args.markers)) if args.markers else None
-    detector = _TimedDetector(CompositeDetector(local, ArucoMarkerDetector() if catalog else None))
+    main_detector: Detector = local
+    if args.gpu_url:  # remote GPU primary, local hot standby (ADR 0007)
+        remote = RemoteGpuDetector(
+            args.gpu_url,
+            token=args.gpu_token or os.environ.get("GPU_TOKEN") or None,
+            object_every=1 if args.record else args.object_every,
+        )
+        main_detector = FailoverDetector(remote, local)
+    detector = _TimedDetector(
+        CompositeDetector(main_detector, ArucoMarkerDetector() if catalog else None)
+    )
 
     backend = None if args.offline else BackendLink(args.backend)
     recorder = (
@@ -85,7 +97,28 @@ async def run(args: argparse.Namespace) -> int:
     if link is None:
         raise SystemExit("--offline needs --record (otherwise snapshots go nowhere)")
 
+    from agent.sound.sources import MicSoundScene, SoundSceneSource, WavSoundScene
+    from agent.vision.minor import MinorConfig, MinorVote
+
+    sound: SoundSceneSource | None = None  # sound scene (ADR 0008 D13): labels, never audio
+    if args.sound_wav:
+        sound = WavSoundScene(Path(args.sound_wav))
+    elif args.sound:
+        device = args.sound_device
+        mic = MicSoundScene(device=int(device) if device and device.isdigit() else device)
+        mic.start()
+        sound = mic
+    minor = MinorVote(
+        MinorConfig(
+            person_threshold=args.minor_threshold,
+            window=args.minor_window,
+            min_hits=args.minor_hits,
+        )
+    )
+
     pipeline = VisionPipeline(
+        minor=minor,
+        sound=sound,
         screen_id=args.screen,
         source=source,
         detector=detector,
@@ -105,6 +138,8 @@ async def run(args: argparse.Namespace) -> int:
             with contextlib.suppress(asyncio.CancelledError):
                 await link_task
         source.close()
+        if sound:
+            sound.close()
         if recorder:
             recorder.close()
             meta = {
@@ -141,9 +176,17 @@ def main() -> None:
     parser.add_argument("--object-every", type=int, default=6)
     parser.add_argument("--conf", type=float, default=0.35)
     parser.add_argument("--debounce-ms", type=float, default=500.0)
+    parser.add_argument("--sound", action="store_true", help="sound scene from the mic")
+    parser.add_argument("--sound-wav", help="sound scene from a 16 kHz mono WAV (replay)")
+    parser.add_argument("--sound-device", default=None, help="sounddevice input name or index")
+    parser.add_argument("--minor-threshold", type=float, default=0.5, help="child-size evidence")
+    parser.add_argument("--minor-window", type=int, default=12, help="minor vote window (frames)")
+    parser.add_argument("--minor-hits", type=int, default=7, help="hits needed in the window")
     parser.add_argument("--device", default=None, help="e.g. 0, cpu, mps")
     parser.add_argument("--markers", help="JSON {marker_id: brand_slug} for the demo props")
     parser.add_argument("--no-keyframes", action="store_true")
+    parser.add_argument("--gpu-url", help="remote GPU service, e.g. wss://host/infer (ADR 0007)")
+    parser.add_argument("--gpu-token", default=None, help="bearer token (default: env GPU_TOKEN)")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     raise SystemExit(asyncio.run(run(args)))

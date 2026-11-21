@@ -21,6 +21,7 @@ from agent.vision.detector import (
 )
 from agent.vision.geometry import distance_band, head_box, is_looking
 from agent.vision.held import HELD_LABEL_PREFIX, HeldProductTracker, MarkerCatalog
+from agent.vision.minor import MinorVote
 from agent.vision.pipeline import JsonlRecorder, VisionPipeline
 from agent.vision.snapshot import SnapshotBuilder, SnapshotConfig
 from agent.vision.tracking import PersonTracker, TrackerConfig
@@ -296,9 +297,12 @@ def _feed(
 
 def test_snapshot_is_a_valid_contract_message_with_held_products() -> None:
     builder, tracker = _builder()
-    tracks = tracker.update(frame(T0, person(400), person(800, facing=False)))
+    adults = frame(T0, person(400), person(800, facing=False))
+    tracks = tracker.update(adults)
     held = HeldProductTracker(CATALOG, window=1, min_hits=1).update((marker_at(1, 500),), tracks)
+    minor = MinorVote().update(adults.persons, adults.height)
     snapshot = builder.build(
+        minor=minor,
         measured_at=T0,
         tracks=tracks,
         objects=(
@@ -316,7 +320,10 @@ def test_snapshot_is_a_valid_contract_message_with_held_products() -> None:
         "cup": 0.8,
         f"{HELD_LABEL_PREFIX}cafe-patio": 1.0,
     }
+    # Two adult-proportioned people: the pose heuristic says "no minor", with a
+    # real but small confidence (one evaluated frame of a 12-frame vote).
     assert wire.minor_likely.value is False
+    assert 0 < wire.minor_likely.confidence < 1
     assert [t.id for t in wire.tracklets] == ["t1", "t2"]
 
 

@@ -4,6 +4,7 @@ import type {
     ConsoleMoment,
     ConsoleOutbound,
     ConsoleReceipt,
+    ConsoleRedemption,
     DegradationFlag,
     LatencyTrace,
 } from "@/contract";
@@ -24,9 +25,12 @@ export interface ScreenView {
     readonly book: ConsoleBook | null;
     /** Newest first; the moment receipts this console has seen. */
     readonly receipts: readonly ConsoleReceipt[];
+    /** Newest first; QR/promo redemptions credited to every brand in the basket. */
+    readonly redemptions: readonly ConsoleRedemption[];
 }
 
 export const RECEIPT_WINDOW = 20;
+export const REDEMPTION_WINDOW = 10;
 
 export interface ConsoleState {
     readonly connection: ConnectionState;
@@ -47,6 +51,7 @@ const emptyScreen: ScreenView = {
     lastCreativeId: null,
     book: null,
     receipts: [],
+    redemptions: [],
 };
 
 export const initialConsoleState: ConsoleState = {
@@ -101,6 +106,11 @@ export function consoleReducer(state: ConsoleState, event: ConsoleEvent): Consol
             return update(state, m.screen_id, (v) => ({
                 ...v,
                 receipts: [m, ...v.receipts].slice(0, RECEIPT_WINDOW),
+            }));
+        case "console.redemption":
+            return update(state, m.screen_id, (v) => ({
+                ...v,
+                redemptions: [m, ...v.redemptions].slice(0, REDEMPTION_WINDOW),
             }));
         case "system.error":
             return { ...state, lastError: `${m.code}: ${m.message}` };

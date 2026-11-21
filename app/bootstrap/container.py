@@ -11,6 +11,7 @@ import os
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import timedelta
+from typing import Any
 
 from app.bootstrap.demo import DemoControls, register_demo
 from app.config.settings import AppSettings
@@ -61,6 +62,9 @@ class Container:
     # voice-over pre-generation). They never block serving.
     startup: list[Callable[[], Awaitable[None]]] = field(default_factory=list)
     writer: WriteBehindWriter | None = None
+    redemption_ledger: Any = None  # RedemptionLedger; in memory unless DATABASE_URL is set
+    keyframe_tagger: Any = None  # KeyframeTagger (AUDIENCE_AI)
+    topic_extractor: Any = None  # TopicExtractor (AUDIENCE_AI)
     # Async cleanups run at shutdown (HTTP clients, ...).
     closers: list[Callable[[], Awaitable[None]]] = field(default_factory=list)
 
@@ -76,6 +80,8 @@ def build_container(
     voice_synthesizer: VoiceSynthesizer | None = None,
     copywriter: CopyWriter | None = None,
     scheduler: Scheduler | None = None,
+    keyframe_tagger: Any = None,
+    topic_extractor: Any = None,
 ) -> Container:
     container = Container(
         settings=settings,
@@ -88,6 +94,7 @@ def build_container(
     build_voiceovers(container, voice_synthesizer)
     build_recognition_vlm(container)
     build_copywriter(container, copywriter)
+    build_audience_ai(container, tagger=keyframe_tagger, topics=topic_extractor)
     build_records(container)
     register_contexts(container)
     return container
@@ -114,7 +121,13 @@ def register_contexts(container: Container) -> None:
             auction_log=container.auction_log,
             ledger=container.ledger,
             budget_clp=container.settings.demo_budget_clp,
+            keyframe_tagger=container.keyframe_tagger,
+            topic_extractor=container.topic_extractor,
+            redemption_ledger=container.redemption_ledger,
+            public_base_url=container.settings.public_base_url,
+            media_dir=container.settings.media_dir,
             copywriter=container.copywriter,
+            startup=container.startup if container.settings.voiceover_prewarm else None,
             copy_timeout_s=container.settings.creative_copy_timeout_s,
             hourly_budget_usd=container.settings.creative_hourly_budget_usd,
         )
@@ -154,6 +167,38 @@ def build_copywriter(container: Container, copywriter: CopyWriter | None = None)
     container.copywriter = ClaudeCopywriter(provider, profile)
 
 
+def build_audience_ai(container: Container, *, tagger: Any = None, topics: Any = None) -> None:
+    """Warm audience AI behind ports; overrides are for tests and offline rehearsal."""
+    if tagger is not None or topics is not None:
+        container.keyframe_tagger, container.topic_extractor = tagger, topics
+        return
+    if not container.settings.audience_ai:
+        return
+    from dotenv import dotenv_values
+
+    from app.modules.ai.domain.model_capabilities import DEFAULT_EFFORT, ModelProfile, parse_effort
+    from app.modules.ai.infrastructure.adapters.llm.anthropic import DEFAULT_MODEL
+    from app.modules.ai.infrastructure.adapters.llm.factory import (
+        LLMNotConfigured,
+        build_llm_provider,
+    )
+    from app.modules.audience.infrastructure.claude_tagger import ClaudeKeyframeTagger
+    from app.modules.audience.infrastructure.claude_topics import ClaudeTopicExtractor
+
+    env = {k: v for k, v in dotenv_values(".env").items() if v is not None} | dict(os.environ)
+    try:
+        provider = build_llm_provider(env)
+    except LLMNotConfigured:
+        logger.warning("AUDIENCE_AI is on but ANTHROPIC_API_KEY is unset: markers/keyterms only")
+        return
+    container.closers.append(provider.aclose)
+    model = env.get("ANTHROPIC_MODEL", "").strip() or DEFAULT_MODEL
+    effort = env.get("ANTHROPIC_EFFORT", "").strip()
+    profile = ModelProfile(model, parse_effort(effort) if effort else DEFAULT_EFFORT)
+    container.keyframe_tagger = ClaudeKeyframeTagger(provider, profile)
+    container.topic_extractor = ClaudeTopicExtractor(provider, profile)
+
+
 def build_records(container: Container) -> None:
     """Auctions and charges: always in memory; also to Postgres when DATABASE_URL is set."""
     url = container.settings.database_url
@@ -171,6 +216,9 @@ def build_records(container: Container) -> None:
     container.writer = writer
     container.auction_log = PostgresAuctionLog(writer, mirror=InMemoryAuctionLog())
     container.ledger = PostgresChargeLedger(writer, mirror=InMemoryChargeLedger())
+    from app.modules.delivery.infrastructure.redemptions import PostgresRedemptionLedger
+
+    container.redemption_ledger = PostgresRedemptionLedger(writer)
 
     async def close_writer() -> None:
         writer.close()

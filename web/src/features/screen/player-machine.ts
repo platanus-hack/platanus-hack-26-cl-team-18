@@ -34,6 +34,13 @@ export interface CompletedPlay {
     readonly endedAt: number;
 }
 
+/** A creative that just became visible; reported as player.displayed (glass-to-glass). */
+export interface DisplayedPlay {
+    readonly seq: number;
+    readonly creativeId: string;
+    readonly displayedAt: number;
+}
+
 export interface PlayerState {
     readonly front: LayerId;
     readonly layers: Readonly<Record<LayerId, Playable | null>>;
@@ -41,6 +48,8 @@ export interface PlayerState {
     readonly queued: Playable | null;
     readonly shownSince: number;
     readonly completed: CompletedPlay | null;
+    /** The latest creative made visible; changes once per new creative, never on an upgrade. */
+    readonly displayed: DisplayedPlay;
 }
 
 export type PlayerEvent =
@@ -59,6 +68,7 @@ export function initialPlayerState(houseAd: Playable, at: number): PlayerState {
         queued: null,
         shownSince: at,
         completed: null,
+        displayed: { seq: 1, creativeId: houseAd.creativeId, displayedAt: at },
     };
 }
 
@@ -156,6 +166,13 @@ export function playerReducer(state: PlayerState, event: PlayerEvent): PlayerSta
                 queued: null,
                 shownSince: sameCreative ? state.shownSince : event.at,
                 completed,
+                displayed: sameCreative
+                    ? state.displayed
+                    : {
+                          seq: state.displayed.seq + 1,
+                          creativeId: event.creativeId,
+                          displayedAt: event.at,
+                      },
             };
             return state.queued ? loadIntoBack(swapped, state.queued) : swapped;
         }

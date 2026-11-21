@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 
 from agent.contract import AudienceUtterance
-from agent.speech.keyterms import DEFAULT_KEYTERMS
+from agent.speech.keyterms import DEFAULT_KEYTERMS, normalize
 from agent.speech.pipeline import SpeechPipeline
 from agent.speech.scribe import CommittedTranscript, PartialTranscript, ScribeConfig, ScribeRealtime
 from agent.speech.vad import FRAME_BYTES, EnergyVad, SpeechGate
@@ -141,3 +141,51 @@ async def test_tts_audio_round_trips_through_our_transcription_pipeline() -> Non
         f"\nscribe: commit -> committed transcript {1000 * (stamps['committed'] - stamps['commit_sent']):.0f} ms; "
         f"utterances {len(sent)}, keyterms {sorted(hits)}, sessions {scribe.stats.sessions}"
     )
+
+
+# The exact line the demo airs for the Voltio + Café Patio duo, as produced by
+# app/modules/creative/application/speech_text.py (prices/symbols spelled out).
+OFFER_LINE = (
+    "Dúo post-entreno: Voltio y Café Patio para dos por cinco mil novecientos noventa pesos"
+)
+OFFER_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "offer_line_pcm16k.raw"
+
+
+async def test_the_aired_offer_line_is_pronounced_as_written() -> None:
+    """Speech generation quality: TTS the line we air, transcribe it back, compare."""
+    if OFFER_FIXTURE.exists():
+        pcm = OFFER_FIXTURE.read_bytes()  # free on reruns
+    else:
+        pcm = _request(
+            f"/v1/text-to-speech/{_voice_id()}?output_format=pcm_16000",
+            body={"text": OFFER_LINE, "model_id": "eleven_flash_v2_5", "language_code": "es"},
+        )
+        OFFER_FIXTURE.write_bytes(pcm)
+
+    finals: list[str] = []
+    scribe = ScribeRealtime(
+        ScribeConfig(api_key=API_KEY or "", keyterms=("Voltio", "Café Patio", "post-entreno")),
+        lambda e: finals.append(e.text) if isinstance(e, CommittedTranscript) else None,
+        idle_close_s=None,
+    )
+    task = asyncio.create_task(scribe.run())
+    try:
+        await scribe.wait_connected(10)
+        for i in range(0, len(pcm), FRAME_BYTES * 3):
+            scribe.send_audio(pcm[i : i + FRAME_BYTES * 3])
+            await asyncio.sleep(0.096)
+        scribe.commit()
+        async with asyncio.timeout(15):
+            while not finals:
+                await asyncio.sleep(0.05)
+    finally:
+        task.cancel()
+
+    heard = normalize(" ".join(finals))
+    assert "voltio" in heard and "patio" in heard, heard
+    assert "pesos" in heard, heard
+    # Scribe may write the price as digits or words; either proves it was spoken as a price.
+    assert any(form in heard.replace(" ", "") for form in ("5990", "cincomilnovecientosnoventa")), (
+        heard
+    )
+    print(f"\naired line transcribed back as: {' '.join(finals)!r}")

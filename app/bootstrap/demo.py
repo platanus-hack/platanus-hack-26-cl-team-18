@@ -1,7 +1,7 @@
 """Compose the local simulator's snapshot-to-creative flow."""
 
 from base64 import b64encode
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from decimal import ROUND_CEILING, Decimal
@@ -12,13 +12,16 @@ from uuid import UUID
 from app.bootstrap.demo_console import decision_messages
 from app.contract.messages import (
     AdvertiserBidMultiplier,
+    AudienceKeyframe,
     AudienceSnapshot,
     AudienceUtterance,
     BookLine,
     ChargeLine,
     ConsoleBook,
     ConsoleDegradation,
+    ConsoleLatency,
     ConsoleReceipt,
+    ConsoleRedemption,
     CopySourceKind,
     CreativeReady,
     CreativeSpec,
@@ -27,20 +30,25 @@ from app.contract.messages import (
     LatencyTrace,
     MoneyDTO,
     PlaybackReport,
+    PlayerDisplayed,
+    ScreenAttention,
     StockSet,
     UpgradeKind,
 )
 from app.modules.auction.application.desk import AuctionDesk
 from app.modules.auction.application.ports.auction_log import AuctionLog, AuctionRecord
-from app.modules.auction.domain.opportunity import AdOpportunity, Layout
+from app.modules.auction.domain.opportunity import AdOpportunity, HeldProduct, Layout
 from app.modules.auction.domain.result import AuctionResult, NoFillReason
 from app.modules.auction.domain.swap import Trigger
 from app.modules.auction.infrastructure.auction_log import InMemoryAuctionLog
 from app.modules.auction.infrastructure.engines.in_process import InProcessBundleEngine
 from app.modules.audience import AudienceMomentSnapshot
 from app.modules.audience.application.fixture_tagging import classify_snapshot
+from app.modules.audience.application.ports.tagger import KeyframeTagger
+from app.modules.audience.application.ports.topics import TopicExtractor
 from app.modules.audience.domain.speech_evidence import (
     SpeechEvidence,
+    SpeechTopic,
     merge_speech,
     topics_from_keyterms,
 )
@@ -64,11 +72,14 @@ from app.modules.common.application.clock import BaseClock
 from app.modules.common.application.id_generator import IdGenerator
 from app.modules.common.domain.value_objects.money import Money
 from app.modules.common.domain.value_objects.money_rate import MoneyRate
+from app.modules.common.domain.value_objects.percentage import Percentage
 from app.modules.common.domain.value_objects.rounding_policy import RoundingPolicy
 from app.modules.common.domain.value_objects.utc_timestamp import UtcTimestamp
 from app.modules.creative.application.briefing import CreativeCatalog, build_brief
+from app.modules.creative.application.loops import BundleLoopLibrary
 from app.modules.creative.application.ports.copywriter import CopyWriter
 from app.modules.creative.application.rendering import render_spec
+from app.modules.creative.application.speech_text import offer_line, spoken_line_for
 from app.modules.creative.application.studio import CreativeStudio, StudioConfig
 from app.modules.creative.application.template import compose_template
 from app.modules.creative.application.voiceover import InvalidSpokenLine, VoiceoverService
@@ -79,8 +90,14 @@ from app.modules.creative.domain.draft import CopyDraft, CopySource
 from app.modules.creative.domain.offer import BasketOffer, OfferBook
 from app.modules.delivery.application.billing import DeliveryDesk, PlayRecord, Receipt
 from app.modules.delivery.application.ports.ledger import ChargeLedger
+from app.modules.delivery.application.redemptions import RedemptionDesk, RedemptionLedger
 from app.modules.delivery.domain.charge import BilledSlot
+from app.modules.delivery.domain.redemption import (
+    BasketOffer as RedeemableOffer,
+)
 from app.modules.delivery.infrastructure.ledger import InMemoryChargeLedger
+from app.modules.delivery.infrastructure.qr import qr_data_url
+from app.modules.delivery.infrastructure.redemptions import InMemoryRedemptionLedger
 from app.modules.screens.domain.value_objects.ids import ScreenId
 from app.realtime.hub import ConnectionHub, ConsoleMessage, Sink
 from app.realtime.router import InboundRouter, Received
@@ -104,6 +121,8 @@ class DemoControls:
     book_view: Callable[[], ConsoleBook]
     set_multiplier: Callable[[AdvertiserBidMultiplier], MultiplierOutcome]
     set_stock: Callable[[StockSet], bool]
+    offer_for: Callable[[str], RedeemableOffer | None]
+    redeem: Callable[[str, str], tuple[ConsoleRedemption, bool]]
 
 
 def _clp_per_as(amount: str) -> MoneyRate:
@@ -129,6 +148,12 @@ def register_demo(
     copy_timeout_s: float = 2.5,
     hourly_budget_usd: Decimal = Decimal(2),
     budget_clp: int = 50_000,
+    startup: list[Callable[[], Awaitable[None]]] | None = None,
+    keyframe_tagger: KeyframeTagger | None = None,
+    topic_extractor: TopicExtractor | None = None,
+    redemption_ledger: RedemptionLedger | None = None,
+    public_base_url: str = "http://localhost:5173",
+    media_dir: Path | None = None,
 ) -> DemoControls:
     screen_id = ScreenId.create(ids.new_uuid7())
     # Reuse the existing project mark for these fictional fixture brands.
@@ -155,6 +180,9 @@ def register_demo(
         )
     )
     kits_by_id = {kit.brand_id: kit for kit in kits}
+    # Stable brand slugs: the prop markers (edge/props/markers.json) and loop files use them.
+    slug_of = {kit.brand_id: _slug(kit.name) for kit in kits}
+    brand_of_slug = {slug: brand for brand, slug in slug_of.items()}
     voltio, patio, rayo = kits[0].brand_id, kits[1].brand_id, kits[3].brand_id
     # Every mutual-partner pair gets an approved basket (docs/demo.md), so Rayo competes
     # for the energy slot inside a basket and prices it. Offers are sized to the group
@@ -218,8 +246,28 @@ def register_demo(
     stock = StockBoard()
     auctions = auction_log or InMemoryAuctionLog()
     delivery = DeliveryDesk(ledger=ledger or InMemoryChargeLedger(), ids=ids, budgets=book)
+    redemptions = RedemptionDesk(ids=ids, ledger=redemption_ledger or InMemoryRedemptionLedger())
+    loops = BundleLoopLibrary(media_dir) if media_dir is not None else None
+    # Held products: from prop markers in the snapshot (hot) and the keyframe tagger (warm).
+    held_now: tuple[HeldProduct, ...] = ()
+    tagged_held: dict[BrandId, tuple[Percentage, datetime]] = {}
+    keyframe_busy = False
     campaign_of = {bidder.campaign_id: bidder for bidder in bidders}
-    vision_catalog = {"sports ball": fitness, "tap handle fixture": beer}
+    vision_catalog = {
+        # Simulator fixture labels (scripts/replay_audience.py, evals/scenarios).
+        "sports ball": fitness,
+        "tap handle fixture": beer,
+        # Real COCO labels the perception agent emits (edge/agent/vision/snapshot.py).
+        # Without these a live camera never maps to a segment and only the house ad plays.
+        "bottle": fitness,  # the gym-bottle prop
+        "cup": coffee,
+        "wine glass": beer,
+        # Held demo props, read from their ArUco markers (edge/props/markers.json, ADR 0008 D2).
+        "product:voltio": fitness,
+        "product:rayo": fitness,
+        "product:cafe-patio": coffee,
+        "product:malta-sur": beer,
+    }
     sound_catalog = {"coffee service fixture": coffee}
     segment_labels = {
         fitness: "Sports & fitness",
@@ -289,7 +337,7 @@ def register_demo(
 
     def decide(snapshot: AudienceSnapshot, received: Received, *, reconsider: bool) -> None:
         nonlocal current_creative, current_moment, latest_observed_at, latest_console
-        nonlocal last_snapshot
+        nonlocal last_snapshot, held_now
         if snapshot.screen_id != DEMO_SCREEN:
             return
         measured_at = UtcTimestamp.create(snapshot.measured_at.astimezone(UTC))
@@ -313,6 +361,17 @@ def register_demo(
                     DEMO_SCREEN,
                     measured_at.value,
                     (tracklet.id for tracklet in snapshot.tracklets if tracklet.looking),
+                )
+                held_now = held_products(snapshot, at=received.received_at)
+                looks = [t.dwell_s for t in snapshot.tracklets if t.looking]
+                hub.send_to_screen_threadsafe(
+                    ScreenAttention(
+                        screen_id=DEMO_SCREEN,
+                        creative_id=current_creative.creative_id,
+                        looking=len(looks) if snapshot.tracklets else snapshot.looking,
+                        dwell_s=max(looks, default=0.0),
+                        measured_at=measured_at.value,
+                    )
                 )
             segments = merge_speech(
                 classify_snapshot(
@@ -383,6 +442,7 @@ def register_demo(
                 reserve=reserve,
                 approved_baskets=offer_book.baskets(),
                 out_of_stock=stock.out_of_stock(DEMO_SCREEN),
+                held_products=held_now,
                 max_play_seconds=Decimal(MAX_PLAY_SECONDS),
             ),
             trigger,
@@ -476,17 +536,20 @@ def register_demo(
         if brief is not None:
             composed = studio.compose(brief)
             if composed.score.verdict.passed:
-                spec = render_spec(brief, composed.draft, kits_by_id)
+                spec = with_cached_voice(render_spec(brief, composed.draft, kits_by_id))
             else:
                 # Even stock copy failed the guard (e.g. a kit line unsafe for this
                 # moment): the house ad airs rather than an unsafe line.
                 brief = None
         current_brief = brief
         ready_at = clock.now_utc()
+        creative_id = str(ids.new_uuid7())
+        if result.winners and spec is not house_spec:
+            spec = with_basket_extras(spec, result, decision.auction_id, creative_id, ready_at)
         trace = decision.trace.model_copy(update={"ready_at": ready_at})
         current_creative = CreativeReady(
             screen_id=DEMO_SCREEN,
-            creative_id=str(ids.new_uuid7()),
+            creative_id=creative_id,
             auction_id=decision.auction_id if result.winners else None,
             spec=spec,
             trace=trace,
@@ -655,6 +718,163 @@ def register_demo(
             reauction(Trigger.STOCK_CHANGED)
         return changed
 
+    # ------------------------------------------------------------ held products, tags
+
+    def held_products(snapshot: AudienceSnapshot, *, at: datetime) -> tuple[HeldProduct, ...]:
+        """Prop markers in this snapshot, plus fresh keyframe tags (ADR 0008 D2)."""
+        best: dict[BrandId, Percentage] = {}
+        for item in snapshot.objects:
+            if not item.label.startswith(HELD_PREFIX):
+                continue
+            brand = brand_of_slug.get(item.label[len(HELD_PREFIX) :])
+            if brand is not None:
+                best[brand] = max(
+                    best.get(brand, Percentage.create(0)),
+                    Percentage.create(Decimal(str(item.score)) * 100),
+                    key=lambda p: p.value,
+                )
+        for brand, (confidence, seen_at) in list(tagged_held.items()):
+            if at - seen_at > TAG_TTL:
+                del tagged_held[brand]
+            elif brand not in best or best[brand].value < confidence.value:
+                best[brand] = confidence
+        return tuple(
+            HeldProduct(brand_id=brand, confidence=confidence)
+            for brand, confidence in sorted(best.items(), key=lambda item: str(item[0]))
+        )
+
+    def receive_keyframe(header: AudienceKeyframe, received: Received) -> None:
+        """Warm VLM tags from the live agent's face-blurred keyframe (objects only)."""
+        nonlocal keyframe_busy
+        if (
+            keyframe_tagger is None
+            or warm is None
+            or header.screen_id != DEMO_SCREEN
+            or header.session_id is not None  # recognition-stream crops: RecognitionVlm's
+            or received.payload is None
+        ):
+            return
+        with lock:
+            if keyframe_busy:
+                return  # one tagging call in flight per screen; newer frames are dropped
+            keyframe_busy = True
+        jpeg = received.payload
+        brand_names = [kits_by_id[brand].name for brand in kits_by_id]
+
+        async def job() -> None:
+            nonlocal keyframe_busy
+            try:
+                tags = await keyframe_tagger.tag(
+                    jpeg, object_labels=list(vision_catalog), brand_names=brand_names
+                )
+            finally:
+                with lock:
+                    keyframe_busy = False
+            at = clock.now_utc()
+            by_name = {kits_by_id[brand].name: brand for brand in kits_by_id}
+            changed = False
+            with lock:
+                for name, confidence in tags.held_brands:
+                    tagged_held[by_name[name]] = (Percentage.create(confidence * 100), at)
+                    changed = True
+            if changed:
+                reauction(Trigger.HELD_PRODUCTS_CHANGED)
+
+        warm.submit_threadsafe("vlm", f"keyframe:{header.screen_id}:{header.seq}", job)
+
+    def extract_topics(utterance: AudienceUtterance, received: Received) -> None:
+        if topic_extractor is None or warm is None:
+            return
+        text, language = utterance.text, utterance.language  # in memory only, never logged
+        catalog_text = {segment.value: label for segment, label in segment_labels.items()}
+        by_key = {segment.value: segment for segment in segment_labels}
+
+        async def job() -> None:
+            nonlocal speech
+            found = await topic_extractor.extract(text, language=language, catalog=catalog_text)
+            if not found:
+                return
+            heard = UtcTimestamp.create(received.received_at)
+            expires = UtcTimestamp.create(received.received_at + speech_ttl)
+            topics = tuple(
+                SpeechTopic(
+                    segment_id=by_key[topic.segment_key],
+                    intent=Percentage.create(topic.intent * 100),
+                    heard_at=heard,
+                    expires_at=expires,
+                )
+                for topic in found
+            )
+            with lock:
+                speech = speech.heard(topics)
+                snapshot = last_snapshot
+            if snapshot is not None:
+                decide(snapshot[0], Received(received_at=received.received_at), reconsider=True)
+
+        warm.submit_threadsafe("claude", f"topics:{utterance.screen_id}:{utterance.seq}", job)
+
+    # ------------------------------------------------------------ QR, redemption, video
+
+    def with_basket_extras(
+        spec: CreativeSpec,
+        result: AuctionResult,
+        auction_id: str,
+        creative_id: str,
+        at: datetime,
+    ) -> CreativeSpec:
+        """Add the basket's redemption code + QR and its pre-generated loop (if any)."""
+        brands = [winner.bidder.brand_id for winner in result.winners]
+        offer = redemptions.issue(
+            auction_id=auction_id,
+            creative_id=creative_id,
+            screen_id=DEMO_SCREEN,
+            campaign_ids=[winner.campaign_id for winner in result.winners],
+            brand_names=[kits_by_id[brand].name for brand in brands],
+            offer_text=spec.offer.text if spec.offer is not None else None,
+            at=at,
+        )
+        redeem_url = f"{public_base_url.rstrip('/')}/r/{offer.code}"
+        update: dict[str, object] = {
+            "redemption_code": offer.code,
+            "redeem_url": redeem_url,
+            "qr_url": qr_data_url(redeem_url),
+        }
+        if loops is not None and spec.video_url is None:
+            update["video_url"] = loops.url_for([slug_of[brand] for brand in brands])
+        return spec.model_copy(update=update)
+
+    def redeem(code: str, nonce: str) -> tuple[ConsoleRedemption, bool]:
+        redemption, created = redemptions.redeem(code, nonce, at=clock.now_utc())
+        offer = redemptions.offer(code)
+        message = ConsoleRedemption(
+            screen_id=redemption.screen_id,
+            auction_id=redemption.auction_id,
+            code=redemption.code,
+            brands=list(offer.brand_names) if offer else [],
+            offer_text=offer.offer_text if offer else None,
+            redeemed_at=redemption.redeemed_at,
+        )
+        if created:
+            hub.broadcast_console_threadsafe(message)
+        return message, created
+
+    def receive_displayed(report: PlayerDisplayed, received: Received) -> None:
+        """Close glass-to-glass: the player made a creative visible."""
+        nonlocal current_creative
+        if report.screen_id != DEMO_SCREEN:
+            return
+        displayed_at = report.displayed_at.astimezone(UTC)
+        with lock:
+            target = current_creative
+            if target.creative_id != report.creative_id:
+                return  # a stale report for a creative already replaced
+            trace = target.trace.model_copy(update={"displayed_at": displayed_at})
+            current_creative = target.model_copy(update={"trace": trace})
+            desk.displayed(displayed_at)  # minimum ad seconds count from what people saw
+        hub.broadcast_console_threadsafe(
+            ConsoleLatency(screen_id=DEMO_SCREEN, creative_id=report.creative_id, trace=trace)
+        )
+
     # ------------------------------------------------------------ delivery (billing)
 
     def receive_playback(report: PlaybackReport, received: Received) -> None:
@@ -723,7 +943,9 @@ def register_demo(
             ttl=speech_ttl,
         )
         if not topics:
-            return  # no keyterm: a TopicExtractor (LLM) would refine here, warm path
+            # No keyterm: the LLM topic extractor refines on the warm path (never blocks).
+            extract_topics(utterance, received)
+            return
         with lock:
             speech = speech.heard(topics)
             snapshot = last_snapshot
@@ -767,7 +989,7 @@ def register_demo(
                     return
                 draft = composed.draft
             # A fresh spec drops the old voice-over: it no longer matches the new line.
-            spec = render_spec(brief, draft, kits_by_id)
+            spec = with_cached_voice(render_spec(brief, draft, kits_by_id))
             trace = target.trace.model_copy(update={"upgraded_at": clock.now_utc()})
             current_creative = target.model_copy(update={"spec": spec, "trace": trace})
             upgraded = CreativeUpgraded(
@@ -787,7 +1009,29 @@ def register_demo(
     # ------------------------------------------------------------ voice-overs (warm)
 
     def spoken_copy(spec: CreativeSpec) -> str:
-        return spec.slots[0].copy_text
+        # The approved offer (stable per tier, so pre-generated and always cached),
+        # normalized for speech; the lead copy only when there is no offer.
+        return spoken_line_for(spec)
+
+    def with_cached_voice(spec: CreativeSpec) -> CreativeSpec:
+        """Hot path: attach a pre-generated voice-over now (a file check), so it plays
+        with the creative instead of arriving later as an upgrade."""
+        if voiceovers is None or (voice := voice_for(spec)) is None:
+            return spec
+        cached = voiceovers.cached_url(spoken_copy(spec), voice)
+        return spec if cached is None else spec.model_copy(update={"voiceover_url": cached})
+
+    async def prewarm_voiceovers() -> None:
+        """Cold path: synthesize every approved offer line once (budget-guarded, cached on disk)."""
+        if voiceovers is None or narrator_voice_id is None:
+            return
+        for basket in sorted(offer_book.baskets(), key=lambda b: sorted(map(str, b))):
+            for tier in offer_book.tiers(basket):
+                line = offer_line(tier.label, tier.text, str(tier.price.amount))
+                await voiceovers.voiceover_url(line, narrator_voice_id)
+
+    if startup is not None and voiceovers is not None:
+        startup.append(prewarm_voiceovers)
 
     def voice_for(spec: CreativeSpec) -> str | None:
         return narrator_voice_id  # co-brand and solo both use the narrator until kits carry voices
@@ -864,10 +1108,28 @@ def register_demo(
     router.on(PlaybackReport, receive_playback)
     router.on_player_connected(player_connected)
     router.on_console_connected(console_connected)
-    return DemoControls(book_view=book_view, set_multiplier=set_multiplier, set_stock=set_stock)
+    router.on(PlayerDisplayed, receive_displayed)
+    router.on(AudienceKeyframe, receive_keyframe)
+    return DemoControls(
+        book_view=book_view,
+        set_multiplier=set_multiplier,
+        set_stock=set_stock,
+        offer_for=redemptions.offer,
+        redeem=redeem,
+    )
 
 
 _CEILING = RoundingPolicy.create(money_rounding=ROUND_CEILING)
+HELD_PREFIX = "product:"  # edge/agent/vision/held.py: a held prop's marker label
+TAG_TTL = timedelta(seconds=20)  # a VLM-tagged held product counts this long
+
+
+def _slug(name: str) -> str:
+    """'Café Patio' → 'cafe-patio' (matches edge/props/markers.json)."""
+    import unicodedata
+
+    plain = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode("ascii")
+    return "-".join(plain.lower().split())
 
 
 def _money(value: Money) -> MoneyDTO:

@@ -22,8 +22,13 @@ from app.modules.audience.infrastructure.recognition_store import RecognitionSto
 from app.realtime.router import InboundRouter, Received
 from app.realtime.warm_worker import WarmWorker
 
+# CLAUDE.md prohibition: never describe a person when recognizing a held product
+# (objects only). Clothing, footwear and accessories describe the person, so they are
+# out of scope; only objects and readable product brands are asked for.
 SYSTEM = (
-    "Describe only visible clothing, footwear, accessories and objects in this anonymized image. "
+    "List only visible objects and branded products in this anonymized image, such as "
+    "a cup, can, bottle or bag. Never describe the person: no clothing, footwear, "
+    "accessories, body, face, hair or appearance. "
     "Do not infer identity, age, race, religion, health, orientation, politics or emotion. "
     "Report a brand only if a readable brand name or logo is visible; cite that evidence. "
     "If uncertain omit it. Do not infer brands from style. Uncertainty is qualitative, "
@@ -48,9 +53,7 @@ def has_opaque_head_redaction(image: bytes) -> bool:
 
 class VisualDetail(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    kind: Literal[
-        "upper_clothing", "lower_clothing", "footwear", "accessory", "brand", "object", "activity"
-    ]
+    kind: Literal["brand", "object"]
     value: str = Field(max_length=256)
     evidence: str = Field(min_length=1, max_length=500)
     associated_item: str = Field(max_length=128)

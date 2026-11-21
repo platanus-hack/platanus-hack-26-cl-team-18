@@ -23,6 +23,7 @@ from app.contract.messages import (
     AudienceSnapshot,
     AudienceUtterance,
     PlaybackReport,
+    PlayerDisplayed,
     RecognitionSnapshot,
 )
 from app.realtime.hub import Sink
@@ -30,7 +31,12 @@ from app.realtime.hub import Sink
 logger = logging.getLogger(__name__)
 
 Inbound = (
-    AudienceSnapshot | AudienceKeyframe | AudienceUtterance | PlaybackReport | RecognitionSnapshot
+    AudienceSnapshot
+    | AudienceKeyframe
+    | AudienceUtterance
+    | PlaybackReport
+    | PlayerDisplayed
+    | RecognitionSnapshot
 )
 
 

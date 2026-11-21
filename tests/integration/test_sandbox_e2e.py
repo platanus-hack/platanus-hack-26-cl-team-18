@@ -303,7 +303,7 @@ def test_speech_flips_the_auction_and_voiceovers_play_end_to_end(sandbox: Sandbo
     assert stats["scribe_sessions"] >= 1 and stats["scribe_commits"] >= 1
     assert stats["scribe_audio_bytes"] >= int(1.5 * 16_000 * 2)  # the whole voiced segment
     query = stats["scribe_queries"][0]
-    assert query["model_id"] == "scribe_v2_realtime" and query["language_code"] == "es"
+    assert query["model_id"] == "scribe_v3_live" and query["language_code"] == "es"
     assert "hambre" in query["keyterms"] and len(query["keyterms"]) <= 50
     assert stats["tts_texts"] == 2 and set(stats["tts_models"]) == {"eleven_flash_v2_5"}
 

@@ -22,6 +22,8 @@ const spec = {
     offer: null,
     angle: null,
     copy_source: null,
+    redemption_code: null,
+    redeem_url: null,
 };
 const house: Playable = { creativeId: "house", auctionId: null, spec, kind: "house" };
 const ad = (id: string): Playable => ({
@@ -105,6 +107,42 @@ describe("player machine", () => {
         s = playerReducer(s, { type: "crossfadeDone", creativeId: "c1", at: 1350 });
         expect(s.completed).toBeNull();
         expect(s.shownSince).toBe(250);
+    });
+});
+
+describe("displayed (glass-to-glass)", () => {
+    const show = (s: ReturnType<typeof initialPlayerState>, creative: Playable, t: number) => {
+        s = playerReducer(s, { type: "received", creative, at: t });
+        s = playerReducer(s, { type: "preloaded", creativeId: creative.creativeId, at: t + 1 });
+        return playerReducer(s, {
+            type: "crossfadeDone",
+            creativeId: creative.creativeId,
+            at: t + 251,
+        });
+    };
+
+    it("the first creative shown (the house ad) is displayed at start", () => {
+        const s = initialPlayerState(house, 5);
+        expect(s.displayed).toEqual({ seq: 1, creativeId: "house", displayedAt: 5 });
+    });
+
+    it("each new creative is displayed once, at crossfade done, with an increasing seq", () => {
+        let s = initialPlayerState(house, 0);
+        s = playerReducer(s, { type: "received", creative: ad("c1"), at: 10 });
+        s = playerReducer(s, { type: "preloaded", creativeId: "c1", at: 20 });
+        expect(s.displayed.creativeId).toBe("house"); // not visible until the fade ends
+        s = playerReducer(s, { type: "crossfadeDone", creativeId: "c1", at: 270 });
+        expect(s.displayed).toEqual({ seq: 2, creativeId: "c1", displayedAt: 270 });
+        s = show(s, { ...house, creativeId: "house-2" }, 1000); // house ads count too
+        expect(s.displayed).toEqual({ seq: 3, creativeId: "house-2", displayedAt: 1251 });
+    });
+
+    it("an in-place upgrade of the same creative does not re-display it", () => {
+        let s = show(initialPlayerState(house, 0), ad("c1"), 0);
+        const displayed = s.displayed;
+        s = playerReducer(s, { type: "upgraded", creative: ad("c1"), at: 1000 });
+        s = playerReducer(s, { type: "received", creative: ad("c1"), at: 1100 });
+        expect(s.displayed).toBe(displayed);
     });
 });
 

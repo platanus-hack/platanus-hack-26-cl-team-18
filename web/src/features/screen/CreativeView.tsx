@@ -1,7 +1,7 @@
 import type { CreativeSpec } from "@/contract";
 import { assetUrl } from "@/lib/config";
 import { useState } from "react";
-import { useDwellStage } from "./stages";
+import { useDwellStage, type AttentionSample } from "./stages";
 
 /** Reveal the actual mounted video only after it can play; overlays stay ready. */
 function VideoLoop({ url }: { url: string }) {
@@ -35,8 +35,17 @@ function VideoLoop({ url }: { url: string }) {
  * (price from the brands, never from the copywriter). A legacy spec without
  * stages renders each slot's own copy.
  */
-export function CreativeView({ spec, playKey }: { spec: CreativeSpec; playKey: string }) {
-    const stage = useDwellStage(playKey, spec.stages);
+export function CreativeView({
+    spec,
+    playKey,
+    readAttention,
+}: {
+    spec: CreativeSpec;
+    playKey: string;
+    /** The latest screen.attention; omitted, stages follow time on air. */
+    readAttention?: () => AttentionSample | null;
+}) {
+    const stage = useDwellStage(playKey, spec.stages, readAttention);
     const columns =
         spec.slots.length === 1
             ? "grid-cols-1"
@@ -102,7 +111,7 @@ export function CreativeView({ spec, playKey }: { spec: CreativeSpec; playKey: s
                     >
                         {stage.copy_text}
                     </p>
-                    <div className="flex h-[12vh] items-center justify-center">
+                    <div className="flex min-h-[12vh] items-center justify-center">
                         {stage.name === "offer" && spec.offer && (
                             <span
                                 className="rounded-container px-10 py-4 text-[3vw] font-bold text-canvas"
@@ -117,12 +126,37 @@ export function CreativeView({ spec, playKey }: { spec: CreativeSpec; playKey: s
                                 ${Number(spec.offer.price.amount).toLocaleString("es-CL")}
                             </span>
                         )}
-                        {stage.name === "close" && (
-                            <span className="text-[2.5vw] text-muted">QR · válido 10 min</span>
-                        )}
+                        {stage.name === "close" && <CloseCall spec={spec} />}
                     </div>
                 </div>
             )}
+        </div>
+    );
+}
+
+/** The close stage: a scannable QR (about 1.5 m on a TV) with its code, or text only. */
+function CloseCall({ spec }: { spec: CreativeSpec }) {
+    if (spec.qr_url === null) {
+        return <span className="text-[2.5vw] text-muted">QR · válido 10 min</span>;
+    }
+    return (
+        <div className="flex items-center gap-10">
+            <div className="rounded-container bg-fg p-[2vh]">
+                <img
+                    className="block aspect-square h-[28vh]"
+                    src={assetUrl(spec.qr_url)}
+                    alt="QR para canjear la oferta"
+                    style={{ imageRendering: "pixelated" }}
+                />
+            </div>
+            <div className="flex flex-col items-start gap-2 text-left">
+                {spec.redemption_code && (
+                    <span className="font-mono text-[3vw] font-bold tracking-widest tabular-nums">
+                        {spec.redemption_code}
+                    </span>
+                )}
+                <span className="text-[2.5vw] text-muted">válido 10 min</span>
+            </div>
         </div>
     );
 }
