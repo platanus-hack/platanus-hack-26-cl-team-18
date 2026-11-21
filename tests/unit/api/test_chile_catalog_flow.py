@@ -245,3 +245,21 @@ def test_a_basket_that_comes_back_shows_its_next_photo_and_every_basket_has_one(
     assert lunch_brands != first_brands
     assert first_photo and lunch_photo and back_photo
     assert back_photo != first_photo  # the returning basket rotates to its next photo
+
+
+def test_every_chilean_brand_and_basket_airs_a_photo_and_most_rotate() -> None:
+    from app.modules.creative.application.campaigns import media_for
+    from app.modules.creative.infrastructure.campaign_assets import load_campaign_media
+
+    media = load_campaign_media()
+    for basket in CHILE.baskets:
+        slots = tuple((slug, BRANDS[slug].category) for slug in sorted(basket.slugs))
+        found = media_for(media, slots)
+        assert found is not None, basket.names
+    rotating = [
+        brand.slug
+        for brand in CHILE.brands
+        if (found := media_for(media, ((brand.slug, brand.category),)))
+        and len(found[1].photo_urls) > 1
+    ]
+    assert len(rotating) >= len(CHILE.brands) * 2 // 3

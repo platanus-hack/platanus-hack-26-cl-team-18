@@ -143,14 +143,14 @@ def _api(params: dict[str, str]) -> dict:
     return json.load(_get(url))
 
 
-def _get(url: str) -> io.BytesIO:
-    for attempt in range(5):
+def _get(url: str, *, attempts: int = 5) -> io.BytesIO:
+    for attempt in range(attempts):
         try:
             request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
             with urllib.request.urlopen(request, timeout=90) as response:
                 return io.BytesIO(response.read())
         except Exception:  # rate limits and flaky networks: back off, retry
-            if attempt == 4:
+            if attempt == attempts - 1:
                 raise
             time.sleep(30 * (attempt + 1))
     raise AssertionError("unreachable")
@@ -200,9 +200,14 @@ def _save(image: Image.Image, stem: str) -> None:
 def _download_and_save(photo: CommonsPhoto, meta: dict, originals: dict[str, Image.Image]) -> None:
     if photo.title not in originals:
         time.sleep(12)
-        originals[photo.title] = ImageOps.exif_transpose(
-            Image.open(_get(meta.get("thumburl", meta["url"])))
-        ).convert("RGB")
+        try:
+            data = _get(meta.get("thumburl", meta["url"]), attempts=1)
+        except Exception:
+            # Thumbnail renders are rate-limited per IP (429); the cached original is not.
+            data = _get(meta["url"])
+        original = ImageOps.exif_transpose(Image.open(data)).convert("RGB")
+        original.thumbnail((3200, 3200))  # originals can be 8000+ px wide
+        originals[photo.title] = original
     framed = _frame(originals[photo.title], photo.focus, photo.zoom)
     _save(ImageOps.mirror(framed) if photo.mirror else framed, photo.stem)
 
@@ -263,8 +268,11 @@ def main() -> None:
         "- `cl-score`, `cl-red-bull`, `cl-monster`, `cl-score-cafe`, `cl-red-bull-cafe`: the\n"
         "  unbranded studio shots above with the can's rim light moved to the brand's hue.\n"
         "  No mark, label or packaging is drawn (CLAUDE.md invariant 4).\n"
-        "- Real Chilean counter food from Wikimedia Commons, credited below as the\n"
-        "  licenses require. CC BY-SA derivatives (the crops) stay under CC BY-SA.\n\n"
+        "- Real photos from Wikimedia Commons (Chilean counter food, drinks and sweets,\n"
+        "  Ruta 5 and a Copec station), credited below as the licenses require. Food,\n"
+        "  drink and road only: no recognisable faces, no third-party marks. CC BY-SA\n"
+        "  derivatives (the crops) stay under CC BY-SA. They air in rotation and as\n"
+        "  category scenes (manifest `alternates`, `category:<name>`).\n\n"
         "| File | Source | Author | License | Changes |\n|---|---|---|---|---|\n"
         + "\n".join(credits)
         + "\n"

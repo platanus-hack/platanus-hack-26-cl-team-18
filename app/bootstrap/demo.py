@@ -497,6 +497,10 @@ def register_demo(
     )
     lock = market.lock
     current_moment: AudienceMomentSnapshot | None = None
+    # Photo rotation (CampaignMedia.alternates): a campaign keeps its photo while it
+    # stays on air and shows the next one each time it comes back. Per screen, in memory.
+    airings: dict[str, int] = {}
+    last_media_key: str | None = None
     current_brief: CreativeBrief | None = None
     latest_observed_at: UtcTimestamp | None = None
     latest_console: tuple[ConsoleMessage, ...] = ()
@@ -899,7 +903,7 @@ def register_demo(
         Hot path: brief → cached AI or targeted stock copy, no network. A warm AI-copy
         upgrade is queued (non-blocking) when this brief has none cached yet.
         """
-        nonlocal current_creative, latest_console, current_brief
+        nonlocal current_creative, latest_console, current_brief, last_media_key
         result = decision.result
         spec = house_spec
         brief = brief_for(decision.moment, result)
@@ -925,6 +929,8 @@ def register_demo(
             spec = with_basket_extras(
                 spec, result, decision.auction_id, creative_id, clock.now_utc(), brief=brief
             )
+        else:
+            last_media_key = None  # the house ad aired: the next campaign is a new airing
         # Includes redemption, QR encoding and loop lookup in the decision budget.
         ready_at = clock.now_utc()
         trace = decision.trace.model_copy(update={"ready_at": ready_at})
@@ -1307,11 +1313,8 @@ def register_demo(
 
     # ------------------------------------------------------------ QR, redemption, video
 
-    # Photo rotation (CampaignMedia.alternates): a campaign keeps its photo while it
-    # stays on air and shows the next one each time it comes back. Per screen, in memory.
-    airings: dict[str, int] = {}
-    last_media_key: str | None = None
-
+    # Photo rotation (CampaignMedia.alternates) for airing_of, declared with the screen
+    # state publish() updates.
     def airing_of(found: tuple[str, CampaignMedia] | None) -> int:
         nonlocal last_media_key
         if found is None:
