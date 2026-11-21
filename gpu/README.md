@@ -10,6 +10,9 @@ RunPod/Modal, or a GPU box on the venue LAN.
 - **Never queues.** Each connection handles one frame at a time: read, decode,
   infer, reply, then read the next. The client (`edge/agent/vision/remote.py`)
   keeps at most 2 frames in flight and drops newer frames instead of queueing.
+  Admission is shared across connections: while one frame is being processed,
+  other clients receive `inference busy; frame dropped` before image decoding.
+  The edge detector treats this as unavailable and uses its local fallback.
 - **Never stores frames.** JPEGs are decoded in memory and dropped once the
   reply goes out. Nothing is written to disk, and no pixels, frame bytes or
   per-frame access lines are logged. `tests/test_service.py` checks this.

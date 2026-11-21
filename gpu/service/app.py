@@ -1,7 +1,8 @@
 """FastAPI app: `GET /health` and `WS /infer` (ADR 0007).
 
 Stateless and queue-free: each connection handles one frame at a time (read →
-decode → infer → reply → next read). Keeping at most 2 frames in flight is
+decode → infer → reply → next read). A shared admission gate rejects other
+clients while busy, before decoding. Keeping at most 2 frames in flight is
 the client's job; the server never buffers frames beyond the socket.
 
 Frames are decoded in memory and dropped when the reply is sent. Nothing is
@@ -21,6 +22,7 @@ Config (env):
 
 from __future__ import annotations
 
+import asyncio
 import hmac
 import io
 import json
@@ -97,6 +99,7 @@ def create_app(model: InferenceModel | None = None, *, token: str | None = None)
         if warmup is not None:
             await run_in_threadpool(warmup)
         app.state.model = loaded
+        app.state.inference_gate = asyncio.Lock()
         logger.info("gpu service ready: model=%s auth=%s", loaded.name, bool(app.state.token))
         yield
 
@@ -124,7 +127,18 @@ def create_app(model: InferenceModel | None = None, *, token: str | None = None)
                 if payload is None:
                     await websocket.send_text(_error(None, "frames must be binary messages"))
                     continue
-                reply = await _handle(loaded, payload)
+                # Admission is checked on the event loop before decoding or
+                # submitting a thread. Never queue raw frames behind YOLO's lock.
+                gate: asyncio.Lock = app.state.inference_gate
+                if gate.locked():
+                    try:
+                        header, _ = unpack_frame(payload)
+                        reply = _error(header.seq, "inference busy; frame dropped")
+                    except MalformedFrame as exc:
+                        reply = _error(exc.seq, str(exc))
+                else:
+                    async with gate:
+                        reply = await _handle(loaded, payload)
                 await websocket.send_text(reply)
         except WebSocketDisconnect:
             return

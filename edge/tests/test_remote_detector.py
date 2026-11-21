@@ -105,7 +105,7 @@ def fast(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Server]:
     server.stop()
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def slow(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Server]:
     server = start_server(tmp_path_factory.mktemp("slow"), GPU_FAKE_DELAY_MS="500")
     yield server

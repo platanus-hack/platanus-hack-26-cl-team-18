@@ -324,7 +324,7 @@ def test_remote_object_requests_follow_capture_deadlines_without_frame_count_dep
 
     def reply(_socket, seq, _deadline):
         detector._in_flight.pop(seq)
-        return {"seq": seq}
+        return {"seq": seq, "persons": [], "objects": []}
 
     monkeypatch.setattr(detector, "_await", reply)
     for t in [0, 50, 190, 200, 350, 450]:
