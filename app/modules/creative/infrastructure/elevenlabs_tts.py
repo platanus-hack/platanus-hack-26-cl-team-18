@@ -53,8 +53,13 @@ class ElevenLabsVoiceSynthesizer:
     ) -> None:
         if not api_key:
             raise ValueError("ELEVENLABS_API_KEY is required for voice-overs")
+        # Keep the TLS connection warm between creatives: httpx's default 5 s keep-alive
+        # would make most warm-path calls reconnect. Every request still costs ~200 ms
+        # round trip to the model region (us-central1 from Santiago), measured.
         self._client = client or httpx.AsyncClient(
-            base_url=base_url, timeout=timeout or httpx.Timeout(10.0, connect=3.0)
+            base_url=base_url,
+            timeout=timeout or httpx.Timeout(10.0, connect=3.0),
+            limits=httpx.Limits(max_keepalive_connections=4, keepalive_expiry=120.0),
         )
         self._headers = {"xi-api-key": api_key, "accept": "audio/*"}
         self._retry_delays = tuple(retry_delays)
@@ -62,6 +67,13 @@ class ElevenLabsVoiceSynthesizer:
 
     async def aclose(self) -> None:
         await self._client.aclose()
+
+    async def warm(self) -> None:
+        """Open the connection before the first voice-over (no credits: an unauthenticated GET)."""
+        try:
+            await self._client.get("/", timeout=3.0)
+        except httpx.HTTPError:
+            pass  # warming is best effort; the first real call connects anyway
 
     async def synthesize(self, request: VoiceRequest) -> SynthesizedVoice:
         if not _VOICE_ID.match(request.voice_id):
