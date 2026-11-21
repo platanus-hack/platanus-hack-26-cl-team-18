@@ -132,15 +132,12 @@ export function CameraPanel({ view }: { view: ScreenView }) {
                     </>
                 ) : (
                     <p className="grid h-full place-items-center px-6 text-center text-compact text-white/75">
-                        {hasDemoKey()
-                            ? "Esperando detecciones de la cámara. Pulsa Iniciar en vivo."
-                            : "Para ver las detecciones, abre una vez /demo/<clave> en este navegador."}
+                        Sin detecciones
                     </p>
                 )}
             </div>
             <p className="text-compact text-muted">
-                {people} {people === 1 ? "persona" : "personas"} · {looking} mirando. Verde:
-                personas y su mirada. Lila: objetos. Naranja: producto en mano.
+                {people} {people === 1 ? "persona" : "personas"} · {looking} mirando
             </p>
         </Section>
     );
@@ -189,17 +186,14 @@ export function PeopleScreen({ view }: { view: ScreenView }) {
                             {next.spec.offer &&
                                 ` · ${next.spec.offer.label} ${moneyCl(next.spec.offer.price.amount)}`}
                         </span>
-                        <span className="text-compact text-muted">
-                            Espera el tiempo mínimo en pantalla del aviso actual.
-                        </span>
                     </div>
                 </Card>
             ) : (
-                <p className="text-compact text-muted">
-                    {onAir?.spec.offer
-                        ? `${onAir.spec.slots.map((s) => s.brand_name).join(" + ")} · ${onAir.spec.offer.label} ${moneyCl(onAir.spec.offer.price.amount)}`
-                        : "Nada en espera: el próximo aviso entra en cuanto cambie el grupo."}
-                </p>
+                onAir?.spec.offer && (
+                    <p className="text-compact text-muted">
+                        {`${onAir.spec.slots.map((s) => s.brand_name).join(" + ")} · ${onAir.spec.offer.label} ${moneyCl(onAir.spec.offer.price.amount)}`}
+                    </p>
+                )
             )}
         </Section>
     );

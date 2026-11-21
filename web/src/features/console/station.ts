@@ -20,7 +20,6 @@ export interface Dot {
 export interface StationView {
     readonly state: StationState;
     readonly headline: string;
-    readonly detail: string;
     readonly toggleLabel: string;
     readonly toggleTo: boolean;
     /** Only while live on a speech-opted-in screen: the mic does nothing otherwise. */
@@ -70,13 +69,11 @@ export function stationView(status: LiveStatus, health: InputHealth | null): Sta
         ? { key: "ai", label: "IA en pausa", tone: "neutral" }
         : generation?.ai
           ? { key: "ai", label: generation.label, tone: "info" }
-          : { key: "ai", label: "Copy aprobado de stock (sin claves de IA)", tone: "neutral" };
+          : { key: "ai", label: "Copy de stock", tone: "neutral" };
 
-    if (!player) warnings.push("Abre la pantalla en el TV: /screen?id=" + status.screen_id);
-    if (status.live && !vision)
-        warnings.push("No hay agente de cámara conectado: nadie será detectado.");
-    if (status.listening && !speech)
-        warnings.push("El micrófono está activado, pero el agente de voz no está conectado.");
+    if (!player) warnings.push(`Abre /screen?id=${status.screen_id} en el TV`);
+    if (status.live && !vision) warnings.push("Sin agente de cámara.");
+    if (status.listening && !speech) warnings.push("Micrófono activo sin agente de voz.");
 
     const degraded = status.live && (!vision || !player);
     return {
@@ -84,11 +81,8 @@ export function stationView(status: LiveStatus, health: InputHealth | null): Sta
         headline: !status.live
             ? "En espera"
             : degraded
-              ? "En vivo · revisar"
+              ? "En vivo"
               : `En vivo desde ${since(status.changed_at)}`,
-        detail: status.live
-            ? "La pantalla ve, escucha y subasta en tiempo real."
-            : "Nada se analiza ni se genera. La pantalla muestra el anuncio de casa.",
         toggleLabel: status.live ? "Detener" : "Iniciar en vivo",
         toggleTo: !status.live,
         mic:

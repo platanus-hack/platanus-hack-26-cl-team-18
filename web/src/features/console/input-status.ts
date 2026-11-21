@@ -32,7 +32,7 @@ export function generationLabel(health: InputHealth): {
     const providers = health.ads?.providers;
     const copy = providers?.ai_copy?.configured ?? false;
     const voice = providers?.voice?.configured ?? false;
-    if (copy && voice) return { label: "IA: copy y voz configurados", ai: true };
-    if (copy) return { label: "IA: copy configurado · sin voz", ai: true };
-    return { label: "Sin claves de IA: anuncios con copy aprobado de stock", ai: false };
+    if (copy && voice) return { label: "IA: copy y voz", ai: true };
+    if (copy) return { label: "IA: copy, sin voz", ai: true };
+    return { label: "Copy de stock", ai: false };
 }

@@ -95,17 +95,14 @@ export function StationBar({
                     )}
                 </div>
                 <div className="flex items-center gap-2">
-                    <span className="text-metadata text-muted" title="Conexión de esta consola">
+                    {connection.status !== "open" && (
                         <span
-                            aria-hidden
-                            className={
-                                connection.status === "open" ? "text-success" : "text-warning"
-                            }
+                            className="text-metadata text-warning"
+                            title="Conexión de esta consola"
                         >
-                            ●
-                        </span>{" "}
-                        {link.label === "En vivo" ? "Conectada" : link.label}
-                    </span>
+                            ● {link.label}
+                        </span>
+                    )}
                     {status && (
                         <Controls
                             status={status}
@@ -131,14 +128,9 @@ export function StationBar({
 
 function StateWord({ view }: { view: ReturnType<typeof stationView> }) {
     return (
-        <div className="flex flex-col">
-            <span className="flex items-center gap-2 text-section font-semibold">
-                <Badge tone={STATE_TONE[view.state]} appearance="soft">
-                    {view.headline}
-                </Badge>
-            </span>
-            <span className="text-compact text-muted">{view.detail}</span>
-        </div>
+        <Badge tone={STATE_TONE[view.state]} appearance="soft">
+            {view.headline}
+        </Badge>
     );
 }
 
