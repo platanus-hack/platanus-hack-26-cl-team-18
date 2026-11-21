@@ -38,6 +38,7 @@ from app.modules.audience.domain.classification import (
     KeyframeFindings,
     classify,
 )
+from app.modules.audience.domain.policies.keyframe_gate import KeyframeGate
 from app.modules.audience.domain.value_objects.evidence import HeldProduct, SegmentEvidence
 from app.modules.audience.domain.value_objects.segment import SegmentId, SegmentSource
 from app.modules.common.domain.value_objects.percentage import Percentage
@@ -102,6 +103,8 @@ class _Screen:
     keyframe: KeyframeFindings | None = None
     biddable: frozenset[SegmentId] = frozenset()
     looking: int = 0
+    objects: frozenset[str] = frozenset()  # the latest snapshot's object labels
+    last_tagged_at: datetime | None = None
 
 
 def _ratio(value: float | Decimal) -> Decimal:
@@ -126,8 +129,13 @@ class AudienceClassifier:
         on_findings: FindingsListener | None = None,
         on_degraded: DegradationListener | None = None,
         on_tags: TagsListener | None = None,
+        keyframe_gate: KeyframeGate | None = None,
     ) -> None:
         self.catalog = catalog
+        # The VLM as a tie-breaker (keyframe_gate.py); counters show what it saved.
+        self._gate = keyframe_gate or KeyframeGate()
+        self.keyframes_skipped = 0
+        self.keyframes_tagged: dict[str, int] = {}
         self._settings = settings or ClassifierSettings()
         self._ttl = ttl or EvidenceTtl()
         self._reliability = reliability or SourceReliability()
@@ -191,6 +199,7 @@ class AudienceClassifier:
             )
             screen.biddable = frozenset(segment.segment_id for segment in result.segments)
             screen.looking = snapshot.looking
+            screen.objects = frozenset(item.label for item in cues)
         return result
 
     # ------------------------------------------------------------ warm path
@@ -202,7 +211,21 @@ class AudienceClassifier:
         if self._tagger is None or self._warm is None:
             self._degraded(wire_id, True)
             return
-        tagger, looking = self._tagger, self._screen(wire_id).looking
+        screen = self._screen(wire_id)
+        with screen.lock:
+            reason = self._gate.should_tag(
+                looking=screen.looking,
+                objects=screen.objects,
+                understood=bool(screen.biddable),
+                last_tagged_at=screen.last_tagged_at,
+                now=received_at,
+            )
+            if reason is None:
+                self.keyframes_skipped += 1  # the hot path already has the answer
+                return
+            screen.last_tagged_at = received_at
+        self.keyframes_tagged[reason] = self.keyframes_tagged.get(reason, 0) + 1
+        tagger, looking = self._tagger, screen.looking
         taken_at = UtcTimestamp.create(received_at)
 
         async def tag() -> None:

@@ -1,0 +1,9 @@
+{
+  "git_sha": "6623899",
+  "metrics": {
+    "minor_false_flag_rate": 0.27058823529411763,
+    "minor_sample_recall": 0.3,
+    "minor_windows_unflagged": 3
+  },
+  "updated_at": "2026-11-21T20:22:25+00:00"
+}

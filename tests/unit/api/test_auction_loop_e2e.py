@@ -858,3 +858,23 @@ def test_the_aired_hook_is_credited_with_the_attention_it_earned(tmp_path: Path)
     assert [(row["variant"], row["hook"]) for row in played] == [
         (0, first.spec.stages[0].copy_text)  # untried hooks air in order, targeted first
     ]
+
+
+def test_a_streaming_camera_after_a_walk_away_still_reaches_the_house_ad(loop: Loop) -> None:
+    """The camera keeps sending empty frames after the group leaves. Those frames must not
+    re-arm the 3 s walk-away grace (D5.5) on every one of them, or the paid ad never ends."""
+    loop.send("co-brand")
+    loop.auction()
+    assert set(paid_brands(loop.creative())) == {"Voltio", "Café Patio"}
+    for _ in range(4):  # the group watched for a while: its size is confirmed
+        loop.send("co-brand", after_s=0.3)
+    left = loop.send("empty", after_s=0.3)
+    first = loop.auction()
+    assert first.swap == "held"
+    for _ in range(7):  # 0.5 s heartbeats while nobody is there, past the 3 s window
+        loop.send("empty", after_s=0.5)
+    loop.clock.set(left + timedelta(seconds=3.6))
+    loop.scheduler.fire_due()
+    while (decision := loop.auction()).swap != "released":
+        assert decision.swap in ("held", "unchanged"), decision.swap
+    assert paid_brands(loop.creative()) == ()

@@ -284,6 +284,78 @@ BASKETS: tuple[DemoBasket, ...] = (
             (4, "Cuatro Malta Sur", " x4", 5990),
         ),
     ),
+    # Every later brand gets its own solo offer too (an ad without a price sells nothing;
+    # found on real footage: a fast-food ad aired priceless).
+    DemoBasket(
+        slugs=frozenset({"miga"}),
+        names="Miga",
+        tiers=(
+            (1, "Medialuna", "", 990),
+            (2, "Dos medialunas", " x2", 1790),
+            (3, "Tres medialunas", " x3", 2490),
+            (4, "Cuatro medialunas", " x4", 3190),
+        ),
+    ),
+    DemoBasket(
+        slugs=frozenset({"brasa-burger"}),
+        names="Brasa Burger",
+        tiers=(
+            (1, "Brasa clásica", "", 3990),
+            (2, "Dúo Brasa", " x2", 7490),
+            (3, "Trío Brasa", " x3", 10490),
+            (4, "Pack x4 Brasa", " x4", 13490),
+        ),
+    ),
+    DemoBasket(
+        slugs=frozenset({"toro-burger"}),
+        names="Toro Burger",
+        tiers=(
+            (1, "Toro clásica", "", 3790),
+            (2, "Dúo Toro", " x2", 6990),
+            (3, "Trío Toro", " x3", 9990),
+            (4, "Pack x4 Toro", " x4", 12790),
+        ),
+    ),
+    DemoBasket(
+        slugs=frozenset({"cola-sur"}),
+        names="Cola Sur",
+        tiers=(
+            (1, "Cola Sur helada", "", 1190),
+            (2, "Dos Cola Sur", " x2", 2190),
+            (3, "Tres Cola Sur", " x3", 2990),
+            (4, "Cuatro Cola Sur", " x4", 3790),
+        ),
+    ),
+    DemoBasket(
+        slugs=frozenset({"pacifica"}),
+        names="Pacífica",
+        tiers=(
+            (1, "Pacífica helada", "", 1090),
+            (2, "Dos Pacífica", " x2", 1990),
+            (3, "Tres Pacífica", " x3", 2790),
+            (4, "Cuatro Pacífica", " x4", 3490),
+        ),
+    ),
+    DemoBasket(
+        slugs=frozenset({"crunchi"}),
+        names="Crunchi",
+        tiers=(
+            (1, "Crunchi", "", 1290),
+            (2, "Dos Crunchi", " x2", 2390),
+            (3, "Tres Crunchi", " x3", 3290),
+            (4, "Cuatro Crunchi", " x4", 4190),
+        ),
+    ),
+    DemoBasket(
+        slugs=frozenset({"agua-cumbre"}),
+        names="Agua Cumbre",
+        tiers=(
+            (1, "Agua Cumbre fría", "", 890),
+            (2, "Dos Agua Cumbre", " x2", 1590),
+            (3, "Tres Agua Cumbre", " x3", 2290),
+            (4, "Cuatro Agua Cumbre", " x4", 2890),
+        ),
+    ),
 )
 
 

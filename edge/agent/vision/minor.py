@@ -40,7 +40,6 @@ from agent.vision.types import Box, ObjectDetection, PersonDetection
 
 # COCO-17 keypoint indexes (agent.vision.types.Kp covers the head and shoulders only).
 _LEFT_EAR, _RIGHT_EAR, _LEFT_SHOULDER, _RIGHT_SHOULDER = 3, 4, 5, 6
-_FACE = (0, 1, 2)  # nose, left eye, right eye
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,11 +126,6 @@ def stature_cue(
 def head_cue(person: PersonDetection, config: MinorConfig) -> float | None:
     points = person.keypoints
     if len(points) <= _RIGHT_SHOULDER:
-        return None
-    # Ear-to-ear width only means something on a face turned to the camera: in profile
-    # or from behind the model guesses the far ear, and adults in a queue read as
-    # big-headed (measured on real footage, evals/video/minors.py).
-    if any(points[i].confidence < config.min_kp_confidence for i in _FACE):
         return None
     ears = points[_LEFT_EAR], points[_RIGHT_EAR]
     shoulders = points[_LEFT_SHOULDER], points[_RIGHT_SHOULDER]

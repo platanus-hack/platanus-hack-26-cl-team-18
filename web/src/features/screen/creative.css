@@ -333,3 +333,25 @@
 .creative-canvas[data-distance="near"] .creative-code {
     font-size: 2.6cqw;
 }
+
+/*
+ * Price-first for far viewers (real footage: most viewers are tagged mid or far).
+ * From across the shop the number is what reads; the long offer sentence does not.
+ * The teaser's price chip grows into a figure, and the offer line yields to the hero
+ * price. Mid viewers get a lighter version. The copy and the price never change here.
+ */
+.creative-meta-price {
+    transition: font-size var(--duration-crossfade) ease-out;
+}
+.creative-canvas[data-distance="far"] .creative-meta-price {
+    font-size: clamp(1.25rem, 5.2cqw, 6rem);
+    font-weight: 750;
+    letter-spacing: -0.02em;
+}
+.creative-canvas[data-distance="mid"] .creative-meta-price {
+    font-size: clamp(1rem, 2.6cqw, 3rem);
+    font-weight: 700;
+}
+.creative-canvas[data-distance="far"] .creative-offer-line {
+    display: none;
+}

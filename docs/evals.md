@@ -316,6 +316,34 @@ form no segment. It is never wrong (0 must-never seconds), but it never
 reaches anyone (sensible reach 0 %). Fix the catalog, then rerun this eval:
 ad precision and reach become the numbers to push up.
 
+### 4.1a Real footage beside the ad it produced, and minor safety
+
+`uv run --with playwright python -m evals.video.side_by_side` replays each clip's agent
+recording in real time into a backend with the whole generation stack (AI copy at replayed
+Claude latency, sandbox ElevenLabs voice-overs, bundle loops, production swap timing) and
+captures the real web player every second beside the face-blurred source frame, captioned
+with what was seen, understood and aired. Report: `evals/results/video/side-by-side/`.
+Per capture: never blank, no must-never brand, the brand fits the scene, an approved
+price, the copy's group no larger than the people present, a video loop, the dwell stage
+never going backwards within one creative. Per clip, from the backend's event timeline:
+
+| Check | Kind | Why |
+|---|---|---|
+| AI copy + voice-over on air within 1.5 s of an ad going up | gate | a complete ad, not a silent stock one |
+| a group steady > 4 s sees its own offer tier | gate | real looking counts jitter; the offer must follow the group, not glances |
+| activity claims ("Entrenaron…") need speech, VLM or sound evidence | tracked | a bottle at a beer party read as fitness; needs a team call on the gym-bottle prop |
+
+`uv run python -m evals.video.minors` scores the agent's `minor_likely` against hand
+labels (`evals/video/minor_labels.json`, labelled from blurred keyframes): child-snapshot
+recall, child windows never flagged, adult false-flag rate. All ratchets
+(`evals/video/minor_baseline.json`). Measured 2026-11-21: recall 0.31, 3/6 child windows
+never flagged (children alone in close-up, a lifted toddler, a carried toddler), 27 % of
+adult snapshots flagged (adults in profile, mostly a queue). A frontal-face gate on the
+head cue halved false flags but lost the carried toddler's only detection, so it was not
+kept: recall must rise before false flags may fall. The video ad-fit metrics (fitting-ad
+reach, ad precision, screen changes per minute) are ratchets too
+(`evals/video/baseline.json`, `python -m evals.video.run --update-baseline`).
+
 ### 4.2 The ad pipeline, end to end: find the bottleneck, fix it, measure again
 
 `make eval-pipeline` (`evals/pipeline.py`) boots a backend with the **whole

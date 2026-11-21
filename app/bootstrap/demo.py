@@ -74,6 +74,7 @@ from app.modules.audience.application.ports import AudienceTagger
 from app.modules.audience.application.ports.tagger import WarmScheduler
 from app.modules.audience.application.ports.topics import TopicExtractor, TopicOutcome
 from app.modules.audience.domain.catalog import CueRule
+from app.modules.audience.domain.policies.group_default import GroupDefault
 from app.modules.audience.domain.speech_evidence import (
     SpeechEvidence,
     SpeechTopic,
@@ -326,6 +327,9 @@ def register_demo(
     slug_of = {kit.brand_id: _slug(kit.name) for kit in kits}
     brand_by_slug = {slug: brand for brand, slug in slug_of.items()}
     fitness, coffee, beer, food = (SegmentId.create(key) for key in ("408", "977", "369", "1404"))
+    # A watching group with no other signal: a low-confidence coffee moment, never a
+    # house ad for a whole queue (group_default.py; measured on real footage).
+    group_default = GroupDefault(segment_id=coffee)
     layouts = (Layout.solo(), Layout.duo())
     reserve = _clp_per_as("1.5")
     desk = AuctionDesk(InProcessBundleEngine(), holds_enabled=swap_holds)
@@ -580,17 +584,24 @@ def register_demo(
                     )
                 )
             classification = classifier.classify(snapshot, at=received.received_at)
-            segments = merge_speech(
-                classification.segments,
-                speech,
-                at=UtcTimestamp.create(received.received_at),
+            segments = group_default.apply(
+                segments=merge_speech(
+                    classification.segments,
+                    speech,
+                    at=UtcTimestamp.create(received.received_at),
+                    looking=snapshot.looking,
+                ),
                 looking=snapshot.looking,
             )
             minor_likely = classification.minor_likely
             held = classification.held_products
             # The group the offer addresses moves only on confirmed counts (party.py), so
             # the second sample of a new count re-briefs even when the facts repeat.
-            party_now = addressed_party(looking_samples, now=measured_at.value)
+            # Only while someone looks: with nobody looking the window drains 3 → 0, and
+            # re-auctioning on each step would re-arm the walk-away grace forever.
+            party_now = (
+                addressed_party(looking_samples, now=measured_at.value) if snapshot.looking else 0
+            )
             if current_moment is not None and (
                 snapshot.people,
                 snapshot.looking,
