@@ -280,3 +280,36 @@ def test_a_publish_that_fails_is_retried_by_the_next_identical_snapshot(
     assert paid_brands(rig.creative()) == ("Voltio",)
     assert calls["n"] >= 2
     caplog.clear()  # the one injected failure is expected
+
+
+def test_a_house_ad_forced_by_the_copy_guard_bills_no_brand(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The auction clears Voltio, but even its stock copy fails the guard for this
+    # moment, so the house ad airs instead of an unsafe line. Voltio must not pay
+    # for attention on an ad that was never theirs, nor have budget held for it.
+    from dataclasses import replace
+
+    from app.modules.creative.application.studio import CreativeStudio
+    from app.modules.creative.domain.guard import GuardVerdict, Violation, ViolationKind
+
+    real = CreativeStudio.compose
+
+    def rejected(self: CreativeStudio, brief: Any, *, variant: int = 0) -> Any:
+        composed = real(self, brief, variant=variant)
+        unsafe = GuardVerdict(
+            violations=(Violation(kind=ViolationKind.COMPETITOR_NAME, where="offer"),)
+        )
+        return replace(composed, score=replace(composed.score, verdict=unsafe))
+
+    monkeypatch.setattr(CreativeStudio, "compose", rejected)
+    rig.agent.send_text(rig.snapshot("fitness"))
+    assert rig.auction().winners  # the market did clear a paid brand
+    house = rig.creative()
+    assert paid_brands(house) == ()
+    assert house.auction_id is None  # no QR, no redemption, no attribution
+    aired_at = rig.clock.now_utc()
+    rig.clock.advance(timedelta(seconds=5))
+    rig.player.send_text(playback(house.creative_id, 1, aired_at, rig.clock.now_utc()))
+    rig.agent.send_text(rig.snapshot("fitness"))  # a round trip: the report was handled
+    assert not rig.container.ledger.charges()

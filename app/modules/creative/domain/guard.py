@@ -96,6 +96,11 @@ def _brand_pattern(name: str) -> re.Pattern[str] | None:
     return re.compile(rf"(?<![a-z0-9]){pattern}")
 
 
+def _letters(normalized: str) -> str:
+    """A normalized name without separators: "coca-cola" and "coca cola" are one brand."""
+    return re.sub(r"[\W_]+", "", normalized)
+
+
 def brand_mentioned(normalized: str, name: str) -> bool:
     """A brand at a word start, letters possibly split by separators ("R-a-y-o", "Rayos")."""
     pattern = _brand_pattern(name)
@@ -195,12 +200,14 @@ def check_copy(draft: CopyDraft, brief: CreativeBrief) -> GuardVerdict:
     )
     approved_price = _digits(str(offer.price.amount)) if offer else None
     basket = {normalize(name) for name in brief.names}
-    # A basket brand's own name may contain a known brand ("Pronto Copec" ⊃ "Copec"):
-    # naming your own brand is never naming a competitor.
+    own_letters = {_letters(name) for name in basket}
+    # A basket brand's own name may contain a known brand ("Pronto Copec" ⊃ "Copec"),
+    # or spell it with other separators ("Coca-Cola" = "Coca Cola"), the same way
+    # brand_mentioned ignores them: naming your own brand is never naming a competitor.
     competitors = tuple(
         name
         for name in sorted(brief.avoid_names | set(KNOWN_BRANDS))
-        if normalize(name) not in basket
+        if _letters(normalize(name)) not in own_letters
         and not any(contains_term(own, normalize(name)) for own in basket)
     )
     allowed_party = party_mentions(approved_text)

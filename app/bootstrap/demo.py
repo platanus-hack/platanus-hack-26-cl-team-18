@@ -918,7 +918,10 @@ def register_demo(
         creative_id = str(ids.new_uuid7())
         if brief is not None and composed is not None:
             hook_lab.aired(creative_id, brief.signature(), variant, composed.draft.teaser)
-        if result.winners and spec is not house_spec:
+        # Paid only if the winners' own creative airs: a house ad the guard forced is a
+        # no-fill on screen, so no brand is billed, held or credited for it.
+        paid = bool(result.winners) and spec is not house_spec
+        if paid:
             spec = with_basket_extras(
                 spec, result, decision.auction_id, creative_id, clock.now_utc(), brief=brief
             )
@@ -928,13 +931,13 @@ def register_demo(
         current_creative = CreativeReady(
             screen_id=wire_screen_id,
             creative_id=creative_id,
-            auction_id=decision.auction_id if result.winners else None,
+            auction_id=decision.auction_id if paid else None,
             spec=spec,
             trace=trace,
         )
         # The player shows it after preload; ready_at is our best server-side stand-in.
         desk.aired(result, displayed_at=ready_at)
-        if result.winners:
+        if paid:
             # Bill what this creative's own auction cleared, and hold its worst case.
             delivery.aired(
                 PlayRecord(

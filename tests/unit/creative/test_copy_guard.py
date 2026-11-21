@@ -10,7 +10,7 @@ from app.modules.creative.application.stock_copy import StockCopywriter
 from app.modules.creative.domain.angle import Angle
 from app.modules.creative.domain.draft import CopyDraft, CopySource
 from app.modules.creative.domain.guard import CopyGuard, ViolationKind, check_copy
-from tests.unit.creative.factory import MIGA, PATIO, brief
+from tests.unit.creative.factory import BRANDS, MIGA, PATIO, VOLTIO, brief
 
 GROUP = brief(party=4, angle=Angle.HUNGER)
 GOOD = CopyDraft(
@@ -182,3 +182,25 @@ def test_reused_matching_rules_still_check_current_minor_safety_and_price() -> N
     changed = replace(GROUP, offer=replace(GROUP.offer, price=clp(9990)))
     assert ViolationKind.PRICE_CHANGED in check_copy(GOOD, changed).kinds()
     assert check_copy(GOOD, GROUP).passed
+
+
+@pytest.mark.parametrize("spelling", ["Coca-Cola", "Coca Cola", "coca cola", "COCA-COLA"])
+def test_a_brand_naming_itself_in_any_spelling_is_not_a_competitor(spelling: str) -> None:
+    # "Coca-Cola" (catalog) and "Coca Cola" (known rivals) are one brand: its own ad
+    # was rejected for "naming a competitor", so a paid Coca-Cola auction aired the
+    # house ad instead (Chile catalog, hot dog + soda).
+    coke = replace(BRANDS[PATIO], name="Coca-Cola", stock_copy="Coca-Cola · Bien helada.")
+    own = replace(GROUP, brands=(BRANDS[VOLTIO], coke), offer=None)
+    draft = replace(GOOD, teaser=f"¿Con hambre los 4? {spelling} y Voltio", offer="", close="QR")
+    kinds = {v.kind for v in check_copy(draft, own).violations}
+    assert ViolationKind.COMPETITOR_NAME not in kinds
+
+
+def test_a_real_rival_is_still_caught_next_to_a_hyphenated_own_brand() -> None:
+    coke = replace(BRANDS[PATIO], name="Coca-Cola", stock_copy="Coca-Cola · Bien helada.")
+    own = replace(GROUP, brands=(BRANDS[VOLTIO], coke), offer=None)
+    draft = replace(GOOD, teaser="Coca-Cola, mejor que Pepsi", offer="", close="QR")
+    names = {
+        v.detail for v in check_copy(draft, own).violations if v.kind.value == "competitor_name"
+    }
+    assert "Pepsi" in names
