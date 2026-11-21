@@ -99,6 +99,7 @@ from app.modules.common.domain.value_objects.rounding_policy import RoundingPoli
 from app.modules.common.domain.value_objects.utc_timestamp import UtcTimestamp
 from app.modules.creative.application.briefing import CreativeCatalog, MomentContext, build_brief
 from app.modules.creative.application.campaigns import CampaignMedia, apply_campaign_media
+from app.modules.creative.application.hook_lab import HookLab, HookResult
 from app.modules.creative.application.loops import BundleLoopLibrary
 from app.modules.creative.application.ports.copywriter import CopyWriter
 from app.modules.creative.application.rendering import render_copy_upgrade, render_spec
@@ -157,6 +158,8 @@ class DemoControls:
     # gets; forget_speech drops spoken topics when the mic goes off mid-moment.
     standby: Callable[[], None] = lambda: None
     forget_speech: Callable[[], None] = lambda: None
+    # Hook testing (HookLab): every approved hook option with its plays, attention, scans.
+    hook_results: Callable[[], list[HookResult]] = lambda: []
 
 
 def _clp_per_as(amount: str) -> MoneyRate:
@@ -397,6 +400,8 @@ def register_demo(
         budget=GenerationBudget(hourly_cap=UsdCost.create(hourly_budget_usd)),
         config=StudioConfig(copy_timeout_s=copy_timeout_s),
     )
+    # Which approved stock hook airs for a brief, learned from attention and QR scans.
+    hook_lab = HookLab()
     house_spec = compose_template(
         "solo",
         (
@@ -734,8 +739,10 @@ def register_demo(
         result = decision.result
         spec = house_spec
         brief = brief_for(decision.moment, result)
+        variant = 0
         if brief is not None:
-            composed = studio.compose(brief)
+            variant = hook_lab.variant_for(brief.signature(), studio.hook_count(brief))
+            composed = studio.compose(brief, variant=variant)
             if composed.score.verdict.passed:
                 spec = with_cached_voice(render_spec(brief, composed.draft, kits_by_id))
             else:
@@ -744,6 +751,8 @@ def register_demo(
                 brief = None
         current_brief = brief
         creative_id = str(ids.new_uuid7())
+        if brief is not None and composed is not None:
+            hook_lab.aired(creative_id, brief.signature(), variant, composed.draft.teaser)
         if result.winners and spec is not house_spec:
             spec = with_basket_extras(
                 spec, result, decision.auction_id, creative_id, clock.now_utc(), brief=brief
@@ -1118,6 +1127,8 @@ def register_demo(
             for campaign in redemption.campaign_ids:
                 autobidder.observe_redemption(campaign)
         offer = redemptions.offer(code)
+        if created and offer is not None:
+            hook_lab.observe_scan(offer.creative_id)
         message = ConsoleRedemption(
             screen_id=redemption.screen_id,
             auction_id=redemption.auction_id,
@@ -1167,6 +1178,7 @@ def register_demo(
         )
         if receipt is None:
             return  # house ad, unknown creative or a retry already billed
+        hook_lab.observe_play(report.creative_id, receipt.attention.attention_seconds)
         # The charge was booked (and capped) against budgets inside billing.
         for charge in receipt.charges:
             autobidder.observe_play(
@@ -1530,6 +1542,7 @@ def register_demo(
         reauction_bids=lambda: reauction(Trigger.BID_CHANGED),
         standby=standby,
         forget_speech=forget_speech,
+        hook_results=hook_lab.results,
         set_autobid=set_autobid,
     )
 
