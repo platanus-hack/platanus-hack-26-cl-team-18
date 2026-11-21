@@ -56,7 +56,8 @@ class PerformanceWindow:
     seen: int | None = None  # auctions since auto-bidding started (cold start); None → auctions
     wins: int
     outbid: int  # lost on value (outbid / competitor) while eligible
-    zero_attention_wins: int  # billed plays with no qualifying attention
+    zero_attention_wins: int  # billed plays (reports) with no qualifying attention
+    plays: int = 0  # billed plays (reports), the denominator for wasted wins
     spend: Money  # since auto-bidding started
     redemptions: int  # since auto-bidding started
     budget: Money | None  # None: uncapped
@@ -123,30 +124,37 @@ class AutoBidPolicy(Policy[AutoBidInput, AutoBidDecision]):
                 AutoBidRule.PACE_DOWN,
                 f"Spending ahead of plan ({_pct(spent)} spent, {_pct(w.elapsed_fraction)} of the period gone).",
             )
-        if w.auctions < c.min_auctions:
+        seen = w.auctions if w.seen is None else w.seen  # lifetime, not the rolling window
+        if seen < c.min_auctions:
             return to(
                 now,
                 AutoBidRule.COLD_START,
-                f"Learning: {w.auctions}/{c.min_auctions} auctions seen.",
+                f"Learning: {seen}/{c.min_auctions} auctions seen.",
             )
-        if w.wins >= 2 and w.zero_attention_wins * 2 >= w.wins:
+        if w.plays >= 2 and w.zero_attention_wins * 2 >= w.plays:
             return to(
                 now * (ONE - c.max_step / 2),
                 AutoBidRule.WASTED_WINS,
-                f"{w.zero_attention_wins} of {w.wins} plays drew no attention: easing off.",
+                f"{w.zero_attention_wins} of {w.plays} plays drew no attention: easing off.",
             )
         target = input.goal.target_cost_per_redemption
         behind = spent is None or spent < w.elapsed_fraction
         if target is not None and w.redemptions > 0:
             cpr = w.spend.amount / w.redemptions
             low, high = c.target_band
+            if cpr == 0 and behind:  # redeemed while paying nothing: beats any target
+                return to(
+                    now * (ONE + c.max_step),
+                    AutoBidRule.UNDER_TARGET,
+                    "Redemptions at $0 cost: bidding up.",
+                )
             if cpr > target.amount * high:
                 return to(
                     now * target.amount / cpr,
                     AutoBidRule.OVER_TARGET,
                     f"Cost per redemption ${cpr:.0f} is above the ${target.amount:.0f} target.",
                 )
-            if cpr < target.amount * low and behind:
+            if 0 < cpr < target.amount * low and behind:
                 return to(
                     now * target.amount / cpr,
                     AutoBidRule.UNDER_TARGET,

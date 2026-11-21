@@ -47,6 +47,9 @@ class ValidityRules:
     min_look: timedelta = MIN_BILLABLE_LOOK
     max_hold: timedelta = MAX_SAMPLE_HOLD
     max_static_look: timedelta = timedelta(minutes=3)
+    # A look interrupted for less than this is still the same look for the static
+    # rule (a one-sample dropout must not reset a poster's clock).
+    static_gap: timedelta = timedelta(seconds=3)
     max_viewers: int = 12  # a counter screen; a venue setting in production
 
 
@@ -83,6 +86,13 @@ def validate_attention(
             continue
         seen.add(sample.at)
         ordered.append(sample)
+    # Static looks are judged on the whole history, not just this play: a poster
+    # watched across many 15 s plays is still one 10-minute "look".
+    static = _static_tracklets(ordered, start=start, end=end, rules=rules)
+    first_seen: dict[str, datetime] = {}
+    for sample in ordered:
+        for tracklet in sample.looking:
+            first_seen.setdefault(tracklet, sample.at)
     before = [sample for sample in ordered if sample.at <= start]
     relevant = ([before[-1]] if before else []) + [s for s in ordered if start < s.at < end]
 
@@ -99,7 +109,8 @@ def validate_attention(
         if seg_end <= seg_start:
             continue
         span = seg_end - seg_start
-        near = sorted(sample.looking - sample.far)
+        # Over capacity, keep the longest-standing viewers (then id, for determinism).
+        near = sorted(sample.looking - sample.far, key=lambda t: (first_seen[t], t))
         for _ in sample.looking & sample.far:
             drop(InvalidReason.FAR, span)
         kept, excess = near[: rules.max_viewers], near[rules.max_viewers :]
@@ -114,14 +125,14 @@ def validate_attention(
 
     total = timedelta()
     billable = glances = 0
-    for spans in runs.values():
+    for tracklet, spans in runs.items():
         for span_start, span_end in spans:
             duration = span_end - span_start
-            if duration < rules.min_look:
+            if tracklet in static or duration > rules.max_static_look:
+                drop(InvalidReason.STATIC, duration)
+            elif duration < rules.min_look:
                 glances += 1
                 drop(InvalidReason.GLANCE, duration)
-            elif duration > rules.max_static_look:
-                drop(InvalidReason.STATIC, duration)
             else:
                 total += duration
                 billable += 1
@@ -134,4 +145,27 @@ def validate_attention(
             for reason, duration in sorted(invalid.items())
         },
         duplicate_samples=duplicates,
+    )
+
+
+def _static_tracklets(
+    ordered: Sequence[LookSample], *, start: datetime, end: datetime, rules: ValidityRules
+) -> frozenset[str]:
+    """Tracklets whose unbroken look (gaps < static_gap tolerated) overlaps this play and
+    lasts longer than max_static_look, measured over all retained samples."""
+    spans: dict[str, list[list[datetime]]] = {}
+    for index, sample in enumerate(ordered):
+        following = ordered[index + 1].at if index + 1 < len(ordered) else end
+        seg_end = min(following, sample.at + rules.max_hold, max(end, sample.at))
+        for tracklet in sample.looking - sample.far:
+            runs = spans.setdefault(tracklet, [])
+            if runs and sample.at - runs[-1][1] <= rules.static_gap:
+                runs[-1][1] = max(runs[-1][1], seg_end)
+            else:
+                runs.append([sample.at, seg_end])
+    return frozenset(
+        tracklet
+        for tracklet, runs in spans.items()
+        for run_start, run_end in runs
+        if run_end > start and run_start < end and run_end - run_start > rules.max_static_look
     )

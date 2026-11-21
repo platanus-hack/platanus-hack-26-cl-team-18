@@ -36,6 +36,7 @@ class _Counts:
     wins: int = 0
     outbid: int = 0
     zero_attention_wins: int = 0
+    plays: int = 0
     needed: list[Decimal] = field(default_factory=list)
 
 
@@ -57,6 +58,7 @@ class _Tracker:
             wins=sum(b.wins for b in buckets),
             outbid=sum(b.outbid for b in buckets),
             zero_attention_wins=sum(b.zero_attention_wins for b in buckets),
+            plays=sum(b.plays for b in buckets),
             needed=[n for b in buckets for n in b.needed],
         )
 
@@ -114,6 +116,7 @@ class AutoBidder:
             if tracker is None:
                 return
             tracker.spend = charge if tracker.spend is None else tracker.spend + charge
+            tracker.current.plays += 1
             tracker.current.zero_attention_wins += int(attention_seconds == 0)
 
     def observe_redemption(self, campaign_id: CampaignId) -> None:
@@ -144,6 +147,7 @@ class AutoBidder:
                 wins=counts.wins,
                 outbid=counts.outbid,
                 zero_attention_wins=counts.zero_attention_wins,
+                plays=counts.plays,
                 spend=tracker.spend or Money.zero(currency=currency),
                 redemptions=tracker.redemptions,
                 budget=account.budget if account else None,

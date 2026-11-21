@@ -71,3 +71,42 @@ def test_a_replayed_reading_is_ignored() -> None:
     samples = [look(0, "a"), look(0, "a", "ghost"), look(3, "a")]
     result = validate_attention(samples, start=at(0), end=at(4))
     assert result.duplicate_samples == 1 and result.attention_seconds == Decimal(4)
+
+
+# ---------------------------------------------------------------- audit regressions
+
+
+def test_a_poster_is_static_across_many_short_plays() -> None:
+    """V1: a 10-minute look billed 15 s at a time is one static look: once it has
+    lasted past max_static_look, every later play bills nothing (we can't know the
+    future, so the first 3 minutes look like a customer)."""
+    samples = heartbeat(("poster",), 600)
+    for play_start in range(180, 585, 15):
+        result = validate_attention(samples, start=at(play_start), end=at(play_start + 15))
+        assert result.attention_seconds == 0, play_start
+        assert result.invalid_seconds[InvalidReason.STATIC] == 15
+
+
+def test_a_static_look_with_short_dropouts_is_still_static() -> None:
+    """V2: a one-sample gap every 170 s must not reset the static clock."""
+    samples = []
+    for s in range(0, 600, 1):
+        samples.append(look(s, *(() if s % 170 == 169 else ("poster",))))
+    result = validate_attention(samples, start=at(0), end=at(600))
+    assert result.attention_seconds == 0
+    assert result.invalid_seconds[InvalidReason.STATIC] > 0
+
+
+def test_a_customer_returning_after_a_real_break_is_not_static() -> None:
+    samples = heartbeat(("a",), 120) + [look(130)] + [look(s, "a") for s in range(140, 260, 5)]
+    result = validate_attention(samples, start=at(140), end=at(255))
+    assert result.attention_seconds == Decimal(115)
+
+
+def test_over_capacity_keeps_the_longest_standing_viewers() -> None:
+    """V3: newcomers are dropped first, not whoever sorts last by id."""
+    early = [look(0, *(f"z{i}" for i in range(12)))]
+    crowd = early + [look(1, *(f"z{i}" for i in range(12)), "a-new", "b-new")]
+    result = validate_attention(crowd, start=at(0), end=at(3), rules=ValidityRules(max_viewers=12))
+    assert result.attention_seconds == Decimal(36)  # the 12 z* viewers × 3 s
+    assert result.invalid_seconds[InvalidReason.OVER_CAPACITY] == Decimal(4)  # 2 × 2 s

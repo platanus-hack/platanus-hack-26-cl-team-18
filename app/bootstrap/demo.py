@@ -1,12 +1,13 @@
 """Compose one screen's live snapshot-to-creative flow and the shared seed market."""
 
+import logging
 from base64 import b64encode
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from decimal import ROUND_CEILING, Decimal
 from pathlib import Path
-from threading import RLock
+from threading import Lock, RLock
 from uuid import UUID
 
 from app.bootstrap.demo_console import decision_messages
@@ -120,6 +121,7 @@ DEMO_SCREEN = "demo-01"
 MAX_MEASUREMENT_SKEW = timedelta(seconds=10)
 # Worst-case play length held against a winner's budget while it is on air (R-B6/R-B7).
 MAX_PLAY_SECONDS = 15
+logger = logging.getLogger(__name__)
 
 
 class UnknownBrand(Exception):
@@ -158,6 +160,9 @@ class LiveMarket:
     redemptions: RedemptionDesk
     lock: RLock
     campaign_media: dict[str, CampaignMedia]
+    # One learner for the whole market: every screen's auctions and plays feed it.
+    autobidder: AutoBidder
+    autobid_lock: Lock = field(default_factory=Lock)
 
 
 def seed_market(
@@ -260,6 +265,7 @@ def seed_market(
         redemptions=RedemptionDesk(ids=ids, ledger=redemption_ledger or InMemoryRedemptionLedger()),
         lock=RLock(),
         campaign_media=load_campaign_media(),
+        autobidder=AutoBidder(book),
     )
 
 
@@ -310,8 +316,9 @@ def register_demo(
     desk = AuctionDesk(InProcessBundleEngine(), holds_enabled=swap_holds)
     book, stock, auctions = market.book, market.stock, market.auctions
     # Rule-based auto-bidding (opt-in per campaign from /advertiser).
-    autobidder = AutoBidder(book)
+    autobidder = market.autobidder
     autobid_running = False
+    autobid_lock = market.autobid_lock
     delivery, redemptions = market.delivery, market.redemptions
     loops = BundleLoopLibrary(media_dir) if media_dir is not None else None
     campaign_of = {bidder.campaign_id: bidder for bidder in bidders}
@@ -869,18 +876,24 @@ def register_demo(
             ),
             at=clock.now_utc(),
         )
-        if not autobid_running:
+        with autobid_lock:  # one loop, however many concurrent enables
+            start = not autobid_running
             autobid_running = True
+        if start:
             scheduler(AUTOBID_TICK_S, autobid_tick)
         return True
 
     def autobid_tick() -> None:
-        changed = autobidder.tick(at=clock.now_utc())
-        if changed:
-            reauction(Trigger.BID_CHANGED)
-        else:
-            hub.broadcast_console_threadsafe(book_view())
-        scheduler(AUTOBID_TICK_S, autobid_tick)
+        try:
+            changed = autobidder.tick(at=clock.now_utc())
+            if changed:
+                reauction(Trigger.BID_CHANGED)
+            else:
+                hub.broadcast_console_threadsafe(book_view())
+        except Exception:  # a bad tick must never stop auto-bidding for good
+            logger.exception("auto-bid tick failed")
+        finally:
+            scheduler(AUTOBID_TICK_S, autobid_tick)
 
     def set_stock(message: StockSet) -> bool:
         if message.screen_id != wire_screen_id:

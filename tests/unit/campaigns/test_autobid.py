@@ -61,7 +61,7 @@ def decide(current: str = "1", goal: AutoBidGoal | None = None, **w):  # type: i
         ("too little data → hold", dict(auctions=2), AutoBidRule.COLD_START, "1"),
         (
             "half the wins unwatched → ease off",
-            dict(wins=4, zero_attention_wins=2),
+            dict(wins=4, plays=4, zero_attention_wins=2),
             AutoBidRule.WASTED_WINS,
             "0.9",
         ),
@@ -116,3 +116,49 @@ def test_the_service_learns_applies_and_yields_to_a_human() -> None:
     book.set_live_multiplier(campaign(0), BidMultiplier.create(2), 1_763_740_000_000)
     auto.disable(campaign(0))
     assert not auto.enabled(campaign(0)) and auto.tick(at=T0 + PACING_PERIOD) == {}
+
+
+# ---------------------------------------------------------------- audit regressions
+
+
+def test_redemptions_at_zero_cost_raise_without_dividing_by_zero() -> None:
+    """A1: the demo's '$0 then redeemed' beat must not crash the policy."""
+    goal = AutoBidGoal(target_cost_per_redemption=clp(500))
+    decision = decide(goal=goal, spend=clp(0), redemptions=1)
+    assert decision.rule is AutoBidRule.UNDER_TARGET and decision.multiplier.value == Decimal("1.2")
+
+
+def test_wasted_wins_compares_plays_with_plays() -> None:
+    """A3: two watched plays plus their empty renewals are not 'wasted'."""
+    watched = decide(wins=2, plays=4, zero_attention_wins=1)
+    assert watched.rule is not AutoBidRule.WASTED_WINS
+    wasted = decide(wins=2, plays=4, zero_attention_wins=2)
+    assert wasted.rule is AutoBidRule.WASTED_WINS
+
+
+def test_the_window_rolls_and_old_evidence_ages_out() -> None:
+    book = LiveCampaignBook([bidder(0, "sports_goods", {FITNESS: "6.5"}, budget=5000)])
+    auto = AutoBidder(book)
+    auto.enable(campaign(0), AutoBidGoal(), at=T0)
+    for _ in range(3):
+        auto.observe_auction(campaign(0), won=False, outbid=True)
+    assert auto.tick(at=T0 + PACING_PERIOD / 2)  # chases once
+    for n in range(4):  # quiet ticks: the outbid evidence ages out
+        auto.tick(at=T0 + PACING_PERIOD / 2 + timedelta(seconds=5 * (n + 1)))
+    decision = auto.last_decision(campaign(0))
+    assert decision is not None and decision.rule is AutoBidRule.HOLD
+
+
+def test_budget_rules_fire_through_the_book() -> None:
+    book = LiveCampaignBook([bidder(0, "sports_goods", {FITNESS: "6.5"}, budget=1000)])
+    auto = AutoBidder(book)
+    auto.enable(campaign(0), AutoBidGoal(), at=T0)
+    auto.observe_play(campaign(0), charge=clp(700), attention_seconds=Decimal(10))
+    book.settle("x", {campaign(0): clp(700)})
+    changed = auto.tick(at=T0 + PACING_PERIOD / 10)  # 70 % spent, 10 % of the day gone
+    assert changed[campaign(0)].rule is AutoBidRule.PACE_DOWN
+    book.settle("y", {campaign(0): clp(260)})
+    changed = auto.tick(at=T0 + PACING_PERIOD / 5)
+    assert changed[campaign(0)].rule is AutoBidRule.BUDGET_FLOOR
+    entry = next(e for e in book.entries() if e.bidder.campaign_id == campaign(0))
+    assert entry.bidder.live_multiplier.value == Decimal("0.2")

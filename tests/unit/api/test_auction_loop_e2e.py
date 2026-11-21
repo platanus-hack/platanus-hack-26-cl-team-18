@@ -745,3 +745,29 @@ def test_a_far_away_viewer_is_filtered_off_the_bill(loop: Loop) -> None:
     # 0.2 s near (a glance) then 3.8 s far: nothing billable, every second explained.
     assert receipt.attention_seconds == "0.000" and receipt.total.amount == "0"
     assert {item.reason for item in receipt.filtered} == {"far", "glance"}
+
+
+def test_a_failing_auto_bid_tick_keeps_the_loop_alive(
+    loop: Loop, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A2: one bad tick must never stop auto-bidding until a restart."""
+    from app.modules.campaigns.application.autobidder import AutoBidder
+
+    loop.send("fitness")
+    loop.auction(), loop.creative()
+    calls = {"n": 0}
+    real = AutoBidder.tick
+
+    def flaky(self, *, at):  # type: ignore[no-untyped-def]
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("bad tick")
+        return real(self, at=at)
+
+    monkeypatch.setattr(AutoBidder, "tick", flaky)
+    autobid(loop, "Rayo")
+    autobid(loop, "Rayo")  # enabling twice still runs one loop
+    for n in range(1, 4):
+        loop.clock.advance(timedelta(seconds=5))
+        loop.scheduler.fire_due()
+        assert calls["n"] == n  # exactly one tick per period, even after the failure
