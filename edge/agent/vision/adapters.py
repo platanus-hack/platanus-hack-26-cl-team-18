@@ -10,7 +10,7 @@ Provider output is translated to `agent.vision.types` here and nowhere else.
 from __future__ import annotations
 
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from agent.vision.detector import Frame
@@ -37,22 +37,48 @@ class UltralyticsDetector:
         pose_model: str = "yolo26n-pose.pt",
         object_model: str | None = "yolo26s.pt",
         object_every: int = 6,
+        object_interval: timedelta | None = None,
         imgsz: int = 640,
         conf: float = 0.35,
         device: str | None = None,
         name: str = "local",
+        cpu_threads: int | None = None,
     ) -> None:
         from ultralytics import YOLO  # local import: optional dependency
 
+        self._cpu_threads = cpu_threads
         self._pose = YOLO(pose_model)
         self._objects = YOLO(object_model) if object_model else None
         self._object_every = max(1, object_every)
+        self._object_interval = object_interval
+        self._objects_at: datetime | None = None
         self._imgsz = imgsz
         self._conf = conf
         self._device = device
         self._frame_index = 0
         self._last_objects: tuple[ObjectDetection, ...] = ()
         self.name = name
+
+    def warmup(self) -> None:
+        """Initialize both model predictors using a synthetic 720p frame, never a camera."""
+        from datetime import UTC
+
+        import numpy as np
+
+        self.detect(np.zeros((720, 1280, 3), dtype=np.uint8), datetime.now(UTC))
+        # Warmup must not seed object facts or alter the first live scan deadline.
+        self._last_objects = ()
+        self._objects_at = None
+        self._frame_index = 0
+        self._set_cpu_threads()
+
+    def _set_cpu_threads(self) -> None:
+        if self._cpu_threads is not None and self._device in (None, "cpu"):
+            import torch
+
+            budget = max(1, self._cpu_threads)
+            if torch.get_num_threads() != budget:
+                torch.set_num_threads(budget)
 
     def detect(self, frame: Frame, measured_at: datetime) -> FrameDetections:
         started = time.perf_counter()
@@ -66,11 +92,18 @@ class UltralyticsDetector:
             verbose=False,
         )[0]
         persons = tuple(_persons(pose))
-        if self._objects is not None and self._frame_index % self._object_every == 0:
+        due = (
+            (self._objects_at is None or measured_at - self._objects_at >= self._object_interval)
+            if self._object_interval is not None
+            else self._frame_index % self._object_every == 0
+        )
+        if self._objects is not None and due:
             result = self._objects.predict(
                 frame, imgsz=self._imgsz, conf=self._conf, device=self._device, verbose=False
             )[0]
             self._last_objects = tuple(_objects(result))
+            self._objects_at = measured_at
+        self._set_cpu_threads()
         self._frame_index += 1
         return FrameDetections(
             measured_at=measured_at,

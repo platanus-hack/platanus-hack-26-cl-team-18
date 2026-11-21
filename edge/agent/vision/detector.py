@@ -56,14 +56,15 @@ class FailoverDetector:
         config: FailoverConfig | None = None,
         *,
         monotonic: Callable[[], float] = time.monotonic,
+        primary_ready: bool = True,
     ) -> None:
         self._primary = primary
         self._secondary = secondary
         self._config = config or FailoverConfig()
         self._now = monotonic
         self._latencies: deque[float] = deque(maxlen=self._config.window)
-        self._on_primary = True
-        self._failed_over_at = 0.0
+        self._on_primary = primary_ready
+        self._failed_over_at = 0.0 if primary_ready else self._now()
         self.name = "failover"
 
     @property

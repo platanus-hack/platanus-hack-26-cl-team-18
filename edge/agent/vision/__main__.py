@@ -27,7 +27,13 @@ from pathlib import Path
 
 from agent.backend_link import BackendLink
 from agent.vision.adapters import ArucoMarkerDetector, UltralyticsDetector
-from agent.vision.detector import CompositeDetector, Detector, FailoverDetector, Frame
+from agent.vision.detector import (
+    CompositeDetector,
+    Detector,
+    DetectorUnavailable,
+    FailoverDetector,
+    Frame,
+)
 from agent.vision.held import HeldProductTracker, MarkerCatalog
 from agent.vision.pipeline import JsonlRecorder, Link, VisionPipeline, blur_encoder
 from agent.vision.remote import RemoteGpuDetector
@@ -67,25 +73,40 @@ async def run(args: argparse.Namespace) -> int:
     else:
         source = LatestFrameCamera(args.camera)
 
+    object_interval = (
+        timedelta(milliseconds=200) if not args.record and args.object_every is None else None
+    )
     local = UltralyticsDetector(
         pose_model=args.pose_model,
         object_model=args.object_model or None,
-        object_every=1 if args.record else args.object_every,
+        object_every=1 if args.record else (args.object_every or 6),
+        object_interval=object_interval,
         conf=args.conf,
         device=args.device,
+        cpu_threads=args.cpu_threads,
     )
+    await asyncio.to_thread(local.warmup)
+    remote: RemoteGpuDetector | None = None
     catalog = MarkerCatalog.from_file(Path(args.markers)) if args.markers else None
     main_detector: Detector = local
     if args.gpu_url:  # remote GPU primary, local hot standby (ADR 0007)
         remote = RemoteGpuDetector(
             args.gpu_url,
             token=args.gpu_token or os.environ.get("GPU_TOKEN") or None,
-            object_every=1 if args.record else args.object_every,
+            object_every=1 if args.record else (args.object_every or 6),
+            object_interval=object_interval,
         )
-        main_detector = FailoverDetector(remote, local)
-    composite = CompositeDetector(main_detector, ArucoMarkerDetector() if catalog else None)
-    timing = _TimedDetector(composite) if args.record else None
-    detector = timing or composite
+        primary_ready = True
+        try:
+            await asyncio.to_thread(remote.warmup)
+        except DetectorUnavailable:
+            primary_ready = False
+            logger.warning("GPU warmup unavailable; local fallback is inference-warm")
+        main_detector = FailoverDetector(remote, local, primary_ready=primary_ready)
+    timing = _TimedDetector(
+        CompositeDetector(main_detector, ArucoMarkerDetector() if catalog else None)
+    )
+    detector = timing
 
     backend = None if args.offline else BackendLink(args.backend)
     recorder = (
@@ -138,6 +159,8 @@ async def run(args: argparse.Namespace) -> int:
             with contextlib.suppress(asyncio.CancelledError):
                 await link_task
         source.close()
+        if remote is not None:
+            await asyncio.to_thread(remote.close)
         if sound:
             sound.close()
         if recorder:
@@ -179,7 +202,18 @@ def argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--duration", type=float, default=None, help="record mode: seconds")
     parser.add_argument("--pose-model", default="yolo26n-pose.pt")
     parser.add_argument("--object-model", default="yolo26s.pt", help="'' disables objects")
-    parser.add_argument("--object-every", type=int, default=6)
+    parser.add_argument(
+        "--object-every",
+        type=int,
+        default=None,
+        help="override 5 Hz object deadline with every N frames",
+    )
+    parser.add_argument(
+        "--cpu-threads",
+        type=int,
+        default=min(4, os.cpu_count() or 1),
+        help="local CPU inference threads; benchmark on the venue device",
+    )
     parser.add_argument("--conf", type=float, default=0.35)
     parser.add_argument("--debounce-ms", type=float, default=500.0)
     parser.add_argument("--sound", action="store_true", help="sound scene from the mic")

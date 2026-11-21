@@ -65,6 +65,9 @@ export const AudienceSnapshotSchema = z.strictObject({
   screen_id: z.string().min(1).max(64).regex(/^[A-Za-z0-9_.:-]+$/),
   seq: z.number().int().gte(0),
   measured_at: z.iso.datetime({ offset: true }),
+  candidate_at: z.iso.datetime({ offset: true }).nullable(),
+  detected_at: z.iso.datetime({ offset: true }).nullable(),
+  published_at: z.iso.datetime({ offset: true }).nullable(),
   people: z.number().int().gte(0),
   looking: z.number().int().gte(0),
   tracklets: z.array(TrackletSchema).max(64),
@@ -240,6 +243,9 @@ export type Exclusion = z.infer<typeof ExclusionSchema>;
 
 // Every decision carries one; add a field when you add a step to the loop.
 export const LatencyTraceSchema = z.strictObject({
+  candidate_at: z.iso.datetime({ offset: true }).nullable(),
+  detected_at: z.iso.datetime({ offset: true }).nullable(),
+  published_at: z.iso.datetime({ offset: true }).nullable(),
   measured_at: z.iso.datetime({ offset: true }).nullable(),
   received_at: z.iso.datetime({ offset: true }).nullable(),
   moment_changed_at: z.iso.datetime({ offset: true }).nullable(),

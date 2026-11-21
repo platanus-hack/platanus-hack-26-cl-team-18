@@ -30,7 +30,7 @@ import socket
 import struct
 import time
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from websockets.exceptions import ConnectionClosed, InvalidHandshake, InvalidStatus
@@ -87,6 +87,7 @@ class RemoteGpuDetector:
         connect_timeout_s: float = 2.0,
         max_in_flight: int = 2,
         object_every: int = 6,
+        object_interval: timedelta | None = None,
         encoder: Encoder | None = None,
         stale_after_s: float | None = None,
         name: str = "remote",
@@ -97,6 +98,8 @@ class RemoteGpuDetector:
         self._connect_timeout_s = connect_timeout_s
         self._max_in_flight = max(1, max_in_flight)
         self._object_every = max(1, object_every)
+        self._object_interval = object_interval
+        self._objects_at: datetime | None = None
         self._encode = encoder or jpeg_encoder()
         self._stale_after_s = stale_after_s if stale_after_s is not None else 4 * timeout_s
         self._ws: ClientConnection | None = None
@@ -112,6 +115,10 @@ class RemoteGpuDetector:
     @property
     def in_flight(self) -> int:
         return len(self._in_flight)
+
+    def warmup(self) -> None:
+        """Establish our GPU connection before live frames start."""
+        self._connection()
 
     def close(self) -> None:
         self._reset()
@@ -135,7 +142,11 @@ class RemoteGpuDetector:
         height, width = frame.shape[:2]
         self._seq += 1
         seq = self._seq
-        want_objects = self._since_objects is None or self._since_objects >= self._object_every - 1
+        want_objects = (
+            (self._objects_at is None or measured_at - self._objects_at >= self._object_interval)
+            if self._object_interval is not None
+            else self._since_objects is None or self._since_objects >= self._object_every - 1
+        )
         header = {
             "seq": seq,
             "measured_at": measured_at.isoformat(),
@@ -159,6 +170,7 @@ class RemoteGpuDetector:
         if want_objects:
             self._last_objects = tuple(_object(o, sx, sy) for o in reply.get("objects", []))
             self._since_objects = 0
+            self._objects_at = measured_at
         else:
             self._since_objects = (self._since_objects or 0) + 1
         return FrameDetections(

@@ -14,6 +14,7 @@ import hashlib
 import logging
 import re
 import unicodedata
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from app.modules.creative.application.ports.voice import (
@@ -92,6 +93,7 @@ class VoiceoverService:
         # Single flight per cache key: startup prewarm and live moments often ask for
         # the same offer line at once; only the first pays, the rest await its result.
         self._in_flight: dict[str, asyncio.Future[str | None]] = {}
+        self._subscribers: dict[str, dict[str, Callable[[str | None], None]]] = {}
 
     def key_for(self, copy: str, voice_id: str) -> str:
         return cache_key(spoken_line(copy), voice_id, self._profile)
@@ -102,6 +104,37 @@ class VoiceoverService:
             return self._store.url_if_cached(self.key_for(copy, voice_id), self._profile.extension)
         except InvalidSpokenLine:
             return None
+
+    def subscribe_pending(
+        self, copy: str, voice_id: str, *, consumer: str, on_ready: Callable[[str | None], None]
+    ) -> bool:
+        """Join a running synthesis without holding a provider admission slot.
+
+        Called on the warm event loop. The latest subscriber per consumer wins;
+        callbacks only publish the result and must check that it still applies.
+        False means no flight exists: the caller should request voiceover_url.
+        """
+        key = self.key_for(copy, voice_id)
+        if key not in self._in_flight:
+            return False
+        self._subscribers.setdefault(key, {})[consumer] = on_ready
+        self.stats.coalesced += 1
+        return True
+
+    def _finished(self, key: str, pending: asyncio.Future[str | None]) -> None:
+        self._in_flight.pop(key, None)
+        subscribers = self._subscribers.pop(key, {})
+        if pending.cancelled():
+            return
+        try:
+            url = pending.result()
+        except Exception:
+            return  # The owner awaits and reports provider/application failures.
+        for notify in subscribers.values():
+            try:
+                notify(url)
+            except Exception:
+                logger.exception("voice-over result subscriber failed")
 
     async def voiceover_url(self, copy: str, voice_id: str) -> str | None:
         """Warm path: cached URL, or synthesize + store. None means 'play without voice'."""
@@ -119,7 +152,7 @@ class VoiceoverService:
             return await asyncio.shield(pending)
         task = asyncio.ensure_future(self._synthesize(key, line, voice_id))
         self._in_flight[key] = task
-        task.add_done_callback(lambda _: self._in_flight.pop(key, None))
+        task.add_done_callback(lambda completed: self._finished(key, completed))
         # Shielded: a caller that gives up (moment moved on) must not cancel the shared call.
         return await asyncio.shield(task)
 

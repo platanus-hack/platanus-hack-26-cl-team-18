@@ -77,3 +77,54 @@ describe("VoicePlayer", () => {
         expect(stopped).toHaveLength(1);
     });
 });
+
+it("shares a prefetch with on-air preparation and cancels only after the last consumer", async () => {
+    const { context } = fakeContext();
+    let finish = (_response: Response) => {};
+    const fetcher = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => {
+        expect(init?.signal?.aborted).toBe(false);
+        return new Promise<Response>((resolve) => {
+            finish = resolve;
+        });
+    });
+    const voice = new VoicePlayer(() => context, fetcher);
+    const back = new AbortController();
+    const front = new AbortController();
+    const first = voice.prepare("/shared.mp3", back.signal);
+    const second = voice.prepare("/shared.mp3", front.signal);
+    const cancelled = expect(first).rejects.toBeDefined();
+    back.abort();
+    await cancelled;
+    expect(fetcher.mock.calls[0]?.[1]?.signal?.aborted).toBe(false);
+    finish(new Response(new Uint8Array(8)));
+    await second;
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(voice.isReady("/shared.mp3")).toBe(true);
+});
+
+it("aborts an unused request and does not cache a late decode", async () => {
+    const { context, raw } = fakeContext();
+    let decoded = (_buffer: AudioBuffer) => {};
+    raw.decodeAudioData.mockImplementation(
+        () =>
+            new Promise((resolve) => {
+                decoded = resolve;
+            }),
+    );
+    const voice = new VoicePlayer(
+        () => context,
+        vi.fn(() => ok()),
+    );
+    const controller = new AbortController();
+    const pending = voice.prepare("/retired.mp3", controller.signal);
+    await vi.waitFor(() => {
+        expect(raw.decodeAudioData).toHaveBeenCalled();
+    });
+    const cancelled = expect(pending).rejects.toBeDefined();
+    controller.abort();
+    await cancelled;
+    decoded({} as AudioBuffer);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(voice.isReady("/retired.mp3")).toBe(false);
+});

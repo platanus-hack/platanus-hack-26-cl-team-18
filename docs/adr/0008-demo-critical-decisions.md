@@ -214,3 +214,28 @@ canonical pose pipeline and drives ads without inventing attention or safety
 facts from detection-only boxes. `--recognition-only` preserves the existing
 workbench contract and crop enrichment. The debug recognition feed itself
 continues to carry observations rather than fabricated auction facts.
+
+## Amendment: purpose-specific sensing filters and freshness
+
+Profiling found that ID retention and looking smoothing were followed by a
+second 500 ms snapshot debounce. Keep 500 ms debounce for arrival, objects,
+held products and sound. Separate the 800 ms association lifetime from a
+300 ms presence hold. Looking retains its 500 ms tracker hold and publishes
+without another fact debounce when group size is unchanged. The minor vote
+still requires seven hits out of twelve: publish a positive vote immediately
+subject to the 10 Hz rate limit, and retain the ordinary debounce on clearing.
+A crowd vote cannot clear an active safety block early. This amends D10/D13.
+
+The canonical agent prewarms both local model predictors and the remote
+connection before live inference. Objects use a 200 ms capture-time deadline;
+face-blurred keyframes use an independent 1.5 s deadline with one active encode
+in a worker and no raw-frame backlog. Pending reconnect state is conflated per
+screen/type and expires after 1.5 s of queue residence. Events remain ordered
+and keyframe header/binary pairs remain indivisible.
+
+Traces include candidate, detected and published boundaries, while measured_at
+continues to identify the latest contributing frame. Candidate time includes
+observed tracker confirmation and holds; camera exposure, device buffering and
+clock synchronization still require a hardware rehearsal. The <300 ms cache
+budget applies after sensing confirmation; scene-to-visible retains the
+1.5 s p50 / 2.5 s p95 targets. No model result gates first visual readiness.

@@ -135,4 +135,4 @@ async def test_outbox_is_bounded_and_drops_oldest_while_offline() -> None:
     for seq in range(5):
         link.send(utterance(seq))
     assert link.stats.dropped == 2
-    assert [json.loads(t)["seq"] for t, _ in link._pending] == [2, 3, 4]
+    assert [json.loads(item.text)["seq"] for item in link._pending] == [2, 3, 4]

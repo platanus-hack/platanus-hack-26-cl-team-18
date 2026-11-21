@@ -11,6 +11,9 @@ import {
 } from "./metrics";
 
 const trace = {
+    candidate_at: null,
+    detected_at: null,
+    published_at: null,
     measured_at: "2026-11-21T15:00:00.000Z",
     received_at: "2026-11-21T15:00:00.004Z",
     moment_changed_at: "2026-11-21T15:00:00.010Z",
@@ -197,4 +200,10 @@ describe("market and receipts", () => {
         const state = consoleReducer(initialConsoleState, { type: "message", message: book });
         expect(state.screens["demo-01"]?.book?.lines[0]?.multiplier).toBe("1.5");
     });
+});
+
+it("includes sensing confirmation in the display metric and waterfall", () => {
+    const sensed = { ...trace, candidate_at: "2026-11-21T14:59:59.300Z" };
+    expect(glassToGlassMs(sensed)).toBe(1800);
+    expect(traceSteps(sensed)[1]?.deltaMs).toBe(700);
 });

@@ -23,7 +23,7 @@ export function holdMs(trace: LatencyTrace): number {
 
 /** Glass-to-glass requires the player's display timestamp; the hold is excluded. */
 export function glassToGlassMs(trace: LatencyTrace): number | null {
-    const start = ms(trace.measured_at);
+    const start = ms(trace.candidate_at ?? trace.measured_at);
     const end = ms(trace.displayed_at);
     if (start === null || end === null || end < start) return null;
     return Math.max(0, end - start - holdMs(trace));
@@ -39,7 +39,10 @@ export function serverDecisionMs(trace: LatencyTrace): number | null {
 /** The trace as ordered steps with the delta from the previous step, for the latency bar. */
 export function traceSteps(trace: LatencyTrace): { step: string; atMs: number; deltaMs: number }[] {
     const order = [
+        "candidate_at",
         "measured_at",
+        "detected_at",
+        "published_at",
         "received_at",
         "moment_changed_at",
         "cleared_at",

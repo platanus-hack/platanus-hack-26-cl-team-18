@@ -182,7 +182,7 @@ def _pipeline(link: Link) -> VisionPipeline:
     )
 
 
-def test_confirmed_minor_is_sent_without_waiting_for_the_general_debounce() -> None:
+def test_minor_likely_publishes_after_the_safety_vote_without_a_second_debounce() -> None:
     link = Link()
     pipeline = _pipeline(link)
     for i in range(10):  # 1 s of adults
@@ -193,8 +193,8 @@ def test_confirmed_minor_is_sent_without_waiting_for_the_general_debounce() -> N
         pipeline.process(object(), _frame(at, ADULT, CHILD, ADULT_2))
     snapshots = [m for m in link.sent if isinstance(m, AudienceSnapshot)]
     flagged = [s for s in snapshots if s.minor_likely.value]
-    assert flagged
-    # The seventh hit at 10 Hz lands 600 ms after the first hit.
+    assert flagged, "the child should be flagged once the vote and the debounce agree"
+    # Keep the seven-frame vote; only remove the redundant 500 ms fact debounce.
     assert flagged[0].measured_at - child_from == timedelta(milliseconds=600)
     assert 0 < flagged[-1].minor_likely.confidence < 1
     # The count (3) is published first; the flag flips later on its own (it is in Facts.key).

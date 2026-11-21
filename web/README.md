@@ -85,7 +85,9 @@ cannot open duplicate sockets or deliver stale creatives.
   assets require a new `creative.ready` and the normal logo checks.
 - An in-flight preload retains its original asset request when copy/voice is
   upgraded, so warm work cannot keep restarting the logo decode.
-- Voice preparation runs independently when the creative reaches the front.
+- Voice preparation starts independently in the back layer and overlaps logo
+  loading and the crossfade. Preparation shares one fetch/decode per URL across
+  the back-to-front handoff; it aborts when its last consumer leaves.
   Cached audio plays immediately; late audio plays only if its creative is
   still on air. Replacing the creative cancels pending audio and stops playback.
 - When a creative leaves the screen, `playback.report` is sent. The backend

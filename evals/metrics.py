@@ -67,7 +67,11 @@ class Decision:
     def glass_to_glass_ms(self) -> float | None:
         if not self.swapped:
             return None
-        return span_ms(self.creative.trace, "measured_at", "displayed_at")
+        return span_ms(
+            self.creative.trace,
+            "candidate_at" if self.creative.trace.candidate_at else "measured_at",
+            "displayed_at",
+        )
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
