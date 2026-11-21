@@ -237,15 +237,24 @@ def register_demo(
     auctions = auction_log or InMemoryAuctionLog()
     delivery = DeliveryDesk(ledger=ledger or InMemoryChargeLedger(), ids=ids, budgets=book)
     campaign_of = {bidder.campaign_id: bidder for bidder in bidders}
-    # The replay fixtures' cues at full weight replace any real cue with the same label,
-    # so scripted scenes stay deterministic; every other real catalog cue still applies.
+    # Demo cues at full weight replace any real catalog cue with the same label, so
+    # scripted scenes and the physical props stay deterministic; every other real
+    # catalog cue still applies. Held props ("product:<slug>", ADR 0008 D2) are not
+    # cues: the classifier reads them as held products that boost their partners.
     loaded = load_catalog()
     fixture_cues = tuple(
         CueRule(source=source, cue=cue, segment_id=segment, weight=Percentage.create(100))
         for source, cue, segment in (
+            # Simulator fixture labels (scripts/replay_audience.py, evals/scenarios).
             (SegmentSource.VISION, "sports ball", fitness),
             (SegmentSource.VISION, "tap handle fixture", beer),
             (SegmentSource.SOUND, "coffee service fixture", coffee),
+            # COCO labels the live agent emits for the demo props
+            # (edge/agent/vision/snapshot.py); at catalog weight a single cup or
+            # bottle stays below the enter threshold and only the house ad plays.
+            (SegmentSource.VISION, "bottle", fitness),  # the gym-bottle prop
+            (SegmentSource.VISION, "cup", coffee),
+            (SegmentSource.VISION, "wine glass", beer),
         )
     )
     fixture_keys = {(rule.source, rule.cue) for rule in fixture_cues}
