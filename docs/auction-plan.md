@@ -493,3 +493,37 @@ S6, S7, S9 and D7 are implemented (§10 table). They are verified three ways:
 **Demo operations:** judges' phones open the Vite app through the tunnel
 (ADR 0008 D3). Point the tunnel at the web server (`:5173`, which proxies
 `/api` and `/ws` to the backend), not at `:8000`.
+
+### 10.3 Second audit: money paths (2026-11-21)
+
+A fresh review reproduced six issues. All are fixed, each with a regression test.
+
+1. **Invariant 2, degraded path:** an engine failure didn't cancel a held swap,
+   so a beer ad cleared before a minor arrived could still go up. The desk now
+   drops the hold on any engine failure. If what's on air is unsafe (a minor in
+   front of an age-restricted ad, a stock-out, or a paused campaign), it swaps
+   to the house ad at once (`NoFillReason.ENGINE_ERROR`): safety never depends
+   on the engine.
+2. **Self-exclusion:** a re-auction counted the on-air play's own budget hold
+   against its winner. The book snapshot now nets out the on-air creative's hold
+   (`snapshot(excluding_hold=…)`).
+3. **Overspend:** two fixes. (a) Charges are capped at the budget left, atomically
+   in `LiveCampaignBook.charge`, with reason `budget_cap` (migration 0003 widens
+   the CHECK; 0002 is already applied). (b) An **exposure lease**: every 15 s on
+   air each winner's hold must grow to cover the next 15 s. A brand that can't
+   comes down at once (`Trigger.BUDGET_CHANGED`, budget is on-air-unsafe). This
+   matters because the player reports a play only when it ends.
+4. **Billing windows:** a window is billed only from the creative's `aired_at`
+   and only past the last billed second for that creative. A re-sent or
+   overlapping window under a new seq never bills twice.
+5. **Write-behind poison unit:** errors are split into transient (lost
+   connection: reconnect, retry) and refused data (only that unit is skipped
+   and counted in `rejected`). `close()` gives up on a dead database instead
+   of hanging.
+6. **New-group hold:** a slider or stock change during a new group's hold keeps
+   the 1.5 s floor and no hysteresis.
+
+Also: the console says "Charged $0: nobody looked" only when attention is
+zero, not when a tiny charge rounds to $0. Covered paths that had no tests
+before: concurrent slider calls (settle on the highest seq), a stock-out of a
+held winner, budget exhaustion during a long play, and both engine-down orders.

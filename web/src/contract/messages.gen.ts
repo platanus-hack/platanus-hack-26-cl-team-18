@@ -120,7 +120,7 @@ export const BookLineSchema = z.strictObject({
 });
 export type BookLine = z.infer<typeof BookLineSchema>;
 
-export const ChargeReasonSchema = z.enum(["attention", "no_attention"]);
+export const ChargeReasonSchema = z.enum(["attention", "no_attention", "budget_cap"]);
 export type ChargeReason = z.infer<typeof ChargeReasonSchema>;
 
 export const ChargeLineSchema = z.strictObject({

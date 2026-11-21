@@ -83,10 +83,26 @@ class LiveCampaignBook:
             self._update(campaign_id, lambda account: account.settle(hold_key, booked))
             return booked
 
-    def can_afford(self, campaign_id: CampaignId, amount: Money) -> bool:
+    def extend_hold(
+        self, key: str, holds: dict[CampaignId, Money], *, at: datetime
+    ) -> frozenset[CampaignId]:
+        """Grow the hold `key` to `holds` where the budget allows (the on-air exposure lease).
+
+        Returns the campaigns that can't cover it: their play must come down.
+        """
+        short: set[CampaignId] = set()
         with self._lock:
-            account = self._entry(campaign_id).account
-            return account is None or account.remaining >= amount
+            for campaign_id, amount in holds.items():
+                account = self._entry(campaign_id).account
+                if account is None:
+                    continue
+                if account.available_for(key) < amount:
+                    short.add(campaign_id)
+                    continue
+                self._update(
+                    campaign_id, lambda current, held=amount: current.reserve(key, held, at=at)
+                )
+        return frozenset(short)
 
     def entries(self) -> tuple[BookEntry, ...]:
         with self._lock:

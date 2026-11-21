@@ -211,3 +211,63 @@ def test_an_on_air_campaign_dropped_from_the_book_is_replaced_at_once() -> None:
     without_voltio = tuple(b for b in demo_bidders() if b.campaign_id != campaign(VOLTIO))
     outcome = desk.run(opportunity(FITNESS_ONLY, *without_voltio), Trigger.BID_CHANGED, now=at(0.2))
     assert outcome.swap_now
+
+
+class FailingEngine:
+    def __init__(self) -> None:
+        self.real = InProcessBundleEngine()
+        self.fail = False
+
+    def decide(self, opportunity: AdOpportunity) -> AuctionResult:
+        if self.fail:
+            raise RuntimeError("engine down")
+        return self.real.decide(opportunity)
+
+
+def test_an_engine_failure_drops_a_held_swap_cleared_against_older_facts() -> None:
+    engine = FailingEngine()
+    desk = AuctionDesk(engine)
+    first = desk.run(opportunity(FITNESS_ONLY, *demo_bidders()), Trigger.MOMENT_CHANGED, now=at(0))
+    desk.aired(first.result, displayed_at=at(0))
+    held = desk.run(
+        opportunity(moment(segment(BEER)), *demo_bidders()), Trigger.MOMENT_CHANGED, now=at(0.5)
+    )
+    assert held.hold_token is not None  # Malta Sur waiting for the 1.5 s floor
+    engine.fail = True
+    minor = desk.run(
+        opportunity(moment(segment(BEER), minor_likely=True), *demo_bidders()),
+        Trigger.MOMENT_CHANGED,
+        now=at(0.8),
+    )
+    assert minor.result is None
+    assert desk.release(held.hold_token) is None  # the beer ad never reaches the minor
+
+
+def test_an_engine_failure_still_takes_an_unsafe_ad_down() -> None:
+    engine = FailingEngine()
+    desk = desk_on_air(opportunity(moment(segment(BEER)), *demo_bidders()))
+    desk._engine = engine  # type: ignore[attr-defined]
+    engine.fail = True
+    outcome = desk.run(
+        opportunity(moment(segment(BEER), minor_likely=True), *demo_bidders()),
+        Trigger.MOMENT_CHANGED,
+        now=at(0.2),
+    )
+    assert outcome.swap_now and outcome.result is not None and not outcome.result.filled
+    assert outcome.result.no_fill is not None and outcome.result.no_fill.value == "engine_error"
+
+
+def test_a_bid_change_during_a_new_group_hold_keeps_the_new_group_floor() -> None:
+    desk = desk_on_air(opportunity(FITNESS_ONLY, *demo_bidders()))
+    held = desk.run(
+        opportunity(CO_BRAND, *demo_bidders(), baskets=DEMO_BASKETS),
+        Trigger.MOMENT_CHANGED,
+        now=at(0.5),
+    )
+    assert held.not_before == at(1.5)
+    slid = desk.run(
+        opportunity(CO_BRAND, *demo_bidders(rayo_multiplier="1.1"), baskets=DEMO_BASKETS),
+        Trigger.BID_CHANGED,
+        now=at(0.7),
+    )
+    assert slid.not_before == at(1.5)  # not stretched to the 3 s same-moment hold

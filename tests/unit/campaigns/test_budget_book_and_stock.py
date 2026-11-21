@@ -105,3 +105,27 @@ def test_stock_toggles_report_only_real_changes() -> None:
     assert board.out_of_stock("other") == frozenset()
     assert board.set("demo-01", brand(0), in_stock=True)
     assert board.out_of_stock("demo-01") == frozenset()
+
+
+def test_a_re_auction_does_not_price_the_incumbent_out_with_its_own_hold() -> None:
+    from app.modules.auction.domain.clearing import clear
+    from app.modules.auction.domain.result import ExclusionReason
+    from tests.unit.auction.builders import moment, opportunity, segment
+
+    live = LiveCampaignBook([bidder(0, "sports_goods", {FITNESS: "8"}, budget=150)])
+    live.reserve("on-air", {campaign(0): clp(98)}, at=T0)
+    audience = moment(segment(FITNESS))
+    naive = clear(opportunity(audience, *live.snapshot()))
+    assert naive.exclusion_for(campaign(0)) is not None  # 52 left < 8 × 15 exposure
+    assert naive.exclusion_for(campaign(0)).reason is ExclusionReason.BUDGET  # type: ignore[union-attr]
+    fair = clear(opportunity(audience, *live.snapshot(excluding_hold="on-air")))
+    assert fair.winner_ids == {campaign(0)}
+
+
+def test_the_exposure_lease_grows_until_the_budget_runs_out() -> None:
+    live = LiveCampaignBook([bidder(0, "sports_goods", {FITNESS: "8"}, budget=200)])
+    assert live.extend_hold("play", {campaign(0): clp(98)}, at=T0) == frozenset()
+    assert live.extend_hold("play", {campaign(0): clp(196)}, at=T0) == frozenset()
+    assert live.extend_hold("play", {campaign(0): clp(294)}, at=T0) == {campaign(0)}
+    held = next(e for e in live.entries() if e.bidder.campaign_id == campaign(0))
+    assert held.account is not None and held.account.reserved == clp(196)  # last good lease

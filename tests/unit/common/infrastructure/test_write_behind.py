@@ -85,3 +85,43 @@ def test_submit_never_blocks_and_counts_drops_when_full() -> None:
     assert writer.stats.dropped >= 3
     gate.set()
     writer.close()
+
+
+class Refused(Exception):
+    """Stands in for a constraint violation: the data's fault, not the connection's."""
+
+
+def test_a_refused_unit_is_skipped_alone_and_later_units_still_write() -> None:
+    store: list = []  # type: ignore[type-arg]
+
+    class Picky(FakeConn):
+        def cursor(self) -> FakeCursor:
+            conn = self
+
+            class Cur(FakeCursor):
+                def execute(self, sql: str, params: object) -> None:
+                    if sql == "bad":
+                        raise Refused()
+                    conn.pending.append((sql, params))
+
+            return Cur(self)
+
+    writer = WriteBehindWriter(lambda: Picky(store), name="t", transient=lambda e: False)
+    writer.submit((("a", ()),))
+    writer.submit((("bad", ()), ("b-in-bad-unit", ())))
+    writer.submit((("c", ()),))
+    assert writer.flush(timeout=5)
+    writer.close()
+    assert [sql for sql, _ in store] == ["a", "c"]  # the bad unit rolled back whole
+    assert writer.stats.rejected == 2 and writer.stats.dropped == 0
+
+
+def test_close_does_not_hang_on_a_dead_database() -> None:
+    def never() -> FakeConn:
+        raise ConnectionError("down")
+
+    writer = WriteBehindWriter(never, name="t")
+    writer.submit((("a", ()),))
+    started = __import__("time").monotonic()
+    writer.close(timeout=2)
+    assert __import__("time").monotonic() - started < 4

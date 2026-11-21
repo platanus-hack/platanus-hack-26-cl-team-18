@@ -472,6 +472,7 @@ class ConsoleBook(_Message):
 class ChargeReason(StrEnum):
     ATTENTION = "attention"
     NO_ATTENTION = "no_attention"
+    BUDGET_CAP = "budget_cap"
 
 
 class ChargeLine(_Model):

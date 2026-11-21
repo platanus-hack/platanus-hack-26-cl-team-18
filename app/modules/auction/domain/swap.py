@@ -24,6 +24,7 @@ class Trigger(StrEnum):
     STOCK_CHANGED = "stock_changed"
     CONDITIONS_CHANGED = "conditions_changed"
     HELD_PRODUCTS_CHANGED = "held_products_changed"
+    BUDGET_CHANGED = "budget_changed"
 
 
 # Re-auctions of the *same* audience: these get hysteresis and the longer hold.
@@ -33,6 +34,7 @@ SAME_MOMENT_TRIGGERS = frozenset(
         Trigger.STOCK_CHANGED,
         Trigger.CONDITIONS_CHANGED,
         Trigger.HELD_PRODUCTS_CHANGED,
+        Trigger.BUDGET_CHANGED,
     }
 )
 

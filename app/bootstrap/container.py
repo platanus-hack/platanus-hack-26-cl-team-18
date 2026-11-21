@@ -57,6 +57,9 @@ class Container:
     demo: DemoControls | None = None
     auction_log: AuctionLog = field(default_factory=InMemoryAuctionLog)
     ledger: ChargeLedger = field(default_factory=InMemoryChargeLedger)
+    # Async hooks run once at app startup, in the background (connection warm-up,
+    # voice-over pre-generation). They never block serving.
+    startup: list[Callable[[], Awaitable[None]]] = field(default_factory=list)
     writer: WriteBehindWriter | None = None
     # Async cleanups run at shutdown (HTTP clients, ...).
     closers: list[Callable[[], Awaitable[None]]] = field(default_factory=list)
@@ -110,6 +113,7 @@ def register_contexts(container: Container) -> None:
             scheduler=container.scheduler,
             auction_log=container.auction_log,
             ledger=container.ledger,
+            budget_clp=container.settings.demo_budget_clp,
             copywriter=container.copywriter,
             copy_timeout_s=container.settings.creative_copy_timeout_s,
             hourly_budget_usd=container.settings.creative_hourly_budget_usd,
@@ -158,7 +162,12 @@ def build_records(container: Container) -> None:
     import psycopg2  # infrastructure only: the hot path never touches the DB
 
     dsn = url.get_secret_value()
-    writer = WriteBehindWriter(lambda: psycopg2.connect(dsn, connect_timeout=5), name="records")
+    writer = WriteBehindWriter(
+        lambda: psycopg2.connect(dsn, connect_timeout=5),
+        name="records",
+        # Lost connections retry; a refused row (constraint, bad data) is skipped alone.
+        transient=lambda exc: isinstance(exc, psycopg2.OperationalError | psycopg2.InterfaceError),
+    )
     container.writer = writer
     container.auction_log = PostgresAuctionLog(writer, mirror=InMemoryAuctionLog())
     container.ledger = PostgresChargeLedger(writer, mirror=InMemoryChargeLedger())
@@ -182,6 +191,7 @@ def build_voiceovers(container: Container, synthesizer: VoiceSynthesizer | None 
             settings.elevenlabs_api_key.get_secret_value(), base_url=settings.elevenlabs_base_url
         )
         container.closers.append(adapter.aclose)
+        container.startup.append(adapter.warm)
         synthesizer = adapter
     elif not (settings.voiceovers_enabled and settings.elevenlabs_narrator_voice_id):
         return

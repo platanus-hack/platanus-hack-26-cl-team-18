@@ -127,6 +127,7 @@ def desk() -> tuple[DeliveryDesk, InMemoryChargeLedger]:
             people=2,
             looking=2,
             slots=SLOTS,
+            aired_at=at(0),
         )
     )
     return billing, ledger
@@ -180,3 +181,122 @@ def test_nobody_looked_charges_zero_explicitly() -> None:
     receipt = report(billing)
     assert receipt is not None and receipt.total.amount == 0
     assert {c.reason for c in ledger.charges()} == {ChargeReason.NO_ATTENTION}
+
+
+# ---------------------------------------------------------------- audit regressions
+
+
+def test_a_window_is_billed_only_for_air_time_and_only_once() -> None:
+    billing, ledger = desk()  # c1 aired at T+0
+    billing.attention.record("demo-01", at(-5), ["a"])
+    billing.attention.record("demo-01", at(3), ["a"])  # still looking: held to T+13
+    early = billing.record_playback(
+        screen_id="demo-01",
+        creative_id="c1",
+        seq=1,
+        started_at=at(-20),
+        ended_at=at(4),
+        recorded_at=at(4),
+    )
+    assert early is not None and early.attention.attention_seconds == 4  # not the 20 s before
+    again = billing.record_playback(
+        screen_id="demo-01",
+        creative_id="c1",
+        seq=2,
+        started_at=at(0),
+        ended_at=at(4),
+        recorded_at=at(4),
+    )
+    assert again is None  # the same seconds under a new seq bill nothing
+    overlap = billing.record_playback(
+        screen_id="demo-01",
+        creative_id="c1",
+        seq=3,
+        started_at=at(2),
+        ended_at=at(6),
+        recorded_at=at(6),
+    )
+    assert overlap is not None and overlap.attention.attention_seconds == 2  # only 4..6
+    assert len(ledger.charges()) == 4  # two brands × two billed windows
+
+
+def test_a_charge_that_rounds_to_zero_still_says_attention() -> None:
+    priced = price_play(SLOTS[1:], Decimal("0.4"))  # 1.2 × 0.4 = 0.48 → 0 CLP
+    assert priced[0].amount.amount == 0 and priced[0].reason is ChargeReason.ATTENTION
+
+
+def test_a_brand_never_pays_past_its_budget() -> None:
+    from app.modules.audience.domain.value_objects.segment import SegmentId
+    from app.modules.campaigns.application.live_book import LiveCampaignBook
+    from app.modules.campaigns.domain.book import Bidder, SegmentBid
+
+    book = LiveCampaignBook(
+        [
+            Bidder(
+                campaign_id=slot.campaign_id,
+                brand_id=slot.brand_id,
+                category=f"c{index}",
+                age_restricted=False,
+                segment_bids=(
+                    SegmentBid(segment_id=SegmentId.create("S"), rate=slot.price_per_as),
+                ),
+                budget_remaining=Money.create(currency="CLP", amount=300),
+            )
+            for index, slot in enumerate(SLOTS)
+        ]
+    )
+    ledger = InMemoryChargeLedger()
+    billing = DeliveryDesk(ledger=ledger, ids=IdGenerator(), budgets=book)
+    billing.aired(
+        PlayRecord(
+            creative_id="long",
+            auction_id="a",
+            screen_id="demo-01",
+            people=1,
+            looking=1,
+            slots=SLOTS,
+            aired_at=at(0),
+        )
+    )
+    billing.attention.record("demo-01", at(0), ["a"])
+    for tick in range(10, 130, 10):  # a fresh sample every 10 s: one viewer watching 120 s
+        billing.attention.record("demo-01", at(tick), ["a"])
+    receipt = billing.record_playback(
+        screen_id="demo-01",
+        creative_id="long",
+        seq=1,
+        started_at=at(0),
+        ended_at=at(120),
+        recorded_at=at(120),
+    )
+    assert receipt is not None and receipt.attention.attention_seconds == 120
+    amounts = {c.campaign_id: (c.amount.amount, c.reason) for c in receipt.charges}
+    # Voltio 2.275 × 120 = 273 (fits); Café 1.2 × 120 = 144 (fits). A second 20 s
+    # play would cost Voltio 46, but only 27 is left: it is capped there.
+    assert amounts[SLOTS[0].campaign_id] == (273, ChargeReason.ATTENTION)
+    billing.aired(
+        PlayRecord(
+            creative_id="long2",
+            auction_id="a2",
+            screen_id="demo-01",
+            people=1,
+            looking=1,
+            slots=SLOTS,
+            aired_at=at(120),
+        )
+    )
+    for tick in (130, 140):
+        billing.attention.record("demo-01", at(tick), ["a"])
+    capped = billing.record_playback(  # 20 s would cost Voltio 46; only 27 is left
+        screen_id="demo-01",
+        creative_id="long2",
+        seq=1,
+        started_at=at(120),
+        ended_at=at(140),
+        recorded_at=at(140),
+    )
+    assert capped is not None
+    first = next(c for c in capped.charges if c.campaign_id == SLOTS[0].campaign_id)
+    assert (first.amount.amount, first.reason) == (27, ChargeReason.BUDGET_CAP)  # 300 − 273
+    spent = {b.campaign_id: b.budget_remaining for b in book.snapshot()}
+    assert spent[SLOTS[0].campaign_id] == Money.create(currency="CLP", amount=0)

@@ -7,6 +7,7 @@ swaps deterministic: nothing sleeps.
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -122,7 +123,7 @@ def test_first_paid_ad_replaces_the_house_ad_at_once(loop: Loop) -> None:
     assert auction.swap == "swap" and auction.trace.swap_not_before is None
     assert paid_brands(creative) == ("Voltio",)
     assert creative.trace.measured_at == sent and creative.trace.ready_at == sent
-    assert loop.scheduler.pending == []
+    assert loop.scheduler.fire_due() == 0  # no swap is waiting (only the 15 s lease timer)
 
 
 def test_new_group_is_held_to_the_floor_then_released(loop: Loop) -> None:
@@ -164,7 +165,7 @@ def test_minor_in_front_of_beer_swaps_immediately(loop: Loop) -> None:
     assert blocked.swap == "swap" and blocked.winners == []
     assert [e.reason for e in blocked.exclusions] == ["safety"]
     assert paid_brands(loop.creative()) == ()
-    assert loop.scheduler.pending == []
+    assert loop.scheduler.fire_due() == 0  # no swap is waiting (only the 15 s lease timer)
 
 
 def test_a_superseded_hold_never_reaches_the_screen(loop: Loop) -> None:
@@ -488,3 +489,151 @@ def test_every_auction_is_recorded(loop: Loop) -> None:
     records = loop.container.auction_log.records()
     assert [r.trigger.value for r in records] == ["moment_changed", "bid_changed"]
     assert records[0].result.winner_ids != records[1].result.winner_ids
+
+
+# ---------------------------------------------------------------- audit regressions
+
+
+def _engine_down(monkeypatch: pytest.MonkeyPatch) -> threading.Event:
+    from app.modules.auction.infrastructure.engines.in_process import InProcessBundleEngine
+
+    called = threading.Event()
+
+    def down(self, opportunity):  # type: ignore[no-untyped-def]
+        called.set()
+        raise RuntimeError("engine down")
+
+    monkeypatch.setattr(InProcessBundleEngine, "decide", down)
+    return called
+
+
+def test_engine_down_while_beer_is_held_never_shows_it_to_a_minor(
+    loop: Loop, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    loop.send("fitness")
+    loop.auction(), loop.creative()
+    loop.send("adult", after_s=0.5)
+    assert loop.auction().swap == "held"  # Malta Sur waits for the 1.5 s floor
+    called = _engine_down(monkeypatch)
+    loop.send("minor-safe", after_s=0.2)
+    assert called.wait(5)  # the minor's snapshot reached the (failing) engine
+    loop.clock.advance(timedelta(seconds=2))
+    loop.scheduler.fire_due()  # the stale beer release fires and must be dropped
+    monkeypatch.undo()
+    loop.send("co-brand", after_s=0.1)
+    loop.auction()
+    assert set(paid_brands(loop.creative())) == {"Voltio", "Café Patio"}  # not Malta first
+
+
+def test_engine_down_when_a_minor_meets_a_beer_ad_on_air_falls_back_to_house(
+    loop: Loop, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    loop.send("adult")
+    loop.auction()
+    assert paid_brands(loop.creative()) == ("Malta Sur",)
+    _engine_down(monkeypatch)
+    loop.send("minor-safe", after_s=0.2)
+    fallback = loop.auction()
+    assert fallback.swap == "swap" and fallback.winners == []
+    assert paid_brands(loop.creative()) == ()  # safety never depends on the engine
+
+
+def test_stock_out_of_a_held_winner_never_airs_it(loop: Loop) -> None:
+    loop.send("fitness")
+    loop.auction(), loop.creative()
+    loop.send("co-brand", after_s=0.5)
+    held = loop.auction()
+    assert held.swap == "held"
+    assert stock(loop, "Café Patio", in_stock=False).json() == {"changed": True}
+    loop.auction()  # Voltio alone is already on air: unchanged, the basket hold is dropped
+    loop.clock.advance(timedelta(seconds=3))
+    loop.scheduler.fire_due()
+    loop.send("adult", after_s=0.1)
+    loop.auction()
+    assert paid_brands(loop.creative()) == ("Malta Sur",)  # no stale Café basket came first
+
+
+def test_concurrent_slider_calls_settle_on_the_highest_seq(loop: Loop) -> None:
+    loop.send("fitness")
+    loop.auction(), loop.creative()
+    rayo = campaign_of(loop, "Rayo")
+    codes: list[int] = []
+
+    def move(seq: int) -> None:
+        response = loop.client.post(
+            "/api/advertiser/bid-multiplier",
+            json={
+                "type": "advertiser.bid_multiplier",
+                "v": 1,
+                "campaign_id": rayo,
+                "multiplier": f"{1 + seq / 10:.1f}",
+                "seq": seq,
+            },
+        )
+        codes.append(response.status_code)
+
+    threads = [threading.Thread(target=move, args=(seq,)) for seq in range(1, 21)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert set(codes) == {200}
+    book = ConsoleBook.model_validate(loop.client.get("/api/book").json())
+    line = next(l for l in book.lines if l.brand_name == "Rayo")
+    assert (line.multiplier, line.multiplier_seq) == ("3", 20)
+
+
+@pytest.fixture
+def poor_loop(tmp_path: Path) -> Iterator[Loop]:
+    clock = FixedClock(T0)
+    scheduler = ManualScheduler(clock)
+    settings = AppSettings(
+        app_env="test",
+        demo_simulator=True,
+        media_dir=tmp_path,
+        auction_swap_holds=True,
+        demo_budget_clp=200,
+    )
+    container = build_container(settings, clock=clock, scheduler=scheduler)
+    with (
+        TestClient(create_app(container=container)) as client,
+        client.websocket_connect("/ws/screen/demo-01") as player,
+        client.websocket_connect("/ws/console") as console,
+        client.websocket_connect("/ws/agent") as agent,
+    ):
+        harness = Loop(client, clock, scheduler, player, console, agent, container)
+        harness.creative()
+        yield harness
+
+
+def test_a_brand_that_cannot_cover_its_next_lease_comes_down_and_is_capped(
+    poor_loop: Loop,
+) -> None:
+    loop = poor_loop
+    shown = loop.send("fitness", after_s=0)
+    loop.auction()
+    voltio = loop.creative()
+    assert paid_brands(voltio) == ("Voltio",)  # 6.5 CLP/AS: each 15 s lease holds 98
+    for tick in range(5, 35, 5):  # the same viewer keeps watching
+        again = snapshot_for("fitness", 100 + tick, shown + timedelta(seconds=tick))
+        loop.clock.set(shown + timedelta(seconds=tick))
+        loop.agent.send_text(again.model_dump_json())
+        if tick in (15, 30):
+            loop.scheduler.fire_due()  # lease renewals
+    # Lease 2 (196) fits the 200 budget, lease 3 (294) doesn't: Voltio comes down at once.
+    gone = loop.next_of(ConsoleAuction)
+    assert gone.trigger == "budget_changed" and gone.swap == "swap"
+    voltio_campaign = next(bid.campaign_id for bid in gone.bids if bid.brand_name == "Voltio")
+    assert any(e.reason == "budget" and e.campaign_id == voltio_campaign for e in gone.exclusions)
+    rayo = loop.creative()
+    assert paid_brands(rayo) == ("Rayo",)
+    played(loop, voltio, seconds=30)
+    receipt = loop.next_of(ConsoleReceipt)
+    [charge] = receipt.charges
+    assert charge.amount.amount == "195"  # 6.5 × 30 AS, within the 200 budget
+    # Neither brand ever pays past its 200 CLP budget, however long the plays.
+    totals: dict[str, int] = {}
+    for charge in loop.container.ledger.charges():
+        name = "Voltio" if str(charge.campaign_id) == voltio_campaign else "other"
+        totals[name] = totals.get(name, 0) + int(charge.amount.amount)
+    assert totals["Voltio"] <= 200

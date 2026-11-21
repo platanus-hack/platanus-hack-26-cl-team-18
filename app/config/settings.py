@@ -19,6 +19,8 @@ class AppSettings(BaseSettings):
     # Postgres is the record (auctions, charges), written behind the hot path.
     # Unset: everything stays in memory (simulator, tests, offline rehearsal).
     database_url: SecretStr | None = None
+    # Each seeded demo campaign's budget (CLP). Small values exercise budget exhaustion.
+    demo_budget_clp: int = Field(default=50_000, gt=0)
     # Minimum ad seconds (docs/auction-plan.md D5): hold a swap so ads aren't strobed.
     # None = on, except app_env=test (fixed-clock tests get immediate swaps unless
     # they opt in and inject a scheduler).
