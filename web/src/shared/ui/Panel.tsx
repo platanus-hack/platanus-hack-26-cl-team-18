@@ -12,8 +12,8 @@ export function Panel({
     children: ReactNode;
 }) {
     return (
-        <section className="flex min-h-0 flex-col rounded-container border border-t-2 border-border border-t-rule bg-surface shadow-resting">
-            <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-5 py-4">
+        <section className="flex min-h-0 flex-col rounded-container border border-t border-border border-t-rule bg-surface shadow-resting">
+            <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-surface-raised/50 px-5 py-4">
                 <h2 className="text-section font-semibold">{title}</h2>
                 {aside}
             </header>
