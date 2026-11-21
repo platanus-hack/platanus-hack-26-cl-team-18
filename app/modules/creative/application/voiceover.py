@@ -144,26 +144,36 @@ class VoiceoverService:
             logger.info("voice-over skipped: %s", exc)
             return None
         key = cache_key(line, voice_id, self._profile)
-        if (url := self._store.url_if_cached(key, self._profile.extension)) is not None:
-            self.stats.cache_hits += 1
-            return url
+        # Install the flight before yielding to storage. Otherwise concurrent
+        # cache misses can each occupy a provider slot during the disk lookup.
         if (pending := self._in_flight.get(key)) is not None:
             self.stats.coalesced += 1
             return await asyncio.shield(pending)
-        task = asyncio.ensure_future(self._synthesize(key, line, voice_id))
+        task = asyncio.ensure_future(self._resolve(key, line, voice_id))
         self._in_flight[key] = task
         task.add_done_callback(lambda completed: self._finished(key, completed))
         # Shielded: a caller that gives up (moment moved on) must not cancel the shared call.
         return await asyncio.shield(task)
 
+    async def _resolve(self, key: str, line: str, voice_id: str) -> str | None:
+        url = await asyncio.to_thread(self._store.url_if_cached, key, self._profile.extension)
+        if url is not None:
+            self.stats.cache_hits += 1
+            return url
+        return await self._synthesize(key, line, voice_id)
+
     async def _synthesize(self, key: str, line: str, voice_id: str) -> str | None:
         if self.stats.disabled_by is not None:
             return None  # provider calls are off (auth, quota or budget); cached lines still play
-        if self._budget is not None and self._budget.remaining() < len(line):
-            # Cache hits above stay free; only new lines are refused.
-            self.stats.disabled_by = VoiceFailure.BUDGET
-            logger.warning("voice-over budget spent: new lines play without voice")
-            return None
+        if self._budget is not None:
+            remaining = await asyncio.to_thread(self._budget.remaining)
+            # Another flight may have disabled the provider while storage yielded.
+            if self.stats.disabled_by is not None:
+                return None
+            if remaining < len(line):
+                self.stats.disabled_by = VoiceFailure.BUDGET
+                logger.warning("voice-over budget spent: new lines play without voice")
+                return None
         request = VoiceRequest(
             text=line,
             voice_id=voice_id,
@@ -187,5 +197,5 @@ class VoiceoverService:
         cost = voice.character_cost if voice.character_cost is not None else len(line)
         self.stats.characters += cost
         if self._budget is not None:
-            self._budget.spend(cost)
-        return self._store.put(key, self._profile.extension, voice.audio)
+            await asyncio.to_thread(self._budget.spend, cost)
+        return await asyncio.to_thread(self._store.put, key, self._profile.extension, voice.audio)

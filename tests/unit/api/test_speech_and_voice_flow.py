@@ -210,11 +210,17 @@ def test_cached_voiceover_rides_in_creative_ready_without_a_new_call(tmp_path: P
 def test_prewarmed_offers_play_with_their_voice_from_the_first_frame(tmp_path: Path) -> None:
     synth = FakeSynth()
     app, clock = app_for(tmp_path, synth=synth, voiceover_prewarm=True)
+    warmed = threading.Event()
+    startup = tuple(app.state.container.startup)
+
+    async def complete_startup() -> None:
+        for hook in startup:
+            await hook()
+        warmed.set()
+
+    app.state.container.startup[:] = [complete_startup]
     with TestClient(app) as client:
-        deadline = datetime.now() + timedelta(seconds=5)
-        while datetime.now() < deadline:  # startup pre-generation runs in the background
-            if client.get("/health").status_code == 200 and synth.requests:
-                break
+        assert warmed.wait(5), "all prewarm results must be persisted before playback"
         with (
             client.websocket_connect("/ws/screen/demo-01") as player,
             client.websocket_connect("/ws/agent") as agent,

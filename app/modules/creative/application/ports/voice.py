@@ -55,7 +55,11 @@ class VoiceSynthesizer(Protocol):
 
 
 class MediaStore(Protocol):
-    """Content-addressed media cache served at /media (docs/stack.md §4)."""
+    """Content-addressed media cache served at /media (docs/stack.md §4).
+
+    Implementations must support calls from worker threads. Warm generation
+    offloads these operations; synchronous cache probes remain available to handlers.
+    """
 
     def url_if_cached(self, key: str, extension: str) -> str | None: ...
 
@@ -65,7 +69,10 @@ class MediaStore(Protocol):
 
 
 class CharacterBudget(Protocol):
-    """A hard cap on provider characters, persisted so a restart can't reset it."""
+    """A hard cap on provider characters, persisted so a restart can't reset it.
+
+    Methods can be called from worker threads; adapters serialize their writes.
+    """
 
     def remaining(self) -> int: ...
 

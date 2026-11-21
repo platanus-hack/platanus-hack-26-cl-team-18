@@ -146,3 +146,74 @@ make eval-pipeline ARGS="--cold --dwell 2"
 ```
 
 No product KPI ratchet changed, so the existing baseline remains intact.
+
+## Third loop: voice storage must not monopolize the event loop
+
+The next fault-injection loop tested synchronous cache lookup, media persistence,
+budget reads and budget writes inside warm voice generation. All four blocked
+unrelated asyncio work until storage returned. A real agent/player regression
+also exercises a second screen while the first screen's voice write is held.
+
+The same probe ran 10 times per operation against the previous implementation
+and this change, using the real voice service and file adapters with an explicit
+150 ms simulated storage stall:
+
+| Event-loop scheduling delay (median) | Before | After |
+|---|---:|---:|
+| Cache lookup | 150.35 ms | 0.034 ms |
+| Media write | 150.43 ms | 0.015 ms |
+| Budget read | 150.72 ms | 0.031 ms |
+| Budget write | 150.66 ms | 0.029 ms |
+
+These measure isolation under a controlled stall, not typical filesystem latency
+or a first-ad speedup. The synchronous `cached_url` probe remains available to
+handler-thread callers; this change targets the async `voiceover_url` workflow.
+
+Warm generation offloads storage operations to worker threads. The single-flight
+entry is installed before yielding to the cache lookup, so concurrent callers
+and result subscribers share both lookup and synthesis. Voice URLs are published
+only after budget accounting and atomic media persistence complete. Provider
+calls stay asynchronous and outside the hot path. No cancellation retries or
+new provider spending are introduced.
+
+Regression tests cover all four blocking operations, a real second screen
+receiving a paid creative while voice persistence is blocked, one lookup and one
+synthesis under concurrent misses, and subscriber notification only after media
+commit. Existing tests continue covering cache reuse, quota failures, stale
+subscribers and provider-slot reuse. The startup prewarm test now waits for all
+prewarm work to complete rather than assuming the first provider request means
+the cache is ready.
+
+```sh
+uv run python scripts/bench_voice_storage.py --out evals/results/voice-storage.json
+# Compare with --source-root /path/to/baseline using the identical probe.
+```
+
+Rebasing onto the campaign-studio release exposed a separate 5 ms generation
+gate failure (p95 7.56 ms under concurrent checks, 5.93 and 5.16 ms on reruns).
+Profiling the campaign corpus recorded about 158,000 normalizations and 88,000
+term matches: copy guarding dominated generation CPU time. Matching now reuses
+bounded compiled term/name rules (512/256 entries), and brief-constant competitor
+and party checks are computed once per draft. Copy text and guard verdicts are
+not memoized by these caches; every draft still gets all price, claim, competitor
+and minor-safety checks for its current brief.
+
+The identical campaign eval then passed at 1.33 ms p95 across 576 accepted
+variants, with 156 rejections, unchanged mean quality 0.9927 and cache-hit rate
+1.0. Regression coverage checks that warming matching rules cannot bypass a
+changed price or a newly active minor-safety flag. No threshold was raised and
+no product KPI baseline was lowered.
+
+Final validation on the integrated campaign/sensing release passed the full
+backend/architecture/Terraform checks, edge suite, 82 web tests/build, sandbox
+speech/TTS, product scenarios/soak, campaign variants, creative/adversarial evals,
+and cold/warm pipeline journeys. The recorded-provider pipeline reported
+27.1 ms warmed complete-ad p95 and 1,059 ms generated complete-ad p95, with no
+duplicate synthesis, no house-ad billing and all paid plays receipted. A final
+synthetic-80-ms-detector → real backend → Chromium trial measured 1,112 ms
+scene-to-visible with zero uncaught browser errors. These are controlled
+measurements; live camera/GPU/provider/TV SLOs still require venue measurement.
+
+A final upstream guard update was integrated before pushing. Its expanded
+41-output adversarial corpus passes with the optimized matcher; campaign p95
+is 1.93 ms with those additional checks, still below the unchanged 5 ms gate.
