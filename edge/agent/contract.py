@@ -491,6 +491,13 @@ class Winner(_Model):
     payment_per_s: MoneyDTO | None = None
 
 
+class BundleAlternative(_Model):
+    """A basket the auction weighed (best first): the console's "Canastas evaluadas"."""
+
+    brands: Annotated[list[Annotated[str, Field(max_length=80)]], Field(min_length=1, max_length=2)]
+    value: MoneyDTO  # per screen-second
+
+
 class ConsoleAuction(_Message):
     type: Literal["console.auction"] = "console.auction"
     screen_id: ScreenId
@@ -512,6 +519,21 @@ class ConsoleAuction(_Message):
     swap: Annotated[str, Field(max_length=32)] | None = (
         None  # swap | held | unchanged | keep_incumbent
     )
+    alternatives: list[BundleAlternative] = Field(default_factory=list, max_length=6)
+
+
+class ConsoleNext(_Message):
+    """The creative waiting out the on-air one's minimum time (a held swap): a preview.
+
+    Station consoles only (?live=1). The preview has no QR, code or voice yet; those
+    are made when it airs. `auction_id` None = the house ad is next.
+    """
+
+    type: Literal["console.next"] = "console.next"
+    screen_id: ScreenId
+    auction_id: EntityId | None = None
+    spec: CreativeSpec
+    not_before: AwareDatetime
 
 
 class ConsoleLatency(_Message):
@@ -956,7 +978,8 @@ ConsoleOutbound = Annotated[
     | ConsoleBook
     | ConsoleReceipt
     | ConsoleRedemption
-    | LiveStatus,
+    | LiveStatus
+    | ConsoleNext,
     Field(discriminator="type"),
 ]
 DevMessage = DevPerception | DevVlm | DevSpeech | DevJob | DevCreative | DevPlayer | DevKeyframe
@@ -972,6 +995,7 @@ DevOutbound = Annotated[
     | ConsoleReceipt
     | ConsoleRedemption
     | LiveStatus
+    | ConsoleNext
     | DevPerception
     | DevVlm
     | DevSpeech
@@ -1009,6 +1033,7 @@ CONSOLE_OUTBOUND: TypeAdapter[
     | ConsoleReceipt
     | ConsoleRedemption
     | LiveStatus
+    | ConsoleNext
 ] = TypeAdapter(ConsoleOutbound)
 
 AnyMessage = (
@@ -1043,6 +1068,7 @@ AnyMessage = (
     | DevCreative
     | DevPlayer
     | DevKeyframe
+    | ConsoleNext
 )
 
 # Order is the generated TS order; append new messages at the end.
@@ -1129,6 +1155,7 @@ class CampaignGenerated(_Message):
 
 # HTTP messages share the generated schemas without joining any socket union.
 ALL_MESSAGES += (CampaignCatalog, CampaignGenerate, CampaignGenerated)
+ALL_MESSAGES += (ConsoleNext,)
 
 # Socket unions exported to TS, by name.
 SOCKET_UNIONS: dict[str, tuple[type[_Message], ...]] = {
@@ -1155,6 +1182,7 @@ SOCKET_UNIONS: dict[str, tuple[type[_Message], ...]] = {
         ConsoleReceipt,
         ConsoleRedemption,
         LiveStatus,
+        ConsoleNext,
     ),
     "DevOutbound": (
         ConsoleMoment,
@@ -1168,6 +1196,7 @@ SOCKET_UNIONS: dict[str, tuple[type[_Message], ...]] = {
         ConsoleReceipt,
         ConsoleRedemption,
         LiveStatus,
+        ConsoleNext,
         DevPerception,
         DevVlm,
         DevSpeech,

@@ -179,6 +179,13 @@ export const BookLineSchema = z.strictObject({
 });
 export type BookLine = z.infer<typeof BookLineSchema>;
 
+// A basket the auction weighed (best first): the console's "Canastas evaluadas".
+export const BundleAlternativeSchema = z.strictObject({
+  brands: z.array(z.string().max(80)).min(1).max(2),
+  value: MoneyDTOSchema,
+});
+export type BundleAlternative = z.infer<typeof BundleAlternativeSchema>;
+
 export const CampaignBrandSchema = z.strictObject({
   slug: z.string(),
   name: z.string(),
@@ -342,6 +349,7 @@ export const ConsoleAuctionSchema = z.strictObject({
   pricing: z.string().max(32).nullable(),
   trigger: z.string().max(32).nullable(),
   swap: z.string().max(32).nullable(),
+  alternatives: z.array(BundleAlternativeSchema).max(6),
 });
 export type ConsoleAuction = z.infer<typeof ConsoleAuctionSchema>;
 
@@ -406,6 +414,20 @@ export const ConsoleMomentSchema = z.strictObject({
   held_products: z.array(HeldProductScoreSchema).max(16),
 });
 export type ConsoleMoment = z.infer<typeof ConsoleMomentSchema>;
+
+// The creative waiting out the on-air one's minimum time (a held swap): a preview.
+// 
+// Station consoles only (?live=1). The preview has no QR, code or voice yet; those
+// are made when it airs. `auction_id` None = the house ad is next.
+export const ConsoleNextSchema = z.strictObject({
+  v: z.literal(1),
+  type: z.literal("console.next"),
+  screen_id: z.string().min(1).max(64).regex(/^[A-Za-z0-9_.:-]+$/),
+  auction_id: z.string().min(1).max(64).nullable(),
+  spec: CreativeSpecSchema,
+  not_before: z.iso.datetime({ offset: true }),
+});
+export type ConsoleNext = z.infer<typeof ConsoleNextSchema>;
 
 export const FilteredAttentionSchema = z.strictObject({
   reason: z.string().max(32),
@@ -891,12 +913,12 @@ export type PlayerInbound = z.infer<typeof PlayerInboundSchema>;
 export const PlayerOutboundSchema = z.discriminatedUnion("type", [CreativeReadySchema, CreativeUpgradedSchema, ErrorMessageSchema, ScreenAttentionSchema, LiveStatusSchema]);
 export type PlayerOutbound = z.infer<typeof PlayerOutboundSchema>;
 
-export const ConsoleOutboundSchema = z.discriminatedUnion("type", [ConsoleMomentSchema, ConsoleAuctionSchema, ConsoleLatencySchema, ConsoleDegradationSchema, CreativeReadySchema, CreativeUpgradedSchema, ErrorMessageSchema, ConsoleBookSchema, ConsoleReceiptSchema, ConsoleRedemptionSchema, LiveStatusSchema]);
+export const ConsoleOutboundSchema = z.discriminatedUnion("type", [ConsoleMomentSchema, ConsoleAuctionSchema, ConsoleLatencySchema, ConsoleDegradationSchema, CreativeReadySchema, CreativeUpgradedSchema, ErrorMessageSchema, ConsoleBookSchema, ConsoleReceiptSchema, ConsoleRedemptionSchema, LiveStatusSchema, ConsoleNextSchema]);
 export type ConsoleOutbound = z.infer<typeof ConsoleOutboundSchema>;
 
-export const DevOutboundSchema = z.discriminatedUnion("type", [ConsoleMomentSchema, ConsoleAuctionSchema, ConsoleLatencySchema, ConsoleDegradationSchema, CreativeReadySchema, CreativeUpgradedSchema, ErrorMessageSchema, ConsoleBookSchema, ConsoleReceiptSchema, ConsoleRedemptionSchema, LiveStatusSchema, DevPerceptionSchema, DevVlmSchema, DevSpeechSchema, DevJobSchema, DevCreativeSchema, DevPlayerSchema, DevKeyframeSchema]);
+export const DevOutboundSchema = z.discriminatedUnion("type", [ConsoleMomentSchema, ConsoleAuctionSchema, ConsoleLatencySchema, ConsoleDegradationSchema, CreativeReadySchema, CreativeUpgradedSchema, ErrorMessageSchema, ConsoleBookSchema, ConsoleReceiptSchema, ConsoleRedemptionSchema, LiveStatusSchema, ConsoleNextSchema, DevPerceptionSchema, DevVlmSchema, DevSpeechSchema, DevJobSchema, DevCreativeSchema, DevPlayerSchema, DevKeyframeSchema]);
 export type DevOutbound = z.infer<typeof DevOutboundSchema>;
 
-export const MESSAGE_TYPES = ["audience.snapshot", "audience.keyframe", "audience.utterance", "creative.ready", "creative.upgraded", "playback.report", "console.moment", "console.auction", "console.latency", "console.degradation", "system.error", "advertiser.bid_multiplier", "stock.set", "console.book", "console.receipt", "recognition.snapshot", "player.displayed", "player.voice", "screen.attention", "console.redemption", "agent.hello", "live.set", "live.status", "advertiser.autobid", "dev.perception", "dev.vlm", "dev.speech", "dev.job", "dev.creative", "dev.player", "dev.keyframe", "campaign.catalog", "campaign.generate", "campaign.generated"] as const;
+export const MESSAGE_TYPES = ["audience.snapshot", "audience.keyframe", "audience.utterance", "creative.ready", "creative.upgraded", "playback.report", "console.moment", "console.auction", "console.latency", "console.degradation", "system.error", "advertiser.bid_multiplier", "stock.set", "console.book", "console.receipt", "recognition.snapshot", "player.displayed", "player.voice", "screen.attention", "console.redemption", "agent.hello", "live.set", "live.status", "advertiser.autobid", "dev.perception", "dev.vlm", "dev.speech", "dev.job", "dev.creative", "dev.player", "dev.keyframe", "campaign.catalog", "campaign.generate", "campaign.generated", "console.next"] as const;
 
 export type MessageType = (typeof MESSAGE_TYPES)[number];

@@ -53,6 +53,21 @@ export function affinityRoutes(matches: readonly BidMatch[]): string {
         .join(" · ");
 }
 
+/** Brand categories from the catalog, in the venue's language. */
+const CATEGORY: Readonly<Record<string, string>> = {
+    alcohol: "cerveza",
+    burger: "hamburguesas",
+    coffee: "café",
+    cola: "bebida",
+    pastry: "panadería",
+    snacks: "snacks",
+    sports_goods: "bebida energética",
+    water: "agua",
+};
+
+export const categoryLabel = (category: string) =>
+    CATEGORY[category] ?? category.replace(/_/g, " ");
+
 export const SOURCE: Record<SignalSource, string> = {
     vision: "cámara",
     vlm: "imagen",

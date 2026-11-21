@@ -28,6 +28,7 @@ from app.contract.messages import (
     ConsoleDegradation,
     ConsoleLatency,
     ConsoleMoment,
+    ConsoleNext,
     ConsoleReceipt,
     ConsoleRedemption,
     CreativeReady,
@@ -202,12 +203,16 @@ class ConnectionHub:
             return
         await self._fan_out(recipients, tuple(message.model_dump_json() for message in messages))
 
+    def has_station_consoles(self) -> bool:
+        """Emitters check this first: station extras cost nothing when nobody watches."""
+        return bool((self._consoles & self._live) or self._devs)
+
     def is_station_console(self, sink: Sink) -> bool:
         """A console that subscribed with ?live=1 (the station page), not a raw reader."""
         return sink in self._consoles and sink in self._live
 
     async def broadcast_station(
-        self, *messages: ConsoleMessage | LiveStatus, sink: Sink | None = None
+        self, *messages: ConsoleMessage | LiveStatus | ConsoleNext, sink: Sink | None = None
     ) -> None:
         """Extras for station consoles (?live=1): what airs, the book before any decision.
 
@@ -218,7 +223,7 @@ class ConnectionHub:
         await self._fan_out(recipients, tuple(message.model_dump_json() for message in messages))
 
     def broadcast_station_threadsafe(
-        self, *messages: ConsoleMessage | LiveStatus, sink: Sink | None = None
+        self, *messages: ConsoleMessage | LiveStatus | ConsoleNext, sink: Sink | None = None
     ) -> None:
         self._schedule(self.broadcast_station(*messages, sink=sink))
 

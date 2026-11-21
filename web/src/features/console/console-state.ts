@@ -2,12 +2,14 @@ import type {
     ConsoleAuction,
     ConsoleBook,
     ConsoleMoment,
+    ConsoleNext,
     ConsoleOutbound,
     ConsoleReceipt,
     ConsoleRedemption,
     CreativeReady,
     CreativeUpgraded,
     DegradationFlag,
+    DevPerception,
     LatencyTrace,
 } from "@/contract";
 import type { ConnectionState } from "@/lib/ws/typed-socket";
@@ -33,6 +35,10 @@ export interface ScreenView {
     readonly onAir: CreativeReady | CreativeUpgraded | null;
     /** Newest first: the loop narrated, one line per fact. */
     readonly events: readonly StationEvent[];
+    /** The creative waiting out the on-air one's minimum time (a held swap). */
+    readonly next: ConsoleNext | null;
+    /** The camera's latest detections (from /ws/dev, demo key only) and when they came. */
+    readonly perception: { readonly message: DevPerception; readonly at: number } | null;
 }
 
 export interface StationEvent {
@@ -54,6 +60,7 @@ export interface ConsoleState {
 
 export type ConsoleEvent =
     | { readonly type: "message"; readonly message: ConsoleOutbound; readonly at?: number }
+    | { readonly type: "perception"; readonly message: DevPerception; readonly at: number }
     | { readonly type: "connection"; readonly state: ConnectionState };
 
 export const emptyScreen: ScreenView = {
@@ -68,6 +75,8 @@ export const emptyScreen: ScreenView = {
     redemptions: [],
     onAir: null,
     events: [],
+    next: null,
+    perception: null,
 };
 
 export const initialConsoleState: ConsoleState = {
@@ -99,7 +108,7 @@ function update(
     };
 }
 
-function brandsOf(creative: CreativeReady | CreativeUpgraded): string {
+function brandsOf(creative: CreativeReady | CreativeUpgraded | ConsoleNext): string {
     return creative.spec.slots.map((slot) => slot.brand_name).join(" + ");
 }
 
@@ -130,6 +139,11 @@ export function describe(m: ConsoleOutbound): Omit<StationEvent, "at"> | null {
                 : { text: `Recibo: $${m.total.amount} cobrado`, tone: "success" };
         case "console.redemption":
             return { text: `Canje ${m.code}: ${m.brands.join(" + ")}`, tone: "success" };
+        case "console.next":
+            return {
+                text: `Siguiente: ${m.auction_id === null ? "aviso de la casa" : brandsOf(m)} (espera el mínimo en pantalla)`,
+                tone: "info",
+            };
         case "console.degradation":
             return m.flags.length
                 ? { text: `Degradado: ${m.flags.join(", ")}`, tone: "warning" }
@@ -148,6 +162,10 @@ function withEvent(view: ScreenView, m: ConsoleOutbound, at: number): ScreenView
 
 export function consoleReducer(state: ConsoleState, event: ConsoleEvent): ConsoleState {
     if (event.type === "connection") return { ...state, connection: event.state };
+    if (event.type === "perception") {
+        const perception = { message: event.message, at: event.at };
+        return update(state, event.message.screen_id, (v) => ({ ...v, perception }));
+    }
     const at = event.at ?? 0;
     const m = event.message;
     if (describe(m) !== null && "screen_id" in m) {
@@ -169,7 +187,11 @@ export function consoleReducer(state: ConsoleState, event: ConsoleEvent): Consol
                 ...v,
                 lastCreativeId: m.creative_id,
                 onAir: m,
+                // The preview aired (or a newer decision replaced it): nothing waits now.
+                next: null,
             }));
+        case "console.next":
+            return update(state, m.screen_id, (v) => ({ ...v, next: m }));
         case "creative.upgraded":
             // An upgrade only replaces the ad it belongs to (never revives a retired one).
             return update(state, m.screen_id, (v) => ({

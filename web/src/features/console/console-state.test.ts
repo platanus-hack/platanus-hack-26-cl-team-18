@@ -1,4 +1,4 @@
-import { ConsoleOutboundSchema } from "@/contract";
+import { ConsoleOutboundSchema, type DevPerception } from "@/contract";
 import { describe, expect, it } from "vitest";
 import { consoleReducer, initialConsoleState, REDEMPTION_WINDOW } from "./console-state";
 import {
@@ -277,5 +277,84 @@ describe("what airs and the timeline", () => {
         state = consoleReducer(state, { type: "message", message: stale });
         expect(state.screens["demo-01"]!.onAir?.creative_id).toBe("c2");
         expect(state.screens["demo-01"]!.onAir?.type).toBe("creative.ready");
+    });
+});
+
+describe("the next ad and the camera", () => {
+    const spec = {
+        layout_id: "duo",
+        slots: [
+            {
+                brand_id: "voltio",
+                brand_name: "Voltio",
+                logo_url: "/v.svg",
+                copy_text: "Recarga",
+                accent_color: "#c6f26b",
+                hero_image_url: null,
+            },
+        ],
+        duration_ms: 12000,
+        video_url: null,
+        voiceover_url: null,
+        qr_url: null,
+        stages: [],
+        offer: null,
+        angle: null,
+        copy_source: null,
+        redemption_code: null,
+        redeem_url: null,
+    };
+
+    it("keeps the waiting ad until an ad airs", () => {
+        const next = ConsoleOutboundSchema.parse({
+            type: "console.next",
+            v: 1,
+            screen_id: "demo-01",
+            auction_id: "a2",
+            spec,
+            not_before: "2026-11-21T15:00:02Z",
+        });
+        let state = consoleReducer(initialConsoleState, { type: "message", message: next, at: 5 });
+        expect(state.screens["demo-01"]!.next?.auction_id).toBe("a2");
+        expect(state.screens["demo-01"]!.events[0]!.text).toContain("Siguiente");
+        const aired = ConsoleOutboundSchema.parse({
+            type: "creative.ready",
+            v: 1,
+            screen_id: "demo-01",
+            creative_id: "c2",
+            auction_id: "a2",
+            spec,
+            trace,
+        });
+        state = consoleReducer(state, { type: "message", message: aired });
+        expect(state.screens["demo-01"]!.next).toBeNull();
+    });
+
+    it("stores the latest detections with their receive time", () => {
+        const perception = {
+            type: "dev.perception" as const,
+            v: 1 as const,
+            screen_id: "demo-01",
+            seq: 1,
+            measured_at: "2026-11-21T15:00:00Z",
+            frame_w: 1280,
+            frame_h: 720,
+            detector: "local",
+            inference_ms: 38,
+            round_trip_ms: null,
+            raw_people: 1,
+            people: [],
+            objects: [],
+            markers: [],
+            held: [],
+            frames: 1,
+            stale_frames: 0,
+        } satisfies DevPerception;
+        const state = consoleReducer(initialConsoleState, {
+            type: "perception",
+            message: perception,
+            at: 1234,
+        });
+        expect(state.screens["demo-01"]!.perception).toEqual({ message: perception, at: 1234 });
     });
 });

@@ -80,6 +80,14 @@ class Winner:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class BundleOption:
+    """A basket the auction weighed, best first: who, and what it was worth."""
+
+    campaign_ids: tuple[CampaignId, ...]  # slot order
+    value: MoneyRate  # per screen-second
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class AuctionResult:
     pricing: PricingRule
     layout: Layout | None
@@ -93,6 +101,9 @@ class AuctionResult:
     coverage: Decimal  # 0..1, upper-bound estimate (R-O4)
     no_fill: NoFillReason | None
     incumbent_value: MoneyRate | None = None  # best value of the on-air set, if still feasible
+    # The best baskets considered (the winner first), each set once: the console's
+    # "Canastas evaluadas". Explainability only; never used to bill.
+    alternatives: tuple[BundleOption, ...] = ()
 
     @classmethod
     def house_ad(cls, *, currency: MoneyRate, reason: NoFillReason) -> AuctionResult:

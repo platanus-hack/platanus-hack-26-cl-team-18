@@ -29,6 +29,11 @@ export interface StationView {
     readonly warnings: readonly string[];
 }
 
+/** "18:03": when the switch last changed, in the venue's clock. */
+function since(changedAt: string): string {
+    return new Date(changedAt).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" });
+}
+
 export function stationView(status: LiveStatus, health: InputHealth | null): StationView {
     const input = health?.inputs[status.screen_id];
     const vision = status.agents.includes("vision");
@@ -76,7 +81,11 @@ export function stationView(status: LiveStatus, health: InputHealth | null): Sta
     const degraded = status.live && (!vision || !player);
     return {
         state: !status.live ? "standby" : degraded ? "degraded" : "live",
-        headline: !status.live ? "En espera" : degraded ? "En vivo · con problemas" : "En vivo",
+        headline: !status.live
+            ? "En espera"
+            : degraded
+              ? "En vivo · revisar"
+              : `En vivo desde ${since(status.changed_at)}`,
         detail: status.live
             ? "La pantalla ve, escucha y subasta en tiempo real."
             : "Nada se analiza ni se genera. La pantalla muestra el anuncio de casa.",

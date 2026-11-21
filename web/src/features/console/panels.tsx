@@ -18,7 +18,7 @@ import { coBrandLift, percentile, serverDecisionMs, traceSteps } from "./metrics
 
 export const pct = (ratio: number) => `${Math.round(ratio * 100)} %`;
 
-const DEMO_BRANDS: Readonly<Record<string, string>> = {
+export const DEMO_BRANDS: Readonly<Record<string, string>> = {
     "cafe-patio": "Café Patio",
     voltio: "Voltio",
     rayo: "Rayo",

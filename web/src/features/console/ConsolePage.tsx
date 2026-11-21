@@ -1,5 +1,11 @@
-import { ConsoleOutboundSchema, type ConsoleOutbound } from "@/contract";
+import {
+    ConsoleOutboundSchema,
+    DevOutboundSchema,
+    type ConsoleOutbound,
+    type DevOutbound,
+} from "@/contract";
 import { backendWsUrl } from "@/lib/config";
+import { demoKey, rememberedDemoKey } from "@/lib/demo";
 import { createStore, useStore } from "@/lib/store";
 import { TypedSocket } from "@/lib/ws/typed-socket";
 import { Badge } from "@/shared/ui/badge";
@@ -7,18 +13,25 @@ import { AppShell } from "@/shared/ui/page";
 import { useEffect, useState } from "react";
 import { consoleReducer, emptyScreen, initialConsoleState } from "./console-state";
 import { DEGRADATION } from "./labels";
-import { AudiencePanel, LatencyPanel } from "./panels";
-import { BidsPanel, OnAirPanel, SessionPanel, Timeline } from "./station-panels";
+import { AuctionSection, CameraPanel, PeopleScreen, TagsPanel, WhyPanel } from "./station-d";
+import { SessionPanel, Timeline } from "./station-panels";
 import { StationBar } from "./StationBar";
 
 const SCREEN_ID = /^[A-Za-z0-9_.:-]{1,64}$/;
-/** The station's home: control bar, what airs, who bids and why, what it earned. */
+// dev.keyframe frames can be large; this socket only reads the detection boxes.
+const DEV_MAX_FRAME_BYTES = 3_000_000;
+
+/**
+ * The station's home: what the camera sees and why, what people see and what is
+ * next, the auction, then the session. Two sockets: the console stream, and (with
+ * the demo key) the dev stream for the camera's detection boxes.
+ */
 export function ConsolePage() {
     const [store] = useState(() => createStore(consoleReducer, initialConsoleState));
     const [socket] = useState(
         () =>
             new TypedSocket<ConsoleOutbound>({
-                // ?live=1: a station console also gets what airs and the book in standby.
+                // ?live=1: a station console also gets what airs, what is next and the book.
                 url: `${backendWsUrl}/ws/console?live=1`,
                 schema: ConsoleOutboundSchema,
                 onMessage: (message) => {
@@ -29,12 +42,28 @@ export function ConsolePage() {
                 },
             }),
     );
+    const [camera] = useState(() => {
+        const key = demoKey() ?? rememberedDemoKey();
+        if (key === null) return null;
+        return new TypedSocket<DevOutbound>({
+            url: `${backendWsUrl}/ws/dev?key=${encodeURIComponent(key)}`,
+            schema: DevOutboundSchema,
+            maxFrameBytes: DEV_MAX_FRAME_BYTES,
+            onMessage: (message) => {
+                if (message.type === "dev.perception") {
+                    store.dispatch({ type: "perception", message, at: Date.now() });
+                }
+            },
+        });
+    });
     useEffect(() => {
         socket.start();
+        camera?.start();
         return () => {
             socket.stop();
+            camera?.stop();
         };
-    }, [socket]);
+    }, [socket, camera]);
 
     const connection = useStore(store, (s) => s.connection);
     const screens = useStore(store, (s) => s.screens);
@@ -60,16 +89,17 @@ export function ConsolePage() {
                     ))}
                 </div>
             )}
-            <div className="grid gap-4 lg:grid-cols-[1fr_1.5fr_1fr]">
-                <div className="flex flex-col gap-4">
-                    <OnAirPanel view={view} />
-                    <AudiencePanel view={view} />
-                </div>
-                <BidsPanel view={view} screen={screen} />
-                <SessionPanel view={view} />
+            <div className="grid gap-7 lg:grid-cols-2">
+                <CameraPanel view={view} />
+                <PeopleScreen view={view} />
             </div>
-            <div className="grid gap-4 lg:grid-cols-[1fr_2.5fr]">
-                <LatencyPanel view={view} />
+            <AuctionSection view={view} screen={screen} />
+            <div className="grid items-start gap-7 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+                <TagsPanel view={view} />
+                <WhyPanel view={view} />
+            </div>
+            <div className="grid items-start gap-7 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+                <SessionPanel view={view} />
                 <Timeline view={view} />
             </div>
         </AppShell>

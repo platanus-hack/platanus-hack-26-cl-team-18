@@ -1,4 +1,4 @@
-import type { ConsoleOutbound, LiveSet, LiveStatus } from "@/contract";
+import type { ConsoleOutbound, CreativeSpec, LiveSet, LiveStatus } from "@/contract";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -201,4 +201,43 @@ it("with the demo key remembered, bids and stock move from the home page", async
         key: "k3y",
         body: { brand_id: "b-voltio", in_stock: false },
     });
+});
+
+it("previews the next ad while a swap waits, and explains the decision", async () => {
+    const spec = {
+        layout_id: "solo",
+        slots: [
+            {
+                brand_id: "voltio",
+                brand_name: "Voltio",
+                logo_url: "/v.svg",
+                copy_text: "Recarga",
+                accent_color: "#c6f26b",
+                hero_image_url: null,
+            },
+        ],
+        duration_ms: 12000,
+        video_url: null,
+        voiceover_url: null,
+        qr_url: null,
+        stages: [],
+        offer: { label: "Trío", text: "Para los 3", price: money("8490"), party_size: 3 },
+        angle: null,
+        copy_source: null,
+        redemption_code: null,
+        redeem_url: null,
+    } satisfies CreativeSpec;
+    await push({
+        type: "console.next",
+        v: 1,
+        screen_id: "demo-01",
+        auction_id: "a2",
+        spec,
+        not_before: new Date(Date.now() + 2000).toISOString(),
+    });
+    await settle();
+    expect(host.querySelector('[aria-label="Siguiente aviso"]')?.textContent).toContain(
+        "Voltio · Trío $8.490",
+    );
+    expect(host.textContent).toContain("La explicación aparece con la primera decisión");
 });

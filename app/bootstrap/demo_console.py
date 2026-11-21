@@ -7,6 +7,7 @@ from app.contract.messages import (
     AudienceSnapshot,
     BidLine,
     BidMatch,
+    BundleAlternative,
     ConsoleAuction,
     ConsoleLatency,
     ConsoleMoment,
@@ -175,6 +176,14 @@ def decision_messages(
             pricing=result.pricing.value,
             trigger=trigger,
             swap=swap,
+            alternatives=[
+                BundleAlternative(
+                    brands=[name(campaign_id) for campaign_id in option.campaign_ids],
+                    value=_money(option.value),
+                )
+                for option in result.alternatives
+                if all(campaign_id in by_campaign for campaign_id in option.campaign_ids)
+            ],
         ),
     )
     if creative_id is None:

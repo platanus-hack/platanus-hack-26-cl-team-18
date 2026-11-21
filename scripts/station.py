@@ -168,6 +168,9 @@ def main() -> int:
     # An inherited build override must not send this station to a different backend.
     env["VITE_BACKEND_URL"] = origin
     env["SPEECH_MODE_SCREENS"] = json.dumps([args.screen] if args.speech else [])
+    # The console's "Lo que ve la cámara": detection boxes only (no image ever leaves
+    # the agent). The backend relays them only to /ws/dev, behind DEMO_KEY.
+    env["EDGE_DEV_STREAM"] = "1"
     lib = ROOT / "var/local-demo/lib/usr"
     if lib.is_dir():
         env["PATH"] = f"{lib / 'bin'}:{env.get('PATH', '')}"

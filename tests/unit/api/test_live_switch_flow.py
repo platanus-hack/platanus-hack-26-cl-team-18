@@ -28,6 +28,7 @@ from app.contract.messages import (
     AgentRole,
     AudienceUtterance,
     ConsoleAuction,
+    ConsoleNext,
     CreativeReady,
     LiveStatus,
 )
@@ -268,3 +269,38 @@ def test_a_plain_console_stream_is_unchanged(tmp_path: Path) -> None:
         agent.send_text(snapshot_for("fitness", 1, datetime.now(UTC)).model_dump_json())
         kinds = [console.receive_json()["type"] for _ in range(3)]
         assert kinds == ["console.moment", "console.auction", "console.latency"]
+
+
+def test_a_held_swap_previews_the_next_ad_and_the_auction_lists_its_baskets(
+    tmp_path: Path,
+) -> None:
+    clock = FixedClock(T0)
+    container = build_container(
+        AppSettings(_env_file=None, app_env="test", media_dir=tmp_path, auction_swap_holds=True),
+        clock=clock,
+    )
+    with (
+        TestClient(create_app(container=container)) as client,
+        client.websocket_connect("/ws/console?live=1") as station,
+        client.websocket_connect("/ws/agent") as agent,
+    ):
+        agent.send_text(
+            snapshot_for("fitness", 1, clock.advance(timedelta(seconds=0.1))).model_dump_json()
+        )
+        agent.send_text(
+            snapshot_for("co-brand", 2, clock.advance(timedelta(seconds=0.5))).model_dump_json()
+        )
+        auction = None
+        while True:
+            message = CONSOLE_OUTBOUND.validate_python(station.receive_json())
+            if isinstance(message, ConsoleAuction) and message.swap == "held":
+                auction = message
+            if isinstance(message, ConsoleNext):
+                break
+        assert auction is not None
+        assert {s.brand_name for s in message.spec.slots} == {"Voltio", "Café Patio"}
+        assert message.auction_id == auction.auction_id
+        assert message.spec.redemption_code is None  # made only when it airs
+        assert message.not_before == auction.trace.swap_not_before
+        assert set(auction.alternatives[0].brands) == {w.brand_name for w in auction.winners}
+        assert all(set(a.brands) != {"Voltio", "Rayo"} for a in auction.alternatives)

@@ -1,6 +1,6 @@
 import type { ConsoleAuction, ConsoleBook, MoneyDTO } from "@/contract";
 import type { Tone } from "@/shared/ui/badge";
-import { EXCLUSION } from "./labels";
+import { EXCLUSION, MATCH } from "./labels";
 
 /**
  * The bid table: one row per brand, joining the book (budget, stock, multiplier,
@@ -23,9 +23,31 @@ export interface BidRow {
     readonly result: { readonly label: string; readonly tone: Tone } | null;
     /** Why it was excluded, in plain words ("Rayo: misma categoría que Voltio"). */
     readonly why: string | null;
+    readonly category: string;
+    /** The audience interest the bid reached ("Coffee → Pastelería"), its strongest match. */
+    readonly match: string | null;
+    /** How it matched: "exacta · 100 %", "relacionada · 40 %". */
+    readonly matchKind: string | null;
+    /** What the bid is worth for this audience, per screen-second. */
+    readonly valuePerS: MoneyDTO | null;
+    /** valuePerS against the best bid (bar width, presentation only). */
+    readonly valueShare: number;
+    /** What a winner actually pays per attention-second (≤ its bid). */
+    readonly pays: MoneyDTO | null;
+    /** The result's reason in a few words, under the result. */
+    readonly reason: string | null;
+}
+
+/** "Rayo: misma categoría que Voltio" → "misma categoría que Voltio". */
+function withoutBrand(detail: string, brand: string): string {
+    return detail.startsWith(`${brand}: `) ? detail.slice(brand.length + 2) : detail;
 }
 
 export function bidRows(book: ConsoleBook, auction: ConsoleAuction | null): BidRow[] {
+    const best = Math.max(
+        0,
+        ...(auction?.bids ?? []).map((b) => Number(b.value_per_s?.amount ?? 0)),
+    );
     return book.lines.map((line) => {
         const bid = auction?.bids.find((b) => b.campaign_id === line.campaign_id) ?? null;
         const exclusion = auction?.exclusions.find((e) => e.campaign_id === line.campaign_id);
@@ -40,6 +62,18 @@ export function bidRows(book: ConsoleBook, auction: ConsoleAuction | null): BidR
                     : bid
                       ? { label: "Pierde", tone: "neutral" }
                       : { label: "Sin interés", tone: "neutral" };
+        const strongest = bid ? [...bid.matches].sort((a, b) => b.weight - a.weight)[0] : undefined;
+        const winner = auction?.winners.find((w) => w.campaign_id === line.campaign_id);
+        const firstWinner = auction?.winners[0];
+        const reason = winner
+            ? winner === firstWinner
+                ? "mejor valor para este grupo"
+                : `socia aprobada de ${firstWinner?.brand_name ?? ""}`
+            : exclusion?.detail
+              ? withoutBrand(exclusion.detail, line.brand_name)
+              : bid
+                ? "vale menos que la canasta ganadora"
+                : null;
         return {
             campaignId: line.campaign_id,
             brandId: line.brand_id,
@@ -55,6 +89,19 @@ export function bidRows(book: ConsoleBook, auction: ConsoleAuction | null): BidR
             budget: line.budget,
             result,
             why: exclusion?.detail ? exclusion.detail : null,
+            category: line.category,
+            match: strongest
+                ? strongest.bid_segment_id === strongest.segment_id
+                    ? strongest.segment_label || strongest.segment_id
+                    : `${strongest.bid_segment_label || strongest.bid_segment_id} → ${strongest.segment_label || strongest.segment_id}`
+                : null,
+            matchKind: strongest
+                ? `${MATCH[strongest.kind]} · ${Math.round(strongest.weight * 100)} %`
+                : null,
+            valuePerS: bid?.value_per_s ?? null,
+            valueShare: bid?.value_per_s && best > 0 ? Number(bid.value_per_s.amount) / best : 0,
+            pays: winner?.price_per_as ?? null,
+            reason,
         };
     });
 }

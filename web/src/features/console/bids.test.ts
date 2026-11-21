@@ -33,12 +33,40 @@ const book = {
     lines: [line("v", "Voltio", { on_air: true }), line("r", "Rayo"), line("m", "Malta Sur")],
 } as unknown as ConsoleBook;
 
+const exact = (id: string, label: string) => ({
+    segment_id: id,
+    bid_segment_id: id,
+    kind: "exact",
+    weight: 1,
+    segment_label: label,
+    bid_segment_label: label,
+});
+
 const auction = {
     bids: [
-        { campaign_id: "v", bid_per_as: money("8") },
-        { campaign_id: "r", bid_per_as: money("6.5") },
+        {
+            campaign_id: "v",
+            bid_per_as: money("8"),
+            value_per_s: money("5.52"),
+            matches: [exact("408", "Fitness and Exercise")],
+        },
+        {
+            campaign_id: "r",
+            bid_per_as: money("6.5"),
+            value_per_s: money("4.49"),
+            matches: [
+                {
+                    segment_id: "977",
+                    bid_segment_id: "980",
+                    kind: "related",
+                    weight: 0.4,
+                    segment_label: "Coffee",
+                    bid_segment_label: "Pastelería",
+                },
+            ],
+        },
     ],
-    winners: [{ campaign_id: "v", brand_name: "Voltio" }],
+    winners: [{ campaign_id: "v", brand_name: "Voltio", price_per_as: money("5.2") }],
     exclusions: [
         { campaign_id: "r", reason: "competitor", detail: "Rayo: same category as Voltio" },
     ],
@@ -84,5 +112,25 @@ describe("ordering", () => {
 
     it("lists every brand before anyone was seen", () => {
         expect(splitRows(bidRows(book, null)).idle).toEqual([]);
+    });
+});
+
+describe("auction columns", () => {
+    it("explains each bid: match, value share, price paid and reason", () => {
+        const [voltio, rayo] = bidRows(book, auction);
+        expect(voltio).toMatchObject({
+            match: "Fitness and Exercise",
+            matchKind: "exacto · 100 %",
+            valueShare: 1,
+            reason: "mejor valor para este grupo",
+        });
+        expect(voltio!.pays?.amount).toBe("5.2");
+        expect(rayo).toMatchObject({
+            match: "Pastelería → Coffee",
+            matchKind: "relacionado · 40 %",
+            pays: null,
+            reason: "same category as Voltio",
+        });
+        expect(rayo!.valueShare).toBeCloseTo(4.49 / 5.52);
     });
 });

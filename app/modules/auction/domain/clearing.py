@@ -8,7 +8,7 @@ expected payment and zero attention charges zero (R-P5).
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 from itertools import combinations
@@ -17,6 +17,7 @@ from app.modules.auction.domain.opportunity import ZERO, AdOpportunity, Layout, 
 from app.modules.auction.domain.result import (
     AuctionResult,
     BidValue,
+    BundleOption,
     Exclusion,
     ExclusionReason,
     NoFillReason,
@@ -178,6 +179,7 @@ def clear(
         single_brand_revenue=rate(sum(solo.payments, ZERO)),
         coverage=_coverage(opportunity, winners),
         no_fill=None,
+        alternatives=_alternatives(cleared.candidates, rate),
         incumbent_value=None if incumbent_value is None else rate(incumbent_value),
     )
 
@@ -245,6 +247,30 @@ def _clear_layouts(
         for limit, payment, floor in zip(best.limits, payments, floors, strict=True)
     )
     return _Cleared(best=best, payments=payments, candidates=candidates)
+
+
+ALTERNATIVES_SHOWN = 4
+
+
+def _alternatives(
+    candidates: tuple[_Candidate, ...], rate: Callable[[Decimal], MoneyRate]
+) -> tuple[BundleOption, ...]:
+    """The best baskets, each set of brands once (its best layout), best first."""
+    seen: set[frozenset[CampaignId]] = set()
+    options: list[BundleOption] = []
+    for candidate in candidates:  # already sorted best first
+        if candidate.ids in seen:
+            continue
+        seen.add(candidate.ids)
+        options.append(
+            BundleOption(
+                campaign_ids=tuple(member.campaign_id for member in candidate.members),
+                value=rate(candidate.value),
+            )
+        )
+        if len(options) == ALTERNATIVES_SHOWN:
+            break
+    return tuple(options)
 
 
 def _candidates(

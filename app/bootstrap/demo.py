@@ -26,6 +26,7 @@ from app.contract.messages import (
     ConsoleBook,
     ConsoleDegradation,
     ConsoleLatency,
+    ConsoleNext,
     ConsoleReceipt,
     ConsoleRedemption,
     CopySourceKind,
@@ -772,6 +773,8 @@ def register_demo(
             schedule_release(outcome.hold_token, decision, outcome.not_before)
         latest_console = console_for(decision, creative_id=None, swap=swap)
         hub.broadcast_console_threadsafe(*latest_console)
+        if outcome.hold_token is not None and outcome.not_before is not None:
+            preview_next(decision, outcome.not_before)  # after its decision, in order
         return None
 
     def reauction(trigger: Trigger, *, out_of_budget: frozenset[CampaignId] = frozenset()) -> None:
@@ -973,6 +976,33 @@ def register_demo(
                 reauction(Trigger.BUDGET_CHANGED, out_of_budget=short)
 
         scheduler(float(MAX_PLAY_SECONDS), renew)
+
+    def preview_next(decision: _Decision, not_before: datetime) -> None:
+        """Station consoles see the held creative before it airs. Caller holds the lock.
+
+        Composed like publish() would (memoized, no network) but without its side
+        effects: no redemption code, QR, voice or budget hold until it really airs.
+        """
+        if not hub.has_station_consoles():
+            return
+        result = decision.result
+        brief = brief_for(decision.moment, result) if result.winners else None
+        spec = house_spec
+        if brief is not None:
+            variant = hook_lab.variant_for(brief.signature(), studio.hook_count(brief))
+            composed = studio.compose(brief, variant=variant)
+            if composed.score.verdict.passed:
+                spec = render_spec(brief, composed.draft, kits_by_id)
+        hub.broadcast_station_threadsafe(
+            ConsoleNext(
+                screen_id=wire_screen_id,
+                auction_id=decision.auction_id
+                if result.winners and spec is not house_spec
+                else None,
+                spec=spec,
+                not_before=not_before,
+            )
+        )
 
     def schedule_release(token: int, decision: _Decision, not_before: datetime) -> None:
         delay = max(0.0, (not_before - clock.now_utc()).total_seconds())
