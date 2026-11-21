@@ -1,1 +1,3 @@
-Put your project description in markdown here. It will render under your project voting page. See as reference [Platanus Hack 26: Buenos Aires voting page](https://hack.platan.us/26-ar/vote).
+**Las pantallas muestran anuncios. ¿Y si supieran qué publicidad mostrarle a cada persona?**
+
+En **ADverse** creamos **Agentic Ads for the Physical World**: agentes inteligentes que perciben el entorno de forma anónima y adaptan la publicidad en tiempo real. Así, cada pantalla reúne marcas complementarias y muestra ofertas relevantes para las personas que tiene enfrente.
