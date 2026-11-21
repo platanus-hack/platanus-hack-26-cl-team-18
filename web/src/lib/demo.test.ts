@@ -20,6 +20,9 @@ describe("demo surface routing", () => {
     it("sends the key only from demo pages", () => {
         expect(demoHeaders("/demo/k3y/advertiser")).toEqual({ "X-Demo-Key": "k3y" });
         expect(demoHeaders("/console")).toEqual({});
+        window.localStorage.setItem("team18.demoKey", "remembered");
+        expect(demoHeaders("/")).toEqual({ "X-Demo-Key": "remembered" });
+        window.localStorage.clear();
     });
 
     it("builds links that keep the screen query", () => {

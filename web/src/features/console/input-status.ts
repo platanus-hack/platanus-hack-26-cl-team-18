@@ -22,28 +22,10 @@ export const InputHealthSchema = z.object({
     ),
 });
 
-export function inputLabels(health: z.infer<typeof InputHealthSchema>, screen: string) {
-    const input = health.inputs[screen];
-    const count = input?.last_keyterm_count;
-    const received =
-        count === null || count === undefined
-            ? "Voz recibida"
-            : count === 0
-              ? "Voz recibida · sin términos reconocidos"
-              : `Voz recibida · ${count} ${count === 1 ? "término reconocido" : "términos reconocidos"}`;
-    return {
-        camera: input?.camera_recent ? "Cámara recibiendo datos" : "Cámara sin datos recientes",
-        speech: !input?.speech_enabled
-            ? "Voz deshabilitada"
-            : input.speech_recent
-              ? received
-              : "Voz habilitada · esperando frase",
-        player: input?.player_connected ? "Pantalla conectada" : "Pantalla desconectada",
-    };
-}
+export type InputHealth = z.infer<typeof InputHealthSchema>;
 
 /** What "ad generation" means on this station: AI only where keys exist, else stock copy. */
-export function generationLabel(health: z.infer<typeof InputHealthSchema>): {
+export function generationLabel(health: InputHealth): {
     label: string;
     ai: boolean;
 } {

@@ -106,7 +106,7 @@ def test_console_explains_the_staged_basket_and_replays_latest_decision(tmp_path
         bids_by_id = {bid.campaign_id: bid.brand_name for bid in auction.bids}
         assert [
             (bids_by_id[item.campaign_id], item.reason, item.detail) for item in auction.exclusions
-        ][:1] == [("Rayo", "competitor", "Rayo: same category as Voltio")]
+        ][:1] == [("Rayo", "competitor", "Rayo: misma categoría que Voltio")]
         # Other valued bidders in the moment lose with an honest reason too.
         assert all(item.reason for item in auction.exclusions)
 

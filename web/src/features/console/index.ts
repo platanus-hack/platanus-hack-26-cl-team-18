@@ -1,5 +1,6 @@
 export {
     consoleReducer,
+    emptyScreen,
     initialConsoleState,
     type ConsoleState,
     type ScreenView,

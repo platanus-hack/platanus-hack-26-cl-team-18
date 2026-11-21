@@ -4,6 +4,7 @@ import {
     AudiencePanel,
     CONNECTION,
     DEGRADATION,
+    emptyScreen,
     LatencyPanel,
     type ScreenView,
 } from "@/features/console";
@@ -36,17 +37,7 @@ const TIMELINE_WINDOW_MS = 20_000;
 // dev.keyframe carries a base64 JPEG; the default 1 MB cap would drop it.
 const MAX_FRAME_BYTES = 3_000_000;
 
-const emptyConsoleScreen: ScreenView = {
-    moment: null,
-    auction: null,
-    lastTrace: null,
-    glassToGlassMs: [],
-    degradation: [],
-    lastCreativeId: null,
-    book: null,
-    receipts: [],
-    redemptions: [],
-};
+const emptyConsoleScreen: ScreenView = emptyScreen;
 
 export function screenFromLocation(search: string): string {
     const id = new URLSearchParams(search).get("screen") ?? "demo-01";

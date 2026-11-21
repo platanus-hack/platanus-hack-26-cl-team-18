@@ -230,3 +230,41 @@ def test_a_connected_player_in_standby_is_reported_connected(standby: Station) -
     inputs = standby.client.get("/health").json()["inputs"]
     assert inputs["demo-01"]["player_connected"] is True
     assert inputs["demo-01"]["camera_recent"] is False
+
+
+def test_a_station_console_sees_what_airs_and_the_book_even_in_standby(tmp_path: Path) -> None:
+    container = build_container(
+        AppSettings(_env_file=None, app_env="test", media_dir=tmp_path, live_starts_on=False)
+    )
+    with (
+        TestClient(create_app(container=container)) as client,
+        client.websocket_connect("/ws/console?live=1") as station,
+    ):
+        seen: dict[str, object] = {}
+        while not {"creative.ready", "console.book"} <= seen.keys():
+            message = CONSOLE_OUTBOUND.validate_python(station.receive_json())
+            seen[message.type] = message
+        house = seen["creative.ready"]
+        assert isinstance(house, CreativeReady) and paid_brands(house) == ()
+        assert {line.brand_name for line in seen["console.book"].lines}  # type: ignore[attr-defined]
+
+        client.post("/api/live", json={"screen_id": "demo-01", "live": True})
+        with client.websocket_connect("/ws/agent") as agent:
+            agent.send_text(snapshot_for("fitness", 1, datetime.now(UTC)).model_dump_json())
+            while True:
+                message = CONSOLE_OUTBOUND.validate_python(station.receive_json())
+                if isinstance(message, CreativeReady) and paid_brands(message):
+                    break
+        assert paid_brands(message) == ("Voltio",)
+
+
+def test_a_plain_console_stream_is_unchanged(tmp_path: Path) -> None:
+    container = build_container(AppSettings(_env_file=None, app_env="test", media_dir=tmp_path))
+    with (
+        TestClient(create_app(container=container)) as client,
+        client.websocket_connect("/ws/console") as console,
+        client.websocket_connect("/ws/agent") as agent,
+    ):
+        agent.send_text(snapshot_for("fitness", 1, datetime.now(UTC)).model_dump_json())
+        kinds = [console.receive_json()["type"] for _ in range(3)]
+        assert kinds == ["console.moment", "console.auction", "console.latency"]

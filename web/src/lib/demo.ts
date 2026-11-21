@@ -37,9 +37,9 @@ export function demoHref(key: string, page: DemoPage | null, query = ""): string
     return `/demo/${encodeURIComponent(key)}${page ? `/${page}` : ""}${query}`;
 }
 
-/** Headers for a demo API call (empty off the demo surface: the backend will 404). */
+/** Headers for a demo API call: the page's key, else the one this browser remembered. */
 export function demoHeaders(pathname?: string): Record<string, string> {
-    const key = demoKey(pathname);
+    const key = demoKey(pathname) ?? rememberedDemoKey();
     return key === null ? {} : { "X-Demo-Key": key };
 }
 

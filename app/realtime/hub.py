@@ -202,6 +202,26 @@ class ConnectionHub:
             return
         await self._fan_out(recipients, tuple(message.model_dump_json() for message in messages))
 
+    def is_station_console(self, sink: Sink) -> bool:
+        """A console that subscribed with ?live=1 (the station page), not a raw reader."""
+        return sink in self._consoles and sink in self._live
+
+    async def broadcast_station(
+        self, *messages: ConsoleMessage | LiveStatus, sink: Sink | None = None
+    ) -> None:
+        """Extras for station consoles (?live=1): what airs, the book before any decision.
+
+        Consumers that read the console stream strictly in order never see them.
+        """
+        station = (self._consoles & self._live) | self._devs
+        recipients = station if sink is None else station & {sink}
+        await self._fan_out(recipients, tuple(message.model_dump_json() for message in messages))
+
+    def broadcast_station_threadsafe(
+        self, *messages: ConsoleMessage | LiveStatus, sink: Sink | None = None
+    ) -> None:
+        self._schedule(self.broadcast_station(*messages, sink=sink))
+
     async def broadcast_live(self, *statuses: LiveStatus, sink: Sink | None = None) -> None:
         """`live.status` to the consoles that subscribed with ?live=1."""
         live_consoles = (self._consoles & self._live) | self._devs

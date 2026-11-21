@@ -212,3 +212,70 @@ it("includes sensing confirmation in the display metric and waterfall", () => {
     expect(glassToGlassMs(sensed)).toBe(1800);
     expect(traceSteps(sensed)[1]?.deltaMs).toBe(700);
 });
+
+describe("what airs and the timeline", () => {
+    const spec = {
+        layout_id: "solo",
+        slots: [
+            {
+                brand_id: "voltio",
+                brand_name: "Voltio",
+                logo_url: "/v.svg",
+                copy_text: "Recarga",
+                accent_color: "#c6f26b",
+                hero_image_url: null,
+            },
+        ],
+        duration_ms: 12000,
+        video_url: null,
+        voiceover_url: null,
+        qr_url: null,
+        stages: [],
+        offer: null,
+        angle: null,
+        copy_source: null,
+        redemption_code: null,
+        redeem_url: null,
+    };
+    const ready = (id: string, auction: string | null) =>
+        ConsoleOutboundSchema.parse({
+            type: "creative.ready",
+            v: 1,
+            screen_id: "demo-01",
+            creative_id: id,
+            auction_id: auction,
+            spec,
+            trace,
+        });
+
+    it("keeps the creative on air and narrates it with the receive time", () => {
+        let state = consoleReducer(initialConsoleState, {
+            type: "message",
+            message: ready("c1", "a1"),
+            at: 1000,
+        });
+        const view = state.screens["demo-01"]!;
+        expect(view.onAir?.creative_id).toBe("c1");
+        expect(view.events[0]).toEqual({ at: 1000, text: "Al aire: Voltio", tone: "success" });
+        state = consoleReducer(state, { type: "message", message: ready("h", null), at: 2000 });
+        expect(state.screens["demo-01"]!.events.map((e) => e.text)).toEqual([
+            "Al aire: aviso de la casa",
+            "Al aire: Voltio",
+        ]);
+    });
+
+    it("an upgrade replaces only the ad it belongs to", () => {
+        let state = consoleReducer(initialConsoleState, {
+            type: "message",
+            message: ready("c2", "a2"),
+        });
+        const stale = ConsoleOutboundSchema.parse({
+            ...ready("c1", "a1"),
+            type: "creative.upgraded",
+            upgrade_kind: "copy",
+        });
+        state = consoleReducer(state, { type: "message", message: stale });
+        expect(state.screens["demo-01"]!.onAir?.creative_id).toBe("c2");
+        expect(state.screens["demo-01"]!.onAir?.type).toBe("creative.ready");
+    });
+});

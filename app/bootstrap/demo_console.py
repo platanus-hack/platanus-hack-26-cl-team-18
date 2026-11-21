@@ -27,10 +27,11 @@ from app.modules.audience.domain.value_objects.segment import SegmentId
 from app.modules.campaigns.domain.book import Bidder, BrandId, BrandKit, CampaignId
 from app.modules.common.domain.value_objects.money_rate import MoneyRate
 
+# Shown on the console as is (ADR 0008 D6: Spanish everywhere).
 _DETAIL = {
-    "competitor": "same category as {other}",
-    "not_partner": "not a pre-approved partner of {other}",
-    "no_basket_offer": "no approved basket offer with {other}",
+    "competitor": "misma categoría que {other}",
+    "not_partner": "no es socia aprobada de {other}",
+    "no_basket_offer": "sin oferta conjunta aprobada con {other}",
 }
 
 

@@ -906,6 +906,8 @@ def register_demo(
             swap=swap,
         )
         hub.broadcast_console_threadsafe(*latest_console)
+        # The station console mirrors what airs (its "Al aire" preview).
+        hub.broadcast_station_threadsafe(current_creative)
         hub.send_to_screen_threadsafe(current_creative)
         if hub.dev_count():
             note = None
@@ -1647,6 +1649,11 @@ def register_demo(
             # The latest decision first (consumers read it in order), then the book.
             if latest_console:
                 hub.broadcast_console_threadsafe(*latest_console, book_view(), sink=sink)
+            if hub.is_station_console(sink):
+                # What airs now, and the book even before the first decision: a station
+                # in standby still shows its brands, bids and the house ad.
+                extras = (current_creative,) if latest_console else (current_creative, book_view())
+                hub.broadcast_station_threadsafe(*extras, sink=sink)
 
     def receive_keyframe(keyframe: AudienceKeyframe, received: Received) -> None:
         # Face-blurred JPEG, in memory only (never stored or logged); tagged on the warm path.

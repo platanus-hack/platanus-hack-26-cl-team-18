@@ -5,6 +5,8 @@ import type {
     ConsoleOutbound,
     ConsoleReceipt,
     ConsoleRedemption,
+    CreativeReady,
+    CreativeUpgraded,
     DegradationFlag,
     LatencyTrace,
 } from "@/contract";
@@ -27,7 +29,19 @@ export interface ScreenView {
     readonly receipts: readonly ConsoleReceipt[];
     /** Newest first; QR/promo redemptions credited to every brand in the basket. */
     readonly redemptions: readonly ConsoleRedemption[];
+    /** What the screen airs now (a station console gets it; ?live=1). */
+    readonly onAir: CreativeReady | CreativeUpgraded | null;
+    /** Newest first: the loop narrated, one line per fact. */
+    readonly events: readonly StationEvent[];
 }
+
+export interface StationEvent {
+    readonly at: number;
+    readonly text: string;
+    readonly tone: "neutral" | "success" | "info" | "warning";
+}
+
+export const EVENT_WINDOW = 40;
 
 export const RECEIPT_WINDOW = 20;
 export const REDEMPTION_WINDOW = 10;
@@ -39,10 +53,10 @@ export interface ConsoleState {
 }
 
 export type ConsoleEvent =
-    | { readonly type: "message"; readonly message: ConsoleOutbound }
+    | { readonly type: "message"; readonly message: ConsoleOutbound; readonly at?: number }
     | { readonly type: "connection"; readonly state: ConnectionState };
 
-const emptyScreen: ScreenView = {
+export const emptyScreen: ScreenView = {
     moment: null,
     auction: null,
     lastTrace: null,
@@ -52,6 +66,8 @@ const emptyScreen: ScreenView = {
     book: null,
     receipts: [],
     redemptions: [],
+    onAir: null,
+    events: [],
 };
 
 export const initialConsoleState: ConsoleState = {
@@ -83,9 +99,60 @@ function update(
     };
 }
 
+function brandsOf(creative: CreativeReady | CreativeUpgraded): string {
+    return creative.spec.slots.map((slot) => slot.brand_name).join(" + ");
+}
+
+/** The timeline line for a message, or null when it adds nothing to read. */
+export function describe(m: ConsoleOutbound): Omit<StationEvent, "at"> | null {
+    switch (m.type) {
+        case "console.moment":
+            return {
+                text: `Momento: ${m.people} ${m.people === 1 ? "persona" : "personas"}, ${m.looking} mirando`,
+                tone: "neutral",
+            };
+        case "console.auction":
+            return m.winners.length === 0
+                ? { text: "Subasta: sin ganador", tone: "neutral" }
+                : {
+                      text: `Subasta: gana ${m.winners.map((w) => w.brand_name).join(" + ")}${m.swap === "held" ? " (espera el mínimo en pantalla)" : ""}`,
+                      tone: "info",
+                  };
+        case "creative.ready":
+            return m.auction_id === null
+                ? { text: "Al aire: aviso de la casa", tone: "neutral" }
+                : { text: `Al aire: ${brandsOf(m)}`, tone: "success" };
+        case "creative.upgraded":
+            return { text: `Mejora en vivo (${m.upgrade_kind}): ${brandsOf(m)}`, tone: "info" };
+        case "console.receipt":
+            return m.total.amount === "0"
+                ? { text: "Recibo: $0, nadie miró", tone: "neutral" }
+                : { text: `Recibo: $${m.total.amount} cobrado`, tone: "success" };
+        case "console.redemption":
+            return { text: `Canje ${m.code}: ${m.brands.join(" + ")}`, tone: "success" };
+        case "console.degradation":
+            return m.flags.length
+                ? { text: `Degradado: ${m.flags.join(", ")}`, tone: "warning" }
+                : null;
+        default:
+            return null;
+    }
+}
+
+function withEvent(view: ScreenView, m: ConsoleOutbound, at: number): ScreenView {
+    const line = describe(m);
+    return line
+        ? { ...view, events: [{ ...line, at }, ...view.events].slice(0, EVENT_WINDOW) }
+        : view;
+}
+
 export function consoleReducer(state: ConsoleState, event: ConsoleEvent): ConsoleState {
     if (event.type === "connection") return { ...state, connection: event.state };
+    const at = event.at ?? 0;
     const m = event.message;
+    if (describe(m) !== null && "screen_id" in m) {
+        state = update(state, m.screen_id, (v) => withEvent(v, m, at));
+    }
     switch (m.type) {
         case "console.moment":
             return update(state, m.screen_id, (v) => ({ ...v, moment: m }));
@@ -98,8 +165,18 @@ export function consoleReducer(state: ConsoleState, event: ConsoleEvent): Consol
         case "console.degradation":
             return update(state, m.screen_id, (v) => ({ ...v, degradation: m.flags }));
         case "creative.ready":
+            return update(state, m.screen_id, (v) => ({
+                ...v,
+                lastCreativeId: m.creative_id,
+                onAir: m,
+            }));
         case "creative.upgraded":
-            return update(state, m.screen_id, (v) => ({ ...v, lastCreativeId: m.creative_id }));
+            // An upgrade only replaces the ad it belongs to (never revives a retired one).
+            return update(state, m.screen_id, (v) => ({
+                ...v,
+                lastCreativeId: m.creative_id,
+                onAir: v.onAir?.creative_id === m.creative_id ? m : v.onAir,
+            }));
         case "console.book":
             return update(state, m.screen_id, (v) => ({ ...v, book: m }));
         case "console.receipt":
