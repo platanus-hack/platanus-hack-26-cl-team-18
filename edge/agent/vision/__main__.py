@@ -19,6 +19,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import math
 import os
 import statistics
 import time
@@ -97,6 +98,8 @@ async def run(args: argparse.Namespace) -> int:
         remote = RemoteGpuDetector(
             args.gpu_url,
             token=args.gpu_token or os.environ.get("GPU_TOKEN") or None,
+            timeout_s=args.gpu_timeout_ms / 1000,
+            connect_timeout_s=args.gpu_connect_timeout_ms / 1000,
             object_every=1 if args.record else (args.object_every or 6),
             object_interval=object_interval,
         )
@@ -195,6 +198,13 @@ async def run(args: argparse.Namespace) -> int:
     return 0
 
 
+def _positive_milliseconds(value: str) -> float:
+    number = float(value)
+    if not math.isfinite(number) or number <= 0:
+        raise argparse.ArgumentTypeError("must be positive, finite milliseconds")
+    return number
+
+
 def argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="agent.vision")
     parser.add_argument("--screen", required=True)
@@ -233,6 +243,18 @@ def argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-keyframes", action="store_true")
     parser.add_argument("--gpu-url", help="remote GPU service, e.g. wss://host/infer (ADR 0007)")
     parser.add_argument("--gpu-token", default=None, help="bearer token (default: env GPU_TOKEN)")
+    parser.add_argument(
+        "--gpu-timeout-ms",
+        type=_positive_milliseconds,
+        default=150.0,
+        help="GPU reply deadline before local fallback (default: 150 ms)",
+    )
+    parser.add_argument(
+        "--gpu-connect-timeout-ms",
+        type=_positive_milliseconds,
+        default=500.0,
+        help="GPU connection deadline before local fallback (default: 500 ms)",
+    )
     return parser
 
 

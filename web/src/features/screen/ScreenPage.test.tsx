@@ -86,6 +86,7 @@ function message(
             voiceover_url: voice,
         },
         trace: {
+            perception: null,
             candidate_at: null,
             detected_at: null,
             published_at: null,

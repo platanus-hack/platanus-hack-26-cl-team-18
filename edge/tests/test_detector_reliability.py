@@ -1,5 +1,6 @@
 """Failure boundaries that must keep live perception accurate and available."""
 
+import json
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
@@ -8,7 +9,7 @@ import pytest
 
 from agent.vision.adapters import UltralyticsDetector
 from agent.vision.detector import CompositeDetector, FailoverDetector
-from agent.vision.remote import RemoteGpuDetector
+from agent.vision.remote import HEADER_PREFIX, RemoteGpuDetector
 from agent.vision.types import FrameDetections
 
 T0 = datetime(2026, 11, 21, tzinfo=UTC)
@@ -17,17 +18,19 @@ T0 = datetime(2026, 11, 21, tzinfo=UTC)
 def remote(monkeypatch, replies):
     detector = RemoteGpuDetector("ws://unused", encoder=lambda f: (b"jpeg", f.shape[1], f.shape[0]))
     answers = iter(replies)
+    request = {}
 
     class Socket:
         def send(self, packet):
-            pass
+            length = HEADER_PREFIX.unpack(packet[:4])[0]
+            request.update(json.loads(packet[4 : 4 + length]))
 
     monkeypatch.setattr(detector, "_connection", lambda: Socket())
     monkeypatch.setattr(detector, "_drain", lambda _: None)
 
     def reply(_socket, seq, _deadline):
         detector._in_flight.pop(seq)
-        return {"seq": seq, **next(answers)}
+        return {**request, **next(answers)}
 
     monkeypatch.setattr(detector, "_await", reply)
     return detector
@@ -47,6 +50,9 @@ def remote(monkeypatch, replies):
             "objects": [{"label": "cup", "box": [0, 0, float("inf"), 10], "confidence": 1}],
         },
         {"persons": [], "objects": [], "server_ms": "invalid"},
+        {"persons": [], "objects": [], "width": 999},
+        {"persons": [], "objects": [], "seq": True},
+        {"persons": [], "objects": [], "measured_at": "2026-11-20T00:00:00+00:00"},
     ],
 )
 def test_malformed_remote_reply_uses_local_fallback(monkeypatch, payload):
@@ -57,6 +63,14 @@ def test_malformed_remote_reply_uses_local_fallback(monkeypatch, payload):
     failover = FailoverDetector(detector, local)
     result = failover.detect(np.zeros((20, 20, 3)), T0)
     assert result.detector == failover.active == "local"
+
+
+@pytest.mark.parametrize("seq", [True, 1.0, "1"])
+def test_non_integer_reply_sequence_never_settles_a_frame(seq):
+    detector = RemoteGpuDetector("ws://unused", encoder=lambda _: (b"jpeg", 10, 10))
+    detector._in_flight[1] = 0.0
+    detector._settle(json.dumps({"seq": seq}))
+    assert detector.in_flight == 1
 
 
 def test_remote_rescans_objects_when_resolution_changes(monkeypatch):

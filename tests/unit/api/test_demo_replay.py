@@ -11,6 +11,7 @@ from app.contract.messages import (
     ConsoleLatency,
     ConsoleMoment,
     CreativeReady,
+    PerceptionTiming,
 )
 from app.main import create_app
 from app.modules.common.infrastructure.clock.fixed_clock import FixedClock
@@ -69,11 +70,18 @@ def test_console_explains_the_staged_basket_and_replays_latest_decision(tmp_path
         client.websocket_connect("/ws/agent") as agent,
     ):
         player.receive_json()
-        agent.send_text(snapshot_for("co-brand", 1, clock.now_utc()).model_dump_json())
+        timing = PerceptionTiming(detector="local", inference_ms=430, primary_attempt_ms=400)
+        snapshot = snapshot_for("co-brand", 1, clock.now_utc()).model_copy(
+            update={"perception": timing}
+        )
+        agent.send_text(snapshot.model_dump_json())
         creative = CreativeReady.model_validate(player.receive_json())
         moment = ConsoleMoment.model_validate(console.receive_json())
         auction = ConsoleAuction.model_validate(console.receive_json())
         latency = ConsoleLatency.model_validate(console.receive_json())
+        assert all(
+            message.trace.perception == timing for message in (creative, moment, auction, latency)
+        )
 
         assert "$5.990" in creative.spec.slots[0].copy_text  # duo tier: 2 looking
         assert auction.auction_id == creative.auction_id

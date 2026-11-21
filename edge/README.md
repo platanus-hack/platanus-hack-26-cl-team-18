@@ -121,6 +121,14 @@ The frame path, in `agent/vision/` (ADR 0004, 0007, 0008):
   WebSocket protocol, with at most two frames in flight and invalid replies
   triggering local fallback. Use `--gpu-url wss://host/infer` and `GPU_TOKEN`;
   the local detector is warmed before capture begins (ADR 0007).
+  Live GPU replies have a 150 ms deadline (`--gpu-timeout-ms`) and connections
+  a 500 ms deadline (`--gpu-connect-timeout-ms`). Both are configurable positive
+  millisecond values. Replies must echo the captured frame's sequence, timestamp
+  and JPEG dimensions; a mismatched reply cannot update tracking or safety.
+  Each snapshot and decision trace carries optional `perception` timings. The
+  console shows the result's detector, total inference time, GPU round trip
+  and time spent attempting the GPU before fallback. Total inference includes
+  failed calls and slow recovery probes, as well as prop-marker detection.
 - **Geometry:** `geometry.py`. Looking = nose and both eyes visible with the
   nose centered; distance band from shoulder width; the blur box from face
   keypoints (top of the person box when keypoints are missing, so no face is

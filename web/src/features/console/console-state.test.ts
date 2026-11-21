@@ -11,6 +11,7 @@ import {
 } from "./metrics";
 
 const trace = {
+    perception: null,
     candidate_at: null,
     detected_at: null,
     published_at: null,

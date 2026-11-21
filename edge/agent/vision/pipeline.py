@@ -20,7 +20,7 @@ from typing import Any, Protocol
 
 from pydantic import BaseModel
 
-from agent.contract import AudienceKeyframe, AudienceSnapshot
+from agent.contract import AudienceKeyframe, AudienceSnapshot, PerceptionTiming
 from agent.sound.sources import SoundSceneSource
 from agent.vision.detector import Detector, Frame
 from agent.vision.geometry import head_box
@@ -121,7 +121,16 @@ class VisionPipeline:
         self.stats.detector = detections.detector
         if snapshot is not None:
             snapshot = snapshot.model_copy(
-                update={"detected_at": detected_at, "published_at": datetime.now(UTC)}
+                update={
+                    "detected_at": detected_at,
+                    "published_at": datetime.now(UTC),
+                    "perception": PerceptionTiming(
+                        detector=detections.detector,
+                        inference_ms=detections.inference_ms,
+                        round_trip_ms=detections.extras.get("round_trip_ms"),
+                        primary_attempt_ms=detections.extras.get("primary_attempt_ms"),
+                    ),
+                }
             )
             self._link.send(snapshot)
             self.stats.snapshots += 1

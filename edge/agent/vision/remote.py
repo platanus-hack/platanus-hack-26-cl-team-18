@@ -93,11 +93,18 @@ class RemoteGpuDetector:
         stale_after_s: float | None = None,
         name: str = "remote",
     ) -> None:
+        if max_in_flight not in (1, 2):
+            raise ValueError("max_in_flight must be 1 or 2")
+        for label, value in (("timeout_s", timeout_s), ("connect_timeout_s", connect_timeout_s)):
+            if not math.isfinite(value) or value <= 0:
+                raise ValueError(f"{label} must be positive and finite")
+        if stale_after_s is not None and (not math.isfinite(stale_after_s) or stale_after_s <= 0):
+            raise ValueError("stale_after_s must be positive and finite")
         self._url = url
         self._token = token
         self._timeout_s = timeout_s
         self._connect_timeout_s = connect_timeout_s
-        self._max_in_flight = max(1, max_in_flight)
+        self._max_in_flight = max_in_flight
         self._object_every = max(1, object_every)
         self._object_interval = object_interval
         self._objects_at: datetime | None = None
@@ -170,6 +177,9 @@ class RemoteGpuDetector:
 
         sx, sy = width / sent_w, height / sent_h
         try:
+            for field in ("seq", "measured_at", "width", "height"):
+                if type(reply[field]) is not type(header[field]) or reply[field] != header[field]:
+                    raise ValueError("reply does not match the captured frame")
             if not isinstance(reply["persons"], list) or not isinstance(reply["objects"], list):
                 raise ValueError("detection lists required")
             persons = tuple(_person(p, sx, sy) for p in reply["persons"])
@@ -276,7 +286,7 @@ class RemoteGpuDetector:
                 self._reset()
                 raise DetectorUnavailable(f"gpu service disconnected: {exc}") from exc
             reply = self._settle(raw)
-            if reply.get("seq") != seq:
+            if type(reply.get("seq")) is not int or reply["seq"] != seq:
                 self.late += 1
                 continue
             if "error" in reply:
@@ -291,7 +301,7 @@ class RemoteGpuDetector:
         if not isinstance(reply, dict):
             return {}
         seq = reply.get("seq")
-        if isinstance(seq, int):
+        if type(seq) is int:
             self._in_flight.pop(seq, None)
         return reply
 

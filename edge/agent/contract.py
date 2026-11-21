@@ -23,7 +23,15 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Annotated, Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, TypeAdapter, model_validator
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    FiniteFloat,
+    TypeAdapter,
+    model_validator,
+)
 
 CONTRACT_VERSION = 1
 
@@ -118,6 +126,15 @@ class MinorLikely(_Model):
     confidence: Score
 
 
+class PerceptionTiming(_Model):
+    """Sensor timings only: no images, provider payloads or per-person observations."""
+
+    detector: Annotated[str, Field(min_length=1, max_length=64)]
+    inference_ms: Annotated[FiniteFloat, Field(ge=0)]
+    round_trip_ms: Annotated[FiniteFloat, Field(ge=0)] | None = None
+    primary_attempt_ms: Annotated[FiniteFloat, Field(ge=0)] | None = None
+
+
 class LatencyTrace(_Model):
     """Every decision carries one; add a field when you add a step to the loop."""
 
@@ -137,6 +154,7 @@ class LatencyTrace(_Model):
     # Minimum ad seconds: the earliest instant this decision may replace what plays.
     # The intentional hold is excluded from glass-to-glass latency.
     swap_not_before: AwareDatetime | None = None
+    perception: PerceptionTiming | None = None
 
 
 class CreativeSlot(_Model):
@@ -212,6 +230,7 @@ class AudienceSnapshot(_Message):
     objects: list[DetectedObject] = Field(default_factory=list, max_length=64)
     sound_scene: list[SoundScene] = Field(default_factory=list, max_length=16)
     minor_likely: MinorLikely
+    perception: PerceptionTiming | None = None
 
     @model_validator(mode="after")
     def _looking_within_people(self) -> AudienceSnapshot:

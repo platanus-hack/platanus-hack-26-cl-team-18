@@ -282,6 +282,7 @@ function LatencyPanel({ view }: { view: ScreenView }) {
     const p95 = percentile(view.glassToGlassMs, 95);
     const steps = view.lastTrace ? traceSteps(view.lastTrace) : [];
     const decisionMs = view.lastTrace ? serverDecisionMs(view.lastTrace) : null;
+    const perception = view.lastTrace?.perception;
     return (
         <Panel
             title="Latency"
@@ -293,6 +294,26 @@ function LatencyPanel({ view }: { view: ScreenView }) {
                 )
             }
         >
+            {perception && (
+                <dl className="mb-3 grid grid-cols-2 gap-x-6 gap-y-1 text-metadata tabular-nums">
+                    <dt className="text-muted">Detector</dt>
+                    <dd>{perception.detector}</dd>
+                    <dt className="text-muted">Inference + fallback</dt>
+                    <dd>{fmtMs(perception.inference_ms)}</dd>
+                    {perception.round_trip_ms !== null && (
+                        <>
+                            <dt className="text-muted">GPU round trip</dt>
+                            <dd>{fmtMs(perception.round_trip_ms)}</dd>
+                        </>
+                    )}
+                    {perception.primary_attempt_ms !== null && (
+                        <>
+                            <dt className="text-muted">GPU attempt before fallback</dt>
+                            <dd>{fmtMs(perception.primary_attempt_ms)}</dd>
+                        </>
+                    )}
+                </dl>
+            )}
             {view.glassToGlassMs.length > 0 && (
                 <div className="flex gap-6">
                     <Kpi

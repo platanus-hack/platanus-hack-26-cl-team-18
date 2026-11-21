@@ -20,6 +20,7 @@ from app.contract.messages import (
     LatencyTrace,
     MinorLikely,
     MoneyDTO,
+    PerceptionTiming,
     PlaybackReport,
 )
 
@@ -48,6 +49,16 @@ def test_agent_union_parses_a_snapshot_by_its_type() -> None:
     msg = AGENT_INBOUND.validate_json(json.dumps(snapshot()))
     assert isinstance(msg, AudienceSnapshot)
     assert msg.measured_at == T0
+    assert msg.perception is None  # older agents remain compatible
+
+
+@pytest.mark.parametrize("value", [-1, float("nan"), float("inf")])
+def test_perception_timing_rejects_invalid_durations(value: float) -> None:
+    for field in ("inference_ms", "round_trip_ms", "primary_attempt_ms"):
+        with pytest.raises(ValidationError):
+            PerceptionTiming.model_validate(
+                {"detector": "remote", "inference_ms": 10, field: value}
+            )
 
 
 @pytest.mark.parametrize(

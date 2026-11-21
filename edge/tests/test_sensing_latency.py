@@ -307,11 +307,13 @@ def test_remote_object_requests_follow_capture_deadlines_without_frame_count_dep
     from agent.vision.remote import HEADER_PREFIX, RemoteGpuDetector
 
     requested = []
+    request = {}
 
     class Socket:
         def send(self, packet):
             length = HEADER_PREFIX.unpack(packet[:4])[0]
-            requested.append(json.loads(packet[4 : 4 + length])["objects"])
+            request.update(json.loads(packet[4 : 4 + length]))
+            requested.append(request["objects"])
 
     detector = RemoteGpuDetector(
         "ws://unused",
@@ -324,7 +326,7 @@ def test_remote_object_requests_follow_capture_deadlines_without_frame_count_dep
 
     def reply(_socket, seq, _deadline):
         detector._in_flight.pop(seq)
-        return {"seq": seq, "persons": [], "objects": []}
+        return {**request, "persons": [], "objects": []}
 
     monkeypatch.setattr(detector, "_await", reply)
     for t in [0, 50, 190, 200, 350, 450]:

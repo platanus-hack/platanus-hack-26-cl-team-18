@@ -42,6 +42,15 @@ export const MinorLikelySchema = z.strictObject({
 });
 export type MinorLikely = z.infer<typeof MinorLikelySchema>;
 
+// Sensor timings only: no images, provider payloads or per-person observations.
+export const PerceptionTimingSchema = z.strictObject({
+  detector: z.string().min(1).max(64),
+  inference_ms: z.number().gte(0),
+  round_trip_ms: z.number().gte(0).nullable(),
+  primary_attempt_ms: z.number().gte(0).nullable(),
+});
+export type PerceptionTiming = z.infer<typeof PerceptionTimingSchema>;
+
 export const SoundSceneSchema = z.strictObject({
   label: z.string().min(1).max(64),
   score: z.number().gte(0.0).lte(1.0),
@@ -74,6 +83,7 @@ export const AudienceSnapshotSchema = z.strictObject({
   objects: z.array(DetectedObjectSchema).max(64),
   sound_scene: z.array(SoundSceneSchema).max(16),
   minor_likely: MinorLikelySchema,
+  perception: PerceptionTimingSchema.nullable(),
 });
 export type AudienceSnapshot = z.infer<typeof AudienceSnapshotSchema>;
 
@@ -254,6 +264,7 @@ export const LatencyTraceSchema = z.strictObject({
   displayed_at: z.iso.datetime({ offset: true }).nullable(),
   upgraded_at: z.iso.datetime({ offset: true }).nullable(),
   swap_not_before: z.iso.datetime({ offset: true }).nullable(),
+  perception: PerceptionTimingSchema.nullable(),
 });
 export type LatencyTrace = z.infer<typeof LatencyTraceSchema>;
 

@@ -16,10 +16,11 @@ and the console shows it.
 from __future__ import annotations
 
 import logging
+import math
 import time
 from collections import deque
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any, Protocol
 
@@ -47,6 +48,14 @@ class FailoverConfig:
     min_samples: int = 5
     recovery_s: float = 10.0  # wait this long on the secondary before probing the primary
 
+    def __post_init__(self) -> None:
+        if not math.isfinite(self.budget_ms) or self.budget_ms <= 0:
+            raise ValueError("budget_ms must be positive and finite")
+        if not 1 <= self.min_samples <= self.window:
+            raise ValueError("require 1 <= min_samples <= window")
+        if not math.isfinite(self.recovery_s) or self.recovery_s < 0:
+            raise ValueError("recovery_s must be non-negative and finite")
+
 
 class FailoverDetector:
     def __init__(
@@ -72,15 +81,27 @@ class FailoverDetector:
         return self._primary.name if self._on_primary else self._secondary.name
 
     def detect(self, frame: Frame, measured_at: datetime) -> FrameDetections:
+        started = self._now()
+        attempted_primary = False
         if not self._on_primary and self._now() - self._failed_over_at >= self._config.recovery_s:
+            attempted_primary = True
             probe = self._try_primary(frame, measured_at)
             if probe is not None:
                 return probe
         if self._on_primary:
+            attempted_primary = True
             result = self._try_primary(frame, measured_at)
             if result is not None:
                 return result
-        return self._secondary.detect(frame, measured_at)
+        primary_ms = (self._now() - started) * 1000
+        result = self._secondary.detect(frame, measured_at)
+        if attempted_primary:
+            return replace(
+                result,
+                inference_ms=max(result.inference_ms + primary_ms, (self._now() - started) * 1000),
+                extras={**result.extras, "primary_attempt_ms": primary_ms},
+            )
+        return result
 
     def _try_primary(self, frame: Frame, measured_at: datetime) -> FrameDetections | None:
         started = self._now()
@@ -142,7 +163,7 @@ class CompositeDetector:
             persons=result.persons,
             objects=result.objects,
             markers=found.markers,
-            detector=self.active,
+            detector=result.detector,
             inference_ms=result.inference_ms + found.inference_ms,
             extras=result.extras,
         )
