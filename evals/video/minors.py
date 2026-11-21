@@ -8,7 +8,7 @@ VLM as the second line; a false flag blocks beer for adults. Both are measured h
 the pose heuristic (edge/agent/vision/minor.py) is never retuned blind:
 
 * minor_sample_recall: share of agent snapshots inside child windows that flag a minor
-* minor_windows_missed: child windows with no flagged snapshot at all
+* minor_windows_unflagged: child windows with no flagged snapshot at all
 * minor_false_flag_rate: share of snapshots inside adult-only windows that flag one
 
 All three are ratchets (evals/video/minor_baseline.json): today's recall is weak on
@@ -68,7 +68,7 @@ def score(labels: dict[str, list[dict[str, Any]]]) -> tuple[dict[str, Any], list
             )
     metrics = {
         "minor_sample_recall": child_hits / child_total if child_total else None,
-        "minor_windows_missed": missed,
+        "minor_windows_unflagged": missed,
         "minor_windows_labelled": windows,
         "minor_false_flag_rate": adult_flags / adult_total if adult_total else None,
     }
@@ -91,7 +91,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"| {row['clip']} | {row['window']} | {mark} | {row['flagged']} | {row['note']} |")
     print()
     for v in verdicts:
-        print(f"{v.status:>8}  {v.label or v.name}: {v.value} (baseline {v.baseline})")
+        label = sc.SPECS[v.metric].label if v.metric in sc.SPECS else v.metric
+        print(f"{v.status:>8}  {label}: {v.value} (baseline {v.baseline})")
     if args.update_baseline:
         if any(v.status == "fail" for v in verdicts):
             print("refusing to update the baseline from a failing run", file=sys.stderr)

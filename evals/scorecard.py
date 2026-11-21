@@ -130,7 +130,9 @@ SPECS: dict[str, Spec] = {
     "video_clips": Spec("info", label="Video: clips"),
     # Minor-safety on hand-labelled real footage (evals/video/minors.py).
     "minor_sample_recall": Spec("ratchet", "higher", label="Minors: child snapshots flagged"),
-    "minor_windows_missed": Spec("ratchet", "lower", label="Minors: child windows never flagged"),
+    "minor_windows_unflagged": Spec(
+        "ratchet", "lower", label="Minors: child windows never flagged"
+    ),
     "minor_windows_labelled": Spec("info", label="Minors: child windows labelled"),
     "minor_false_flag_rate": Spec(
         "ratchet", "lower", tolerance=0.01, label="Minors: adult snapshots flagged"
