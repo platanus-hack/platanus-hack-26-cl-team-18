@@ -14,6 +14,9 @@ export const AudienceKeyframeSchema = z.strictObject({
   measured_at: z.iso.datetime({ offset: true }),
   content_type: z.literal("image/jpeg"),
   byte_length: z.number().int().gt(0).lte(2000000),
+  session_id: z.string().min(1).max(64).nullable(),
+  track_id: z.string().min(1).max(32).nullable(),
+  video_time_s: z.number().gte(0).nullable(),
 });
 export type AudienceKeyframe = z.infer<typeof AudienceKeyframeSchema>;
 
@@ -244,7 +247,86 @@ export const PlaybackReportSchema = z.strictObject({
 });
 export type PlaybackReport = z.infer<typeof PlaybackReportSchema>;
 
-export const AgentInboundSchema = z.discriminatedUnion("type", [AudienceSnapshotSchema, AudienceKeyframeSchema, AudienceUtteranceSchema]);
+export const RecognitionAttributeSchema = z.strictObject({
+  name: z.string().min(1).max(64),
+  value: z.string().max(256),
+  source: z.enum(["vlm", "visual", "audio"]),
+  observed_at_s: z.number().gte(0),
+  evidence: z.string().max(500),
+  uncertainty: z.enum(["low", "medium", "high", "unknown"]),
+  model: z.string().max(128),
+  associated_item: z.string().max(128),
+  crop_ref: z.string().max(128),
+});
+export type RecognitionAttribute = z.infer<typeof RecognitionAttributeSchema>;
+
+export const RecognitionAudioEventSchema = z.strictObject({
+  label: z.string().min(1).max(64),
+  observed_at_s: z.number().gte(0),
+  confidence: z.number().gte(0.0).lte(1.0),
+  source: z.string().min(1).max(64),
+});
+export type RecognitionAudioEvent = z.infer<typeof RecognitionAudioEventSchema>;
+
+export const RecognitionDetectionSchema = z.strictObject({
+  label: z.string().min(1).max(64),
+  confidence: z.number().gte(0.0).lte(1.0),
+  box: z.array(z.number()).min(4).max(4),
+  track_id: z.string().min(1).max(32).nullable(),
+  observed_at_s: z.number().gte(0),
+});
+export type RecognitionDetection = z.infer<typeof RecognitionDetectionSchema>;
+
+export const RecognitionLatencySchema = z.strictObject({
+  decode_ms: z.number().gte(0),
+  detection_tracking_ms: z.number().gte(0),
+  publication_delay_ms: z.number().gte(0),
+  first_observation_ms: z.number().gte(0).nullable(),
+});
+export type RecognitionLatency = z.infer<typeof RecognitionLatencySchema>;
+
+export const RecognitionObjectSchema = z.strictObject({
+  label: z.string().min(1).max(64),
+  count: z.number().int().gte(1),
+  last_seen_s: z.number().gte(0),
+  currently_visible: z.boolean(),
+});
+export type RecognitionObject = z.infer<typeof RecognitionObjectSchema>;
+
+export const RecognitionPersonSchema = z.strictObject({
+  track_id: z.string().min(1).max(32),
+  first_seen_s: z.number().gte(0),
+  last_seen_s: z.number().gte(0),
+  box: z.array(z.number()).min(4).max(4),
+  confidence: z.number().gte(0.0).lte(1.0),
+  direction: z.enum(["left", "right", "stationary", "unknown"]),
+  currently_visible: z.boolean(),
+  attributes: z.array(RecognitionAttributeSchema).max(64),
+});
+export type RecognitionPerson = z.infer<typeof RecognitionPersonSchema>;
+
+// Anonymous, ephemeral recognition facts; not a classified audience moment.
+export const RecognitionSnapshotSchema = z.strictObject({
+  v: z.literal(1),
+  type: z.literal("recognition.snapshot"),
+  screen_id: z.string().min(1).max(64).regex(/^[A-Za-z0-9_.:-]+$/),
+  session_id: z.string().min(1).max(64),
+  session_started_at: z.iso.datetime({ offset: true }),
+  seq: z.number().int().gte(0),
+  revision: z.number().int().gte(0),
+  measured_at: z.iso.datetime({ offset: true }),
+  video_time_s: z.number().gte(0),
+  finished: z.boolean(),
+  people: z.array(RecognitionPersonSchema).max(128),
+  history: z.array(RecognitionPersonSchema).max(256),
+  detections: z.array(RecognitionDetectionSchema).max(256),
+  objects: z.array(RecognitionObjectSchema).max(128),
+  audio_events: z.array(RecognitionAudioEventSchema).max(32),
+  latency: RecognitionLatencySchema,
+});
+export type RecognitionSnapshot = z.infer<typeof RecognitionSnapshotSchema>;
+
+export const AgentInboundSchema = z.discriminatedUnion("type", [AudienceSnapshotSchema, AudienceKeyframeSchema, AudienceUtteranceSchema, RecognitionSnapshotSchema]);
 export type AgentInbound = z.infer<typeof AgentInboundSchema>;
 
 export const PlayerInboundSchema = z.discriminatedUnion("type", [PlaybackReportSchema]);
@@ -256,6 +338,6 @@ export type PlayerOutbound = z.infer<typeof PlayerOutboundSchema>;
 export const ConsoleOutboundSchema = z.discriminatedUnion("type", [ConsoleMomentSchema, ConsoleAuctionSchema, ConsoleLatencySchema, ConsoleDegradationSchema, CreativeReadySchema, CreativeUpgradedSchema, ErrorMessageSchema]);
 export type ConsoleOutbound = z.infer<typeof ConsoleOutboundSchema>;
 
-export const MESSAGE_TYPES = ["audience.snapshot", "audience.keyframe", "audience.utterance", "creative.ready", "creative.upgraded", "playback.report", "console.moment", "console.auction", "console.latency", "console.degradation", "system.error"] as const;
+export const MESSAGE_TYPES = ["audience.snapshot", "audience.keyframe", "audience.utterance", "creative.ready", "creative.upgraded", "playback.report", "console.moment", "console.auction", "console.latency", "console.degradation", "system.error", "recognition.snapshot"] as const;
 
 export type MessageType = (typeof MESSAGE_TYPES)[number];

@@ -35,12 +35,15 @@ class AudienceState:
         self.people: dict[int, Person] = {}
         self.objects: dict[str, tuple[float, int]] = {}
         self.visible_objects: dict[str, int] = {}
+        self.visible_detections: list[Detection] = []
+        self.finished = False
 
     def observe(self, timestamp: float, detections: list[Detection]) -> None:
         # A slow detector must never rewind the current scene.
         if timestamp < self.timestamp:
             return
         self.timestamp = timestamp
+        self.visible_detections = detections.copy()
         counts: Counter[str] = Counter()
         for detection in detections:
             if detection.label != "person":
@@ -67,6 +70,10 @@ class AudienceState:
         self.visible_objects = dict(counts)
         for label, count in counts.items():
             self.objects[label] = (timestamp, count)
+
+    def finish(self, timestamp: float) -> None:
+        self.observe(timestamp, [])
+        self.finished = True
 
     def enrich(
         self,
@@ -102,7 +109,7 @@ class AudienceState:
             item = asdict(person)
             item["visible_duration"] = round(person.last_seen - person.first_seen, 3)
             item["currently_visible"] = person.last_seen == self.timestamp
-            if self.timestamp - person.last_seen <= self.exit_after:
+            if not self.finished and self.timestamp - person.last_seen <= self.exit_after:
                 active.append(item)
             else:
                 history.append(item)
@@ -114,9 +121,11 @@ class AudienceState:
         return {
             "session_id": self.session_id,
             "timestamp": self.timestamp,
+            "finished": self.finished,
             "people_count": len(active),
             "people": active,
             "history": history,
+            "detections": [asdict(detection) for detection in self.visible_detections],
             "scene": {
                 "currently_visible": self.visible_objects,
                 "recently_observed": recent,

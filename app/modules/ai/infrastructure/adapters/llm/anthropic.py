@@ -19,6 +19,7 @@ path never awaits it.
 
 from __future__ import annotations
 
+import base64
 import json
 from collections.abc import Sequence
 from types import TracebackType
@@ -128,7 +129,24 @@ class AnthropicProvider(ILLMProvider):
             "model": self.model,
             "max_tokens": params.max_tokens,
             "messages": [
-                {"role": m.role.value, "content": m.content}
+                {
+                    "role": m.role.value,
+                    "content": (
+                        [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/jpeg",
+                                    "data": base64.b64encode(m.image_jpeg).decode("ascii"),
+                                },
+                            },
+                            {"type": "text", "text": m.content},
+                        ]
+                        if m.image_jpeg is not None
+                        else m.content
+                    ),
+                }
                 for m in messages
                 if m.role is not ProviderRole.SYSTEM
             ],

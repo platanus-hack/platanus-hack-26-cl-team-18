@@ -42,3 +42,13 @@ def test_rejects_evidence_from_outside_track_lifetime():
     state.enrich(1, "brand", "Nike", 0.5, "vlm", "logo", 1)
     state.enrich(2, "brand", "Nike", 1.0, "vlm", "logo", 1)
     assert state.snapshot()["people"][0]["attributes"] == {}
+
+
+def test_finish_removes_active_people_even_without_exit_timeout():
+    state = AudienceState("test")
+    state.observe(0.9, [person(1)])
+    state.finish(1.0)
+    snapshot = state.snapshot()
+    assert snapshot["finished"]
+    assert snapshot["people_count"] == 0
+    assert snapshot["history"][0]["track_id"] == 1

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Self
 
 from app.modules.ai.domain.errors import (
@@ -17,15 +17,18 @@ from app.modules.common.domain.primitives.value_object import ValueObject
 class ProviderMessage(ValueObject):
     role: ProviderRole
     content: str
+    image_jpeg: bytes | None = field(default=None, repr=False)
 
     @classmethod
-    def create(cls, role: ProviderRole | str, content: str) -> Self:
+    def create(
+        cls, role: ProviderRole | str, content: str, *, image_jpeg: bytes | None = None
+    ) -> Self:
         try:
             normalized_role = ProviderRole(role)
         except Exception as exc:
             raise InvalidProviderMessageRole(role=role) from exc
 
-        msg = cls(role=normalized_role, content=content)
+        msg = cls(role=normalized_role, content=content, image_jpeg=image_jpeg)
         msg._enforce_types()
         return msg
 
@@ -33,6 +36,12 @@ class ProviderMessage(ValueObject):
         if not isinstance(self.role, ProviderRole):
             raise InvalidProviderMessageRole(role=self.role)
         if not isinstance(self.content, str):
+            raise InvalidProviderMessageContent()
+        if self.image_jpeg is not None and (
+            self.role is not ProviderRole.USER
+            or not isinstance(self.image_jpeg, bytes)
+            or not 0 < len(self.image_jpeg) <= 2_000_000
+        ):
             raise InvalidProviderMessageContent()
 
 

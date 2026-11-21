@@ -23,12 +23,15 @@ from app.contract.messages import (
     AudienceSnapshot,
     AudienceUtterance,
     PlaybackReport,
+    RecognitionSnapshot,
 )
 from app.realtime.hub import Sink
 
 logger = logging.getLogger(__name__)
 
-Inbound = AudienceSnapshot | AudienceKeyframe | AudienceUtterance | PlaybackReport
+Inbound = (
+    AudienceSnapshot | AudienceKeyframe | AudienceUtterance | PlaybackReport | RecognitionSnapshot
+)
 
 
 @dataclass(frozen=True, slots=True)

@@ -27,6 +27,7 @@ from app.contract.messages import (
     AudienceSnapshot,
     AudienceUtterance,
     ErrorMessage,
+    RecognitionSnapshot,
 )
 from app.realtime.mailbox import ConflatingMailbox
 from app.realtime.router import Inbound, Received
@@ -36,7 +37,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _SCREEN_ID = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
-AgentMessage = AudienceSnapshot | AudienceKeyframe | AudienceUtterance
+AgentMessage = AudienceSnapshot | AudienceKeyframe | AudienceUtterance | RecognitionSnapshot
 
 
 def _container(ws: WebSocket) -> Container:
@@ -124,6 +125,16 @@ async def agent_socket(ws: WebSocket) -> None:
                 received_at = c.clock.now_utc()
                 if not gate.admit((message.type, message.screen_id), message.seq):
                     continue  # duplicate or stale: drop, never queue
+                if isinstance(message, RecognitionSnapshot):
+                    if not c.recognition.put(message, Received(received_at=received_at)):
+                        continue  # stale session or sequence, even across connections
+                    stored = c.recognition.get(message.screen_id, received_at)
+                    if stored is None or (stored[0].session_id, stored[0].seq) != (
+                        message.session_id,
+                        message.seq,
+                    ):
+                        continue
+                    message = stored[0]  # retain warm evidence in subsequent publications
                 if isinstance(message, AudienceKeyframe):
                     pending_keyframe = message  # bytes arrive in the next frame
                 elif isinstance(message, AudienceUtterance):

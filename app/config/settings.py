@@ -15,6 +15,7 @@ class AppSettings(BaseSettings):
     app_env: Literal["local", "test", "prod"] = "local"
     log_level: str = "INFO"
     demo_simulator: bool = False
+    vlm_enabled: bool = False
     # JSON list in the env, e.g. CORS_ORIGINS='["http://localhost:5173"]'
     cors_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:5173", "http://127.0.0.1:5173"]
