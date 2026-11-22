@@ -189,6 +189,9 @@ class AppSettings(BaseSettings):
     max_screen_runtimes: int = Field(default=16, ge=1, le=1000)
     # Pending agent messages per connection before the oldest is dropped.
     ws_agent_mailbox_size: int = Field(default=32, gt=0)
+    # Charges Postgres could not take (down at shutdown, overflow full), replayed at the
+    # next start (write-behind spill). Created only when needed; outside the served /media.
+    charge_spill_file: Path = Path("var/charge-spill.jsonl")
     # Local media cache (voice-overs, video loops, hero images), served at /media.
     media_dir: Path = Path("var/media")
     # Max concurrent warm calls per provider (WarmWorker); JSON object in the env.

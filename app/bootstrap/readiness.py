@@ -96,6 +96,7 @@ def records_status(container: Container) -> dict[str, object]:
             "written": writer.stats.written,
             "dropped": writer.stats.dropped,
             "rejected": writer.stats.rejected,
+            "spilled": writer.stats.spilled,
             "failures": writer.stats.failures,
             "last_error": writer.stats.last_error,
         },
