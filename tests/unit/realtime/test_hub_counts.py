@@ -171,3 +171,14 @@ def test_without_redacted_players_every_player_gets_the_same_creative() -> None:
     hub.add_player("demo-01", two)
     asyncio.run(hub.send_to_screen(_basket_creative()))
     assert one.sent == two.sent and one.sent[0]["spec"]["redemption_code"] == "AB12CD"  # type: ignore[index]
+
+
+def test_one_socket_can_serve_vision_and_speech() -> None:
+    """The /screen page (ADR 0010) says hello twice on one socket; neither role is lost."""
+    hub = ConnectionHub()
+    page = Sink()
+    hub.add_agent("demo-01", AgentRole.VISION, page)
+    hub.add_agent("demo-01", AgentRole.SPEECH, page)
+    assert hub.agent_roles("demo-01") == sorted([AgentRole.SPEECH, AgentRole.VISION])
+    assert hub.remove_agent(page) == ["demo-01"]
+    assert hub.agent_roles("demo-01") == []

@@ -107,7 +107,8 @@ class ConnectionHub:
         # Players and consoles that asked for `live.status` (?live=1), like attention.
         self._live: set[Sink] = set()
         # Perception agents that said `agent.hello`: screen -> {sink: role}.
-        self._agents: dict[str, dict[Sink, AgentRole]] = defaultdict(dict)
+        # One socket may serve several roles (the /screen page says hello as vision and speech).
+        self._agents: dict[str, dict[Sink, frozenset[AgentRole]]] = defaultdict(dict)
         self._loop: asyncio.AbstractEventLoop | None = None
         self.stats = HubStats()
         # Worker threads ask "is anyone watching?" while the event loop mutates the sets
@@ -129,7 +130,7 @@ class ConnectionHub:
         devs = len(self._devs)
         screens = tuple(sorted(self._players))
         roles = {
-            screen_id: tuple(sorted(set(sinks.values())))
+            screen_id: tuple(sorted({role for roles in sinks.values() for role in roles}))
             for screen_id, sinks in self._agents.items()
         }
         with self._counts_lock:
@@ -205,7 +206,8 @@ class ConnectionHub:
 
     def add_agent(self, screen_id: str, role: AgentRole, sink: Sink) -> None:
         self._send_states.setdefault(sink, _SendState())
-        self._agents[screen_id][sink] = role
+        current = self._agents[screen_id].get(sink, frozenset())
+        self._agents[screen_id][sink] = current | {role}
         self._recount()
 
     def remove_agent(self, sink: Sink) -> list[str]:

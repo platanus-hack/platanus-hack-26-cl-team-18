@@ -15,6 +15,7 @@ const SCRIBE_URL = "wss://api.elevenlabs.io/v1/speech-to-text/realtime";
 const SAMPLE_RATE = 16_000;
 /** ~128 ms of 16 kHz mono PCM16 per chunk (Scribe accepts 0.1–1 s). */
 const CHUNK_SAMPLES = 2_048;
+const RETRY_MS = 10_000;
 
 /** Posts each 128-frame mic block to the main thread (copied; the worklet reuses it). */
 const CAPTURE_WORKLET = `
@@ -63,6 +64,8 @@ function base64(bytes: Uint8Array): string {
 
 export class BrowserSpeech {
     private running = false;
+    /** After a failed start, wait before asking for another token (no hammering). */
+    private retryAfterMs = 0;
     private stream: MediaStream | null = null;
     private context: AudioContext | null = null;
     private socket: WebSocket | null = null;
@@ -78,7 +81,7 @@ export class BrowserSpeech {
     ) {}
 
     async start(): Promise<void> {
-        if (this.running) return;
+        if (this.running || Date.now() < this.retryAfterMs) return;
         this.running = true;
         try {
             const session = await this.fetchSession();
@@ -95,6 +98,7 @@ export class BrowserSpeech {
             await this.openMic(this.stream);
         } catch (error) {
             console.warn(`[sensor] speech unavailable: ${String(error)}`);
+            this.retryAfterMs = Date.now() + RETRY_MS;
             this.running = false;
             this.release();
         }

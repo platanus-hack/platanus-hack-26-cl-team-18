@@ -22,12 +22,25 @@ export function sensingEnabled(search: string = window.location.search): boolean
     return new URLSearchParams(search).get("sense") !== "0";
 }
 
+/** The mic stays open this long after the camera last saw someone. */
+export const SPEECH_LINGER_MS = 20_000;
+
+/**
+ * Speech runs only while the backend says `listening` *and* someone is in front of
+ * the screen: Scribe bills session time, and an empty room has nothing to hear.
+ */
+export function speechWanted(listening: boolean, lastPeopleAtMs: number | null, nowMs: number) {
+    return listening && lastPeopleAtMs !== null && nowMs - lastPeopleAtMs <= SPEECH_LINGER_MS;
+}
+
 export class ScreenSensor {
     private readonly socket: TypedSocket<AgentOutbound, AgentInbound>;
     private readonly vision: BrowserVision;
     private readonly speech: BrowserSpeech;
-    private seq = { snapshot: 0, utterance: 0, hello: 0 };
+    private seq = { snapshot: 0, utterance: 0, hello: 0, perception: 0 };
     private open = false;
+    private listening = false;
+    private lastPeopleAtMs: number | null = null;
 
     constructor(
         private readonly screenId: string,
@@ -48,15 +61,28 @@ export class ScreenSensor {
                 if (this.open && !wasOpen) this.hello();
             },
         });
-        this.vision = new BrowserVision((facts) => {
-            this.socket.send({
-                v: 1,
-                type: "audience.snapshot",
-                screen_id: screenId,
-                seq: ++this.seq.snapshot,
-                ...facts,
-            });
-        });
+        this.vision = new BrowserVision(
+            (facts) => {
+                if (facts.people > 0) this.lastPeopleAtMs = Date.now();
+                this.updateSpeech();
+                this.socket.send({
+                    v: 1,
+                    type: "audience.snapshot",
+                    screen_id: screenId,
+                    seq: ++this.seq.snapshot,
+                    ...facts,
+                });
+            },
+            (facts) => {
+                this.socket.send({
+                    v: 1,
+                    type: "dev.perception",
+                    screen_id: screenId,
+                    seq: ++this.seq.perception,
+                    ...facts,
+                });
+            },
+        );
         this.speech = new BrowserSpeech(screenId, token, (facts) => {
             this.socket.send({
                 v: 1,
@@ -93,7 +119,12 @@ export class ScreenSensor {
     private apply(status: LiveStatus): void {
         if (status.sensing) void this.vision.start();
         else this.vision.stop();
-        if (status.listening) void this.speech.start();
+        this.listening = status.listening;
+        this.updateSpeech();
+    }
+
+    private updateSpeech(): void {
+        if (speechWanted(this.listening, this.lastPeopleAtMs, Date.now())) void this.speech.start();
         else this.speech.stop();
     }
 }
