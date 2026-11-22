@@ -158,8 +158,16 @@ Original 473 ml, Coca-Cola Zero Azúcar, Bilz y Pap Zero 600 ml at CCU's $1.000 
 point, Pronto's completo palta, Savory's "Alarma de helado"). Hero
 basket: Score + Juan Valdez (Red Bull bids for Score's slot). No alcohol (Ley 21.363
 bans it at gas stations); the minor-safety beat blocks the "ALTO EN" snacks instead
-(Ley 20.606). Props use `edge/props/markers-chile.json`; `scripts.demo.rehearse held`
-shows a Juan Valdez cup. Real trademarks, no affiliation (a hackathon demo). Logo provenance:
+(Ley 20.606). Props use `edge/props/markers-chile.json`: every one of the 23 brands
+has a marker, all on one A4 [sheet](../edge/props/markers-chile-sheet.svg) (print at
+100%, cut, tape one to each product). The camera alone (YOLOE labels: cup, can,
+bottle, hot dog, croissant, chips, ice cream cone, juice) airs the aisle leader's
+basket; a challenger's basket (Red Bull, Monster, Bilz, Bresler, Marco Polo, Soprole,
+Andina, Powerade) airs when its marker is held. YOLOE cannot tell a chocolate bar,
+candy, a milk carton or a sports drink apart (measured: they read as donut, cup,
+bottle), so Super 8, Ambrosoli, Colun, Soprole, Powerade and Gatorade are seen through
+their marker (`Catalog.marker_cues`): hold the marked product. `tests/unit/catalog_sweep/test_chile_campaign_scenes.py`
+plays all 41 campaigns' scenes. `scripts.demo.rehearse held` shows a Juan Valdez cup. Real trademarks, no affiliation (a hackathon demo). Logo provenance:
 [`assets/campaigns/logos/SOURCES.md`](../assets/campaigns/logos/SOURCES.md).
 
 **Imagery never repeats in a row:** each campaign has a primary photo and

@@ -208,6 +208,34 @@
       "label_es": "Equipamiento deportivo",
       "path": "Purchase Intent | Sporting Goods | Exercise and Fitness Equipment",
       "tier": "purchase_intent"
+    },
+    {
+      "id": "988",
+      "label": "Juices",
+      "label_es": "Jugos y néctares",
+      "path": "Purchase Intent | Consumer Packaged Goods | Edible | Beverages | Juices",
+      "tier": "purchase_intent"
+    },
+    {
+      "id": "998",
+      "label": "Sports Drinks",
+      "label_es": "Bebidas isotónicas",
+      "path": "Purchase Intent | Consumer Packaged Goods | Edible | Beverages | Sports/Energy Drinks | Sports Drinks",
+      "tier": "purchase_intent"
+    },
+    {
+      "id": "1076",
+      "label": "Chocolate Candy",
+      "label_es": "Chocolates",
+      "path": "Purchase Intent | Consumer Packaged Goods | Edible | General Food | Candy | Chocolate Candy",
+      "tier": "purchase_intent"
+    },
+    {
+      "id": "1140",
+      "label": "Milk",
+      "label_es": "Leche",
+      "path": "Purchase Intent | Consumer Packaged Goods | Edible | Refrigerated | Dairy | Milk",
+      "tier": "purchase_intent"
     }
   ],
   "cues": {
@@ -306,6 +334,21 @@
         "cue": "pastry",
         "segment": "1045",
         "weight": 65
+      },
+      {
+        "cue": "chips",
+        "segment": "1122",
+        "weight": 70
+      },
+      {
+        "cue": "ice cream",
+        "segment": "1011",
+        "weight": 75
+      },
+      {
+        "cue": "juice",
+        "segment": "988",
+        "weight": 70
       }
     ],
     "sound": [
@@ -428,6 +471,22 @@
       ],
       "weight": 40,
       "why": "mobile games ↔ technology"
+    },
+    {
+      "segments": [
+        "998",
+        "408"
+      ],
+      "weight": 50,
+      "why": "sports drinks ↔ fitness"
+    },
+    {
+      "segments": [
+        "998",
+        "1000"
+      ],
+      "weight": 40,
+      "why": "sports drinks ↔ bottled water: the same thirst"
     }
   ],
   "products": [
@@ -465,6 +524,15 @@
     },
     {
       "category": "ice_cream"
+    },
+    {
+      "category": "dairy"
+    },
+    {
+      "category": "juice"
+    },
+    {
+      "category": "sports_drink"
     }
   ],
   "reliability": {

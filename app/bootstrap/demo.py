@@ -178,6 +178,9 @@ MAX_PLAY_SECONDS = 15
 # a reload or a Wi-Fi drop on laptop B must not reset or undercount "Cobrado".
 SESSION_RECEIPTS = 200
 SESSION_REDEMPTIONS = 50
+# Store-shelf labels the agent emits (edge/agent/vision/vocabulary.py) for the products
+# the Chile catalog sells; demo_market() reads each at full weight as its catalog segment.
+_STORE_PROP_LABELS = frozenset({"chips", "ice cream", "juice"})
 logger = logging.getLogger(__name__)
 
 
@@ -422,25 +425,45 @@ def register_demo(
     campaign_of = {bidder.campaign_id: bidder for bidder in bidders}
     # Demo cues at full weight replace any real catalog cue with the same label, so
     # scripted scenes and the physical props stay deterministic; every other real
-    # catalog cue still applies. Held props ("product:<slug>", ADR 0008 D2) are not
-    # cues: the classifier reads them as held products that boost their partners.
+    # catalog cue still applies. Held props ("product:<slug>", ADR 0008 D2) are held
+    # products that boost their partners; only a market's marker_cues also add a segment.
     loaded = load_catalog()
-    fixture_cues = tuple(
-        CueRule(source=source, cue=cue, segment_id=segment, weight=Percentage.create(100))
-        for source, cue, segment in (
-            # Simulator fixture labels (scripts/replay_audience.py, evals/scenarios).
-            (SegmentSource.VISION, "sports ball", fitness),
-            (SegmentSource.VISION, "tap handle fixture", beer),
-            (SegmentSource.SOUND, "coffee service fixture", coffee),
-            # COCO labels the live agent emits for the demo props
-            # (edge/agent/vision/vocabulary.py); at catalog weight a single cup or
-            # bottle stays below the enter threshold and only the house ad plays.
-            (SegmentSource.VISION, "bottle", fitness),  # the gym-bottle prop
-            (SegmentSource.VISION, "cup", coffee),
-            (SegmentSource.VISION, "wine glass", beer),
-            # YOLOE-26 store labels (edge/agent/vision/vocabulary.py) COCO lacked.
-            (SegmentSource.VISION, "energy drink can", fitness),  # a Voltio/Rayo can
-            (SegmentSource.VISION, "beer bottle", beer),
+    fixture_cues = (
+        tuple(
+            CueRule(source=source, cue=cue, segment_id=segment, weight=Percentage.create(100))
+            for source, cue, segment in (
+                # Simulator fixture labels (scripts/replay_audience.py, evals/scenarios).
+                (SegmentSource.VISION, "sports ball", fitness),
+                (SegmentSource.VISION, "tap handle fixture", beer),
+                (SegmentSource.SOUND, "coffee service fixture", coffee),
+                # COCO labels the live agent emits for the demo props
+                # (edge/agent/vision/vocabulary.py); at catalog weight a single cup or
+                # bottle stays below the enter threshold and only the house ad plays.
+                (SegmentSource.VISION, "bottle", fitness),  # the gym-bottle prop
+                (SegmentSource.VISION, "cup", coffee),
+                (SegmentSource.VISION, "wine glass", beer),
+                # YOLOE-26 store labels (edge/agent/vision/vocabulary.py) COCO lacked.
+                (SegmentSource.VISION, "energy drink can", fitness),  # a Voltio/Rayo can
+                (SegmentSource.VISION, "beer bottle", beer),
+            )
+        )
+        + tuple(
+            # The rest of the store's YOLOE labels (chips, ice cream, juice) read as their
+            # own catalog segment, at full weight like the props above: a held product is
+            # the strongest signal the camera has, and every one has brands that sell it.
+            replace(rule, weight=Percentage.create(100))
+            for rule in loaded.catalog.cues
+            if rule.source is SegmentSource.VISION and rule.cue in _STORE_PROP_LABELS
+        )
+        + tuple(
+            # Markers standing in for a label the camera cannot see (Catalog.marker_cues).
+            CueRule(
+                source=SegmentSource.VISION,
+                cue=f"product:{slug}",
+                segment_id=SegmentId.create(segment),
+                weight=Percentage.create(100),
+            )
+            for slug, segment in market.catalog.marker_cues
         )
     )
     # The market's catalog may read a demo cue as another segment (demo_catalog.Catalog).
@@ -506,6 +529,11 @@ def register_demo(
             SegmentId.create(demo_catalog.WATER): Angle.POST_WORKOUT,
             SegmentId.create(demo_catalog.ENERGY_DRINKS): Angle.ENERGY,
             SegmentId.create(demo_catalog.CANDY): Angle.HUNGER,
+            SegmentId.create(demo_catalog.CHOCOLATE_CANDY): Angle.HUNGER,
+            SegmentId.create(demo_catalog.ICE_CREAM): Angle.HUNGER,
+            SegmentId.create(demo_catalog.JUICES): Angle.HUNGER,
+            SegmentId.create(demo_catalog.MILK): Angle.HUNGER,
+            SegmentId.create(demo_catalog.SPORTS_DRINKS): Angle.POST_WORKOUT,
             **{
                 SegmentId.create(segment): Angle(angle)
                 for segment, angle in market.catalog.segment_angles

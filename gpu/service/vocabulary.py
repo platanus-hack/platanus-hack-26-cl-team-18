@@ -43,6 +43,7 @@ OBJECT_VOCABULARY: tuple[tuple[str, str], ...] = (
     ("mug", "cup"),
     # Energy drinks (Voltio, Rayo) and other cans.
     ("energy drink can", "energy drink can"),
+    ("energy drink", "energy drink can"),  # measured: Monster cans 0/4 -> 2/4
     ("soda can", "soda can"),
     # Water / gym bottles.
     ("water bottle", "bottle"),
@@ -58,6 +59,19 @@ OBJECT_VOCABULARY: tuple[tuple[str, str], ...] = (
     ("sandwich", "sandwich"),
     ("hot dog", "hot dog"),
     ("pizza slice", "pizza"),
+    # The rest of the store (DEMO_CATALOG=chile), measured on a labelled set of real
+    # product photos (YOLOE-26s, conf 0.25): only prompts that detect their product and
+    # stay off the others. One class per box, so a generic class wins its box: a sports
+    # drink reads as "bottle", a milk carton as "cup", and "chocolate bar", "candy",
+    # "lollipop", "milk carton" and "popsicle" never won theirs (or fired on cans and
+    # coffee stirrers). Those aisles are reached by the printed prop markers
+    # (props/markers-chile.json, every brand) and the VLM tags instead.
+    ("bag of chips", "chips"),
+    ("potato chips", "chips"),
+    ("ice cream cone", "ice cream"),
+    ("ice cream", "ice cream"),
+    ("juice box", "juice"),
+    ("glass of juice", "juice"),
     # Context objects the catalog maps to interests.
     ("backpack", "backpack"),
     ("handbag", "handbag"),

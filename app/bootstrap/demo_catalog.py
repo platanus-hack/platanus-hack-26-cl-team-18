@@ -33,6 +33,10 @@ NON_ALCOHOLIC = "377"  # Interest | Food & Drink | Non-Alcoholic Beverages
 DESSERTS = "372"  # Interest | Food & Drink | Desserts and Baking
 READY_TO_DRINK_COFFEE = "982"  # Purchase Intent | CPG | Edible | Beverages | Tea/Coffee RTD
 ICE_CREAM = "1011"  # Purchase Intent | CPG | Edible | Frozen | Frozen Desserts | Ice Cream
+JUICES = "988"  # Purchase Intent | CPG | Edible | Beverages | Juices
+SPORTS_DRINKS = "998"  # Purchase Intent | CPG | Edible | Beverages | Sports/Energy Drinks | Sports
+CHOCOLATE_CANDY = "1076"  # Purchase Intent | CPG | Edible | General Food | Candy | Chocolate
+MILK = "1140"  # Purchase Intent | CPG | Edible | Refrigerated | Dairy | Milk
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -402,6 +406,11 @@ class Catalog:
     # Segment → creative angle overrides (Angle values) for this venue: at a gas
     # station a water bottle or a fitness cue is a road moment, not a gym exit.
     segment_angles: tuple[tuple[str, str], ...] = ()
+    # Held-marker cues: (brand slug, IAB segment id). For products the camera cannot
+    # tell apart (YOLOE reads a sports drink as "bottle", a milk carton as "cup"), the
+    # brand's printed marker stands in for the missing label, at full weight. Other
+    # markers only mark a held product (complete the basket); they add no segment.
+    marker_cues: tuple[tuple[str, str], ...] = ()
 
     def partners_of(self, slug: str) -> frozenset[str]:
         return frozenset(

@@ -55,7 +55,9 @@ class ReplayProvider:
 def run_case(case: dict[str, Any]) -> dict[str, Any]:
     provider = ReplayProvider(case.get("raw_response", json.dumps(case.get("response", {}))))
     extractor = ClaudeTopicExtractor(provider, ModelProfile("claude-haiku-5-5", "low"))
-    settings_options: dict[str, Any] = {"_env_file": None}
+    # The fixtures speak the fictional seed (Malta Sur, "cerveza"): pin it, whatever the
+    # default catalog is, or the first creative never comes and the eval blocks forever.
+    settings_options: dict[str, Any] = {"_env_file": None, "demo_catalog": "fictional"}
     with tempfile.TemporaryDirectory(prefix="speech-understanding-") as tmp:
         container = build_container(
             AppSettings(
