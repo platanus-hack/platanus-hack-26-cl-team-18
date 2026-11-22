@@ -12,6 +12,7 @@ import threading
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -82,7 +83,8 @@ def rig(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> Iterator[Rig]:
         assert console_ready.wait(2)
         assert paid_brands(rig.creative()) == ()  # house ad first
         yield rig
-    failures = [r for r in caplog.records if r.getMessage() == "inbound handler failed"]
+    # The test body's records: in teardown `caplog.records` only holds teardown's own.
+    failures = [r for r in caplog.get_records("call") if r.getMessage() == "inbound handler failed"]
     assert not failures, [r.exc_info for r in failures]
 
 
@@ -313,3 +315,31 @@ def test_a_house_ad_forced_by_the_copy_guard_bills_no_brand(
     rig.player.send_text(playback(house.creative_id, 1, aired_at, rig.clock.now_utc()))
     rig.agent.send_text(rig.snapshot("fitness"))  # a round trip: the report was handled
     assert not rig.container.ledger.charges()
+
+
+def test_two_screens_on_one_screen_id_bill_the_play_once_without_failing(rig: Rig) -> None:
+    # A TV plus a laptop preview both open /screen/demo-01. Each page numbers its
+    # reports from 1, so both send the same `screen:creative:seq` key with slightly
+    # different windows. That is the same play shown twice, not a fault: bill it
+    # once and never raise into the socket handler (the rig fails on that log).
+    from app.contract.messages import PlaybackReport
+
+    reports = threading.Semaphore(0)
+    rig.container.router.on(PlaybackReport, lambda _report, _received: reports.release())
+    rig.agent.send_text(rig.snapshot("fitness"))
+    on_air = rig.creative()
+    assert paid_brands(on_air) == ("Voltio",)
+    aired_at = rig.clock.now_utc()
+    with rig.client.websocket_connect("/ws/screen/demo-01") as preview:
+        assert CreativeReady.model_validate(preview.receive_json()).creative_id == (
+            on_air.creative_id
+        )
+        rig.agent.send_text(rig.snapshot("fitness", after_s=4))
+        ended = rig.clock.now_utc()
+        rig.player.send_text(playback(on_air.creative_id, 1, aired_at, ended))
+        receipt = receipt_for(rig, on_air.creative_id)
+        preview.send_text(playback(on_air.creative_id, 1, aired_at + timedelta(seconds=0.3), ended))
+        assert reports.acquire(timeout=5) and reports.acquire(timeout=5)  # both handled
+    charges = rig.container.ledger.charges()
+    assert {c.creative_id for c in charges} == {on_air.creative_id}
+    assert sum(Decimal(c.amount.amount) for c in charges) == Decimal(receipt.total.amount)

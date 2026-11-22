@@ -144,7 +144,12 @@ from app.modules.creative.infrastructure.campaign_assets import (
     CAMPAIGN_ASSETS,
     load_campaign_media,
 )
-from app.modules.delivery.application.billing import DeliveryDesk, PlayRecord, Receipt
+from app.modules.delivery.application.billing import (
+    ConflictingPlaybackReport,
+    DeliveryDesk,
+    PlayRecord,
+    Receipt,
+)
 from app.modules.delivery.application.ports.ledger import ChargeLedger
 from app.modules.delivery.application.redemptions import RedemptionDesk, RedemptionLedger
 from app.modules.delivery.domain.charge import BilledSlot
@@ -1574,14 +1579,21 @@ def register_demo(
             report.ended_at,
             played_s=(report.ended_at - report.started_at).total_seconds(),
         )
-        receipt = delivery.record_playback(
-            screen_id=report.screen_id,
-            creative_id=report.creative_id,
-            seq=report.seq,
-            started_at=report.started_at.astimezone(UTC),
-            ended_at=report.ended_at.astimezone(UTC),
-            recorded_at=received.received_at,
-        )
+        try:
+            receipt = delivery.record_playback(
+                screen_id=report.screen_id,
+                creative_id=report.creative_id,
+                seq=report.seq,
+                started_at=report.started_at.astimezone(UTC),
+                ended_at=report.ended_at.astimezone(UTC),
+                recorded_at=received.received_at,
+            )
+        except ConflictingPlaybackReport:
+            # Two pages on one screen id (a TV plus a laptop preview) each number their
+            # reports from 1: same key, a slightly different window. It is the same play
+            # shown twice and it was billed once; the second report bills nothing.
+            logger.info("playback report already billed from another player on this screen")
+            return
         if receipt is None:
             return  # house ad, unknown creative or a retry already billed
         hook_lab.observe_play(report.creative_id, receipt.attention.attention_seconds)
