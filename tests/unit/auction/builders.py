@@ -71,7 +71,10 @@ def segment(
 
 
 def moment(
-    *segments: SegmentEstimate, looking: int | None = None, minor_likely: bool = False
+    *segments: SegmentEstimate,
+    looking: int | None = None,
+    people: int | None = None,
+    minor_likely: bool = False,
 ) -> AudienceMomentSnapshot:
     seen = max((item.viewer_count for item in segments), default=0)
     looking = seen if looking is None else looking
@@ -82,7 +85,7 @@ def moment(
         measured_at=instant,
         received_at=instant,
         moment_changed_at=instant,
-        people=looking,
+        people=looking if people is None else people,
         looking=looking,
         segments=segments,
         minor_likely=minor_likely,

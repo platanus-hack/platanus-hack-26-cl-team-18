@@ -234,6 +234,36 @@ describe("screen display and voice lifecycle", () => {
         expect(host.textContent).toContain("Acércate");
     });
 
+    it("keeps the playing loop on glass until an upgraded video can play (no blink)", async () => {
+        const render = async (url: string) => {
+            await act(async () => {
+                root.render(
+                    <CreativeView spec={{ ...HOUSE_AD.spec, video_url: url }} playKey="video" />,
+                );
+                await Promise.resolve();
+            });
+        };
+        const videos = () => [...host.querySelectorAll("video")];
+        await render("/old.mp4");
+        const old = videos()[0]!;
+        await act(async () => {
+            old.dispatchEvent(new Event("canplaythrough"));
+            await Promise.resolve();
+        });
+        await render("/new.mp4");
+        // The old loop stays visible underneath while the new one buffers hidden.
+        expect(videos()).toHaveLength(2);
+        expect(old.isConnected && old.style.opacity).toBe("1");
+        const incoming = videos().find((v) => v !== old)!;
+        expect(incoming.style.opacity).toBe("0");
+        await act(async () => {
+            incoming.dispatchEvent(new Event("canplaythrough"));
+            await Promise.resolve();
+        });
+        expect(videos()).toEqual([incoming]);
+        expect(incoming.style.opacity).toBe("1");
+    });
+
     it("applies a copy upgrade immediately without decoding logos or replacing the mounted video", async () => {
         const ready = message("on-air", null);
         ready.spec.video_url = "/loop.mp4";

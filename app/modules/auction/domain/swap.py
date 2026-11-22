@@ -46,6 +46,8 @@ class SwapTimings:
     new_group: timedelta = timedelta(seconds=1.5)  # D5.3
     same_moment: timedelta = timedelta(seconds=3.0)  # D5.4, one full teaser stage
     leave_grace: timedelta = timedelta(seconds=3.0)  # D5.5, people glance away
+    # D5.5: nobody looking but the group still in front (talking, reading a phone).
+    present_grace: timedelta = timedelta(seconds=6.0)
     hysteresis: Decimal = Decimal("0.02")  # D8, challenger must beat incumbent by 2 %
 
 
@@ -123,6 +125,13 @@ class MinAdTimePolicy(Policy[SwapInput, SwapPlan]):
             <= result.incumbent_value.amount * (1 + timings.hysteresis)
         ):
             return SwapPlan(action=SwapAction.KEEP_INCUMBENT)
+        if result.no_fill is NoFillReason.NO_AUDIENCE and input.opportunity.moment.people > 0:
+            # The group is still in front, eyes elsewhere. A 3 s grace here blinked the
+            # ad off to the house ad and back on (as a fresh creative, restarting at the
+            # teaser) whenever someone looked away a little longer. Unwatched seconds
+            # bill nothing either way; a group that keeps ignoring it still frees the
+            # screen. The plain leave grace applies once the room is empty.
+            return SwapPlan(action=SwapAction.SWAP, not_before=now + timings.present_grace)
         if not result.filled and result.no_fill in GRACED_NO_FILLS:
             # D5.5: keep the creative for the grace *after attention or the signal left*,
             # not after it went on air: a glance away, or a cup hidden behind a hand for a

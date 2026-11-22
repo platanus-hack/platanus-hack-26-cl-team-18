@@ -13,8 +13,37 @@ import {
 } from "./offer-copy";
 import { useDwellStage, useViewingDistance, type AttentionSample } from "./stages";
 
+/**
+ * A warm video upgrade swaps the loop under a creative already on air. The new
+ * loop buffers hidden on top while the old one keeps playing, and replaces it
+ * only once it can play: unmounting the old loop first would blink the glass
+ * dark for the whole buffering time.
+ */
+function VideoLoops({ url }: { url: string }) {
+    const [shown, setShown] = useState(url);
+    // Keyed list: the incoming element is kept (not remounted) when it becomes the shown one.
+    const urls = url === shown ? [shown] : [shown, url];
+    return (
+        <>
+            {urls.map((item) => (
+                <VideoLoop
+                    key={item}
+                    url={item}
+                    onReady={
+                        item === shown
+                            ? undefined
+                            : () => {
+                                  setShown(item);
+                              }
+                    }
+                />
+            ))}
+        </>
+    );
+}
+
 /** Reveal the actual mounted video only after it can play; overlays stay ready. */
-function VideoLoop({ url }: { url: string }) {
+function VideoLoop({ url, onReady }: { url: string; onReady?: (() => void) | undefined }) {
     const [ready, setReady] = useState(false);
     const ref = useRef<HTMLVideoElement>(null);
     // A detached <video> keeps its decoder and buffers until GC; over hours of
@@ -36,6 +65,7 @@ function VideoLoop({ url }: { url: string }) {
             style={{ opacity: ready ? 1 : 0 }}
             onCanPlayThrough={() => {
                 setReady(true);
+                onReady?.();
             }}
             onError={() => {
                 setReady(false);
@@ -99,7 +129,7 @@ export function CreativeView({
             {media && (
                 <div className="creative-visual">
                     {photo && <img className="creative-media" src={assetUrl(photo)} alt="" />}
-                    {spec.video_url && <VideoLoop key={spec.video_url} url={spec.video_url} />}
+                    {spec.video_url && <VideoLoops url={spec.video_url} />}
                     <div className="creative-shade" />
                 </div>
             )}

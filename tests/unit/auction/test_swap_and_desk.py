@@ -116,6 +116,37 @@ def test_a_glance_away_late_in_an_ad_never_strobes_the_house_ad() -> None:
     assert away.hold_token is not None and desk.release(away.hold_token) is None
 
 
+def test_a_group_still_in_front_but_looking_away_gets_a_longer_grace() -> None:
+    """Live screen: a viewer looks away for longer than 3 s while the group stays.
+    Dropping to the house ad and re-airing a fresh creative when they look back reads
+    as a blink; the group still in front gets the longer present grace."""
+    desk = desk_on_air(opportunity(FITNESS_ONLY, *demo_bidders()))
+    away = desk.run(
+        opportunity(moment(looking=0, people=2), *demo_bidders()),
+        Trigger.MOMENT_CHANGED,
+        now=at(10),
+    )
+    assert not away.swap_now and away.not_before == at(16)
+    back = desk.run(opportunity(FITNESS_ONLY, *demo_bidders()), Trigger.MOMENT_CHANGED, now=at(15))
+    assert back.action is SwapAction.UNCHANGED  # the same creative plays on, no restart
+    assert away.hold_token is not None and desk.release(away.hold_token) is None
+
+
+def test_the_group_leaving_after_looking_away_ends_the_ad_after_the_short_grace() -> None:
+    desk = desk_on_air(opportunity(FITNESS_ONLY, *demo_bidders()))
+    desk.run(
+        opportunity(moment(looking=0, people=2), *demo_bidders()),
+        Trigger.MOMENT_CHANGED,
+        now=at(10),
+    )
+    left = desk.run(
+        opportunity(moment(looking=0, people=0), *demo_bidders()),
+        Trigger.MOMENT_CHANGED,
+        now=at(12),
+    )
+    assert left.not_before == at(15)  # D5.5 leave grace counts from the empty room
+
+
 def test_a_held_decision_superseded_during_the_hold_is_never_released() -> None:
     desk = desk_on_air(opportunity(FITNESS_ONLY, *demo_bidders()))
     first = desk.run(
