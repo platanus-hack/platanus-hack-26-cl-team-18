@@ -571,7 +571,7 @@ def register_demo(
                 brand_id=BrandId.create(ids.new_uuid7()),
                 name="ADverse",
                 logo_url=market.house_logo_url,
-                stock_copy="ADverse · Acércate. Hay una oferta para tu grupo.",
+                stock_copy="ADverse · Acércate. Hay una oferta para ti.",
                 accent_color="#f4845f",  # Coral: the ADverse moment
             ),
         ),

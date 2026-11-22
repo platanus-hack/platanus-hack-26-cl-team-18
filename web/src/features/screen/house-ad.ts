@@ -33,7 +33,7 @@ export const HOUSE_AD: Playable = {
                 brand_id: "house",
                 brand_name: "ADverse",
                 logo_url: HOUSE_LOGO,
-                copy_text: "Acércate. Hay una oferta para tu grupo.",
+                copy_text: "Acércate. Hay una oferta para ti.",
                 accent_color: "#f4845f",
                 hero_image_url: null,
             },

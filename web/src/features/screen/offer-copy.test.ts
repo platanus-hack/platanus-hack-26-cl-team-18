@@ -60,8 +60,8 @@ it("formats CLP with Chilean thousands", () => {
 });
 
 it.each([
-    ["team18 · Acércate. Hay una oferta para tu grupo.", "Acércate. Hay una oferta para tu grupo."],
-    ["Acércate. Hay una oferta para tu grupo.", "Acércate. Hay una oferta para tu grupo."],
+    ["team18 · Acércate. Hay una oferta para ti.", "Acércate. Hay una oferta para ti."],
+    ["Acércate. Hay una oferta para ti.", "Acércate. Hay una oferta para ti."],
     ["Voltio · Energía para tu día.", "Voltio · Energía para tu día."], // another brand's prefix stays
     ["team18 · ", "team18 · "], // nothing would remain
 ])("drops only the slot's own brand prefix from %j", (copy, shown) => {
