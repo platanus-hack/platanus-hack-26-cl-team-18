@@ -2,12 +2,17 @@
 const CATEGORY: Readonly<Record<string, string>> = {
     alcohol: "Cerveza",
     burger: "Hamburguesas",
+    candy: "Dulces",
     coffee: "Café",
     cola: "Bebida",
+    dairy: "Lácteos",
     energy_drink: "Bebida energética",
     food: "Comida",
+    ice_cream: "Helados",
+    juice: "Jugos",
     pastry: "Panadería",
     snacks: "Snacks",
+    sports_drink: "Bebida isotónica",
     sports_goods: "Bebida energética",
     water: "Agua",
 };

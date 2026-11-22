@@ -123,7 +123,6 @@ export function DevPage() {
         <AppShell>
             <PageHeader
                 title="Dev / QA"
-                description="Todo el ciclo de una pantalla en vivo: percepción, VLM, voz, subasta, creatividad y lo que está al aire."
                 actions={
                     <>
                         <label className="flex items-center gap-2 text-compact text-muted">
@@ -163,19 +162,15 @@ export function DevPage() {
                         {DEGRADATION[flag]}
                     </Badge>
                 ))}
-                {load.length === 0 ? (
-                    <Badge appearance="soft">Sin trabajos tibios</Badge>
-                ) : (
-                    load.map((l) => (
-                        <Badge
-                            key={l.provider}
-                            tone={l.in_flight > 0 ? "info" : "neutral"}
-                            appearance="soft"
-                        >
-                            {l.provider}: {l.in_flight} en curso
-                        </Badge>
-                    ))
-                )}
+                {load.map((l) => (
+                    <Badge
+                        key={l.provider}
+                        tone={l.in_flight > 0 ? "info" : "neutral"}
+                        appearance="soft"
+                    >
+                        {l.provider}: {l.in_flight} en curso
+                    </Badge>
+                ))}
             </div>
             <div className="grid gap-4 xl:grid-cols-3">
                 <div className="flex min-w-0 flex-col gap-4">

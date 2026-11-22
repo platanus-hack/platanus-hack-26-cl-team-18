@@ -72,8 +72,6 @@ export function stationView(status: LiveStatus, health: InputHealth | null): Sta
           : { key: "ai", label: "Copy de stock", tone: "neutral" };
 
     if (!player) warnings.push(`Abre /screen?id=${status.screen_id} en el TV`);
-    if (status.live && !vision) warnings.push("Sin agente de cámara.");
-    if (status.listening && !speech) warnings.push("Micrófono activo sin agente de voz.");
 
     const degraded = status.live && (!vision || !player);
     return {

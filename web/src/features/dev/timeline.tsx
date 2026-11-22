@@ -22,10 +22,7 @@ export function TimelinePanel({
     windowMs: number;
 }) {
     return (
-        <Panel
-            title="Línea de tiempo: camino caliente y tibio"
-            aside={`últimos ${String(windowMs / 1000)} s`}
-        >
+        <Panel title="Línea de tiempo" aside={`últimos ${String(windowMs / 1000)} s`}>
             {!timeline ? (
                 <p className="text-compact text-muted">
                     Sin decisiones ni trabajos tibios en la ventana.

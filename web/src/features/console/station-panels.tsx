@@ -21,9 +21,7 @@ export function SessionPanel({ view }: { view: ScreenView }) {
     return (
         <Panel title="Sesión">
             {auction === null && view.receipts.length === 0 && p50 === null ? (
-                <p className="text-compact text-muted">
-                    Cobertura, cobros y latencia aparecen con el primer aviso pagado.
-                </p>
+                <p className="text-compact text-muted">Sin avisos pagados todavía.</p>
             ) : (
                 <div className="grid grid-cols-2 gap-4">
                     <Metric label="Cobertura" value={auction ? pct(auction.coverage) : "—"} />

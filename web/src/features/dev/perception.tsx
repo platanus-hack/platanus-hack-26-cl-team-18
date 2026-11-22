@@ -160,7 +160,7 @@ export function PerceptionPanel({ view, nowMs }: { view: DevScreen; nowMs: numbe
             aside={p && `${p.detector} · ${fps === null ? "—" : fps.toFixed(1)} fps`}
         >
             {!p ? (
-                <Empty>Sin cuadros del agente. Inicia el agente de visión con el stream dev.</Empty>
+                <Empty>Sin cuadros del agente.</Empty>
             ) : (
                 <div className="flex flex-col gap-3">
                     <BoxCanvas perception={p} keyframe={view.keyframe} nowMs={nowMs} />
@@ -351,7 +351,7 @@ export function SpeechPanel({ view, nowMs }: { view: DevScreen; nowMs: number })
     return (
         <Panel title="Voz (temas, sin texto)" aside={`${view.speech.length} eventos`}>
             {view.speech.length === 0 ? (
-                <Empty>Sin eventos de voz. El modo voz está apagado o nadie habló.</Empty>
+                <Empty>Sin eventos de voz.</Empty>
             ) : (
                 <ul className="flex flex-col gap-3">
                     {view.speech.slice(0, 8).map((e, i) => (
