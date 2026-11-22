@@ -2,6 +2,8 @@
 
 import threading
 
+import pytest
+
 from app.modules.common.infrastructure.postgres.write_behind import WriteBehindWriter
 
 
@@ -125,3 +127,58 @@ def test_close_does_not_hang_on_a_dead_database() -> None:
     started = __import__("time").monotonic()
     writer.close(timeout=2)
     assert __import__("time").monotonic() - started < 4
+
+
+def test_a_full_queue_spills_to_the_overflow_and_every_unit_is_written_in_order() -> None:
+    gate = threading.Event()
+    store: list = []  # type: ignore[type-arg]
+
+    def slow_connect() -> FakeConn:
+        gate.wait(5)
+        return FakeConn(store)
+
+    writer = WriteBehindWriter(slow_connect, name="t", capacity=1, overflow_capacity=100)
+    for n in range(20):
+        writer.submit(((f"x{n}", ()),))
+    assert writer.stats.dropped == 0 and writer.stats.overflowed >= 1
+    assert not writer.flush(timeout=0.05)  # overflowed units still count as pending
+    gate.set()
+    assert writer.flush(timeout=5)
+    writer.close()
+    assert [sql for sql, _ in store] == [f"x{n}" for n in range(20)]
+    assert writer.stats.written == 20
+
+
+def test_drops_past_the_overflow_are_counted_and_logged_at_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    gate = threading.Event()
+
+    def slow_connect() -> FakeConn:
+        gate.wait(5)
+        return FakeConn([])
+
+    writer = WriteBehindWriter(slow_connect, name="t", capacity=1, overflow_capacity=2)
+    with caplog.at_level("ERROR"):
+        for _ in range(10):
+            writer.submit((("x", ()),))
+    assert writer.stats.dropped >= 5
+    assert any("rows dropped" in r.message and r.levelname == "ERROR" for r in caplog.records)
+    gate.set()
+    writer.close()
+
+
+def test_close_writes_what_is_still_queued() -> None:
+    gate = threading.Event()
+    store: list = []  # type: ignore[type-arg]
+
+    def slow_connect() -> FakeConn:
+        gate.wait(5)
+        return FakeConn(store)
+
+    writer = WriteBehindWriter(slow_connect, name="t", capacity=2, overflow_capacity=10)
+    for n in range(6):
+        writer.submit(((f"x{n}", ()),))
+    threading.Timer(0.1, gate.set).start()
+    writer.close(timeout=5)
+    assert [sql for sql, _ in store] == [f"x{n}" for n in range(6)]

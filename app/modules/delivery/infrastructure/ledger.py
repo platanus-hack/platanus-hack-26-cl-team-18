@@ -20,14 +20,21 @@ ON CONFLICT ON CONSTRAINT charge_dedupe_unique DO NOTHING
 
 
 class InMemoryChargeLedger:
-    def __init__(self) -> None:
+    """The record when there is no database (unbounded: never forget a charge). As a
+    Postgres mirror, `max_charges` keeps only the most recent ones in memory."""
+
+    def __init__(self, *, max_charges: int | None = None) -> None:
         self._lock = Lock()
+        self._max_charges = max_charges
         self._charges: dict[tuple[str, CampaignId], Charge] = {}
 
     def append(self, charges: tuple[Charge, ...]) -> None:
         with self._lock:
             for charge in charges:
                 self._charges.setdefault((charge.dedupe_key, charge.campaign_id), charge)
+            if self._max_charges is not None:
+                while len(self._charges) > self._max_charges:
+                    self._charges.pop(next(iter(self._charges)))
 
     def charges(self) -> tuple[Charge, ...]:
         with self._lock:

@@ -218,6 +218,10 @@ def build_audience_ai(
     container.topic_extractor = ClaudeTopicExtractor(provider, profile)
 
 
+# A long-running process with Postgres keeps only recent charges in memory.
+MIRROR_MAX_CHARGES = 20_000
+
+
 def build_records(container: Container) -> None:
     """Auctions and charges: always in memory; also to Postgres when DATABASE_URL is set."""
     url = container.settings.database_url
@@ -229,12 +233,17 @@ def build_records(container: Container) -> None:
     writer = WriteBehindWriter(
         lambda: psycopg2.connect(dsn, connect_timeout=5),
         name="records",
+        # Charges are money: a full queue spills to a bounded overflow instead of dropping.
+        overflow_capacity=50_000,
         # Lost connections retry; a refused row (constraint, bad data) is skipped alone.
         transient=lambda exc: isinstance(exc, psycopg2.OperationalError | psycopg2.InterfaceError),
     )
     container.writer = writer
     container.auction_log = PostgresAuctionLog(writer, mirror=InMemoryAuctionLog())
-    container.ledger = PostgresChargeLedger(writer, mirror=InMemoryChargeLedger())
+    # Postgres is the record here; the in-memory mirror only serves this process's reads.
+    container.ledger = PostgresChargeLedger(
+        writer, mirror=InMemoryChargeLedger(max_charges=MIRROR_MAX_CHARGES)
+    )
     from app.modules.delivery.infrastructure.redemptions import PostgresRedemptionLedger
 
     container.redemption_ledger = PostgresRedemptionLedger(writer)

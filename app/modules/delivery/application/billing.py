@@ -127,7 +127,10 @@ class DeliveryDesk:
             self._plays[play.creative_id] = play
             while len(self._plays) > MAX_PLAYS_REMEMBERED:
                 evicted = self._plays.pop(next(iter(self._plays)))
+                # A forgotten play never bills again (unknown creative), so its
+                # per-creative marks are dead weight in a long-running process.
                 self._off_air.pop(evicted.creative_id, None)
+                self._billed_until.pop(evicted.creative_id, None)
 
     def off_air(self, screen_id: str, *, at: datetime) -> None:
         """Whatever paid play was on `screen_id` left it at `at` (another creative aired).
