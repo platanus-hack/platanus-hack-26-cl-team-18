@@ -17,7 +17,13 @@ import { screenProtocols } from "@/lib/device";
 import { HEARTBEAT_IDLE_MS } from "@/lib/ws/heartbeat";
 import { TypedSocket } from "@/lib/ws/typed-socket";
 import { BrowserSpeech } from "./speech";
-import { BrowserVision } from "./vision";
+import { BrowserVision, type DeviceState } from "./vision";
+
+/** What the screen tells the operator about its camera and mic (sensor/notice.ts). */
+export interface DeviceStates {
+    readonly camera: DeviceState;
+    readonly mic: DeviceState;
+}
 
 export function sensingEnabled(search: string = window.location.search): boolean {
     return new URLSearchParams(search).get("sense") !== "0";
@@ -46,9 +52,13 @@ export class ScreenSensor {
     private lastPeopleAtMs: number | null = null;
     private readonly watched: PermissionStatus[] = [];
 
+    private camera: DeviceState = "off";
+    private mic: DeviceState = "off";
+
     constructor(
         private readonly screenId: string,
         token: string | null,
+        private readonly onDevices: (devices: DeviceStates) => void = () => {},
     ) {
         this.socket = new TypedSocket<AgentOutbound, AgentInbound>({
             url: `${backendWsUrl}/ws/agent`,
@@ -106,16 +116,28 @@ export class ScreenSensor {
                     jpeg,
                 );
             },
+            (state) => {
+                this.camera = state;
+                this.reportDevices();
+            },
         );
-        this.speech = new BrowserSpeech(screenId, token, (facts) => {
-            this.socket.send({
-                v: 1,
-                type: "audience.utterance",
-                screen_id: screenId,
-                seq: ++this.seq.utterance,
-                ...facts,
-            });
-        });
+        this.speech = new BrowserSpeech(
+            screenId,
+            token,
+            (facts) => {
+                this.socket.send({
+                    v: 1,
+                    type: "audience.utterance",
+                    screen_id: screenId,
+                    seq: ++this.seq.utterance,
+                    ...facts,
+                });
+            },
+            (state) => {
+                this.mic = state;
+                this.reportDevices();
+            },
+        );
     }
 
     start(): void {
@@ -176,11 +198,18 @@ export class ScreenSensor {
         }
     }
 
+    private reportDevices(): void {
+        // A mic problem matters only while the screen is meant to listen.
+        this.onDevices({ camera: this.camera, mic: this.listening ? this.mic : "off" });
+    }
+
     private apply(status: LiveStatus): void {
         this.sensing = status.sensing;
         if (status.sensing) void this.vision.start();
         else this.vision.stop();
+        const wasListening = this.listening;
         this.listening = status.listening;
+        if (wasListening !== this.listening) this.reportDevices();
         this.updateSpeech();
     }
 

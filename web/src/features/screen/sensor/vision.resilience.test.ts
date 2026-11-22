@@ -24,7 +24,10 @@ const model: {
     createFails: Set<string>;
     created: { provider: string }[];
     sessions: FakeSession[];
+    /** While set, session creation waits on it (a slow model download). */
+    gate: Promise<void> | null;
 } = vi.hoisted(() => ({
+    gate: null,
     /** Rows the next inference returns: one person, nobody, or a throw. */
     output: "nobody",
     createFails: new Set<string>(), // providers whose session creation rejects
@@ -44,31 +47,34 @@ vi.mock("onnxruntime-web", () => {
         env: { wasm: { numThreads: 0 } },
         Tensor,
         InferenceSession: {
-            create: vi.fn((_url: string, options: { executionProviders: string[] }) => {
-                const provider = options.executionProviders[0] ?? "?";
-                model.created.push({ provider });
-                if (model.createFails.has(provider)) {
-                    return Promise.reject(new Error(`${provider} unavailable`));
-                }
-                let warm = false;
-                const session: FakeSession = {
-                    provider,
-                    release: vi.fn(() => Promise.resolve()),
-                    run: vi.fn(() => {
-                        if (!warm) {
-                            warm = true; // the throwaway warm-up run always works
-                            return Promise.resolve({ output0: { data: new Float32Array(ROW) } });
-                        }
-                        if (model.output === "throw")
-                            return Promise.reject(new Error("device lost"));
-                        return Promise.resolve({ output0: { data: modelRows(model.output) } });
-                    }),
-                };
-                model.sessions.push(session);
-                return Promise.resolve(session);
-            }),
+            create: vi.fn((_url: string, options: { executionProviders: string[] }) =>
+                (model.gate ?? Promise.resolve()).then(() => createSession(options)),
+            ),
         },
     };
+
+    function createSession(options: { executionProviders: string[] }) {
+        const provider = options.executionProviders[0] ?? "?";
+        model.created.push({ provider });
+        if (model.createFails.has(provider)) {
+            return Promise.reject(new Error(`${provider} unavailable`));
+        }
+        let warm = false;
+        const session: FakeSession = {
+            provider,
+            release: vi.fn(() => Promise.resolve()),
+            run: vi.fn(() => {
+                if (!warm) {
+                    warm = true; // the throwaway warm-up run always works
+                    return Promise.resolve({ output0: { data: new Float32Array(ROW) } });
+                }
+                if (model.output === "throw") return Promise.reject(new Error("device lost"));
+                return Promise.resolve({ output0: { data: modelRows(model.output) } });
+            }),
+        };
+        model.sessions.push(session);
+        return Promise.resolve(session);
+    }
 });
 
 const keyframes = vi.hoisted(() => ({ fail: false, calls: 0 }));
@@ -194,6 +200,7 @@ beforeEach(() => {
     model.createFails.clear();
     model.created.length = 0;
     model.sessions.length = 0;
+    model.gate = null;
     keyframes.fail = false;
     keyframes.calls = 0;
     camera.picture = "live";
@@ -283,12 +290,14 @@ describe("BrowserVision on a demo day", () => {
         vision.stop();
     });
 
-    it("a model that fails to load never opens the camera, and loads on the next start", async () => {
+    it("a model that fails to load lets the camera go again, and loads on the next start", async () => {
         model.createFails.add("webgpu");
         model.createFails.add("wasm");
         const vision = sensor();
         await expect(vision.start()).resolves.toBeUndefined();
-        expect(camera.getUserMedia).not.toHaveBeenCalled();
+        // Asked at once (the prompt must not wait for a 30 MB download), then released.
+        expect(camera.getUserMedia).toHaveBeenCalledTimes(1);
+        for (const track of camera.tracks) expect(track.stop).toHaveBeenCalled();
 
         model.createFails.clear();
         await vision.start();
@@ -517,7 +526,58 @@ describe("BrowserVision on a demo day", () => {
         const second = vision.start();
         await Promise.all([first, second]);
         expect(model.created).toHaveLength(1);
-        expect(camera.getUserMedia).toHaveBeenCalledTimes(1);
+        // The superseded start's camera is let go; one stays open.
+        expect(camera.tracks.filter((t) => t.stop.mock.calls.length === 0)).toHaveLength(1);
+        vision.stop();
+    });
+
+    it("asks for the camera while the model is still downloading", async () => {
+        let finishLoad: () => void = () => {};
+        model.gate = new Promise((resolve) => {
+            finishLoad = resolve;
+        });
+        const vision = sensor();
+        const starting = vision.start();
+        await run(0);
+        expect(camera.getUserMedia).toHaveBeenCalledTimes(1); // prompt is up before the model
+        expect(model.sessions).toHaveLength(0);
+        model.gate = null;
+        finishLoad();
+        await starting;
+        await run(500);
+        expect(snapshots.length).toBeGreaterThan(0);
+        vision.stop();
+    });
+
+    it.each([
+        ["NotAllowedError", "blocked"],
+        ["NotFoundError", "missing"],
+        ["NotReadableError", "busy"],
+    ])("a %s camera tells the screen it is %s; standby clears it", async (name, state) => {
+        camera.getUserMedia = vi.fn(() => Promise.reject(new DOMException("no", name)));
+        const states: string[] = [];
+        const vision = new BrowserVision(
+            () => {},
+            () => {},
+            () => {},
+            (s) => states.push(s),
+        );
+        await vision.start();
+        expect(states).toEqual(["asking", state]);
+        vision.stop();
+        expect(states.at(-1)).toBe("off");
+    });
+
+    it("a working camera reports asking, then on", async () => {
+        const states: string[] = [];
+        const vision = new BrowserVision(
+            () => {},
+            () => {},
+            () => {},
+            (s) => states.push(s),
+        );
+        await vision.start();
+        expect(states).toEqual(["asking", "starting", "on"]);
         vision.stop();
     });
 

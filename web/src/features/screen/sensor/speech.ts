@@ -17,6 +17,7 @@
 import type { AudienceUtterance } from "@/contract";
 import { backendHttpUrl } from "@/lib/config";
 import { SpeechTurn } from "./turn";
+import { deviceProblem, type DeviceState } from "./vision";
 
 const SCRIBE_URL = "wss://api.elevenlabs.io/v1/speech-to-text/realtime";
 const SAMPLE_RATE = 16_000;
@@ -148,6 +149,7 @@ export class BrowserSpeech {
         private readonly screenId: string,
         private readonly screenToken: string | null,
         private readonly onUtterance: (facts: UtteranceFacts) => void,
+        private readonly onState: (state: DeviceState) => void = () => {},
     ) {
         this.turn = new SpeechTurn(sessionTag(), ({ text, isFinal, utteranceId }) => {
             this.emit(text, isFinal, utteranceId);
@@ -165,10 +167,20 @@ export class BrowserSpeech {
             const session = await this.fetchSession();
             if (!this.current(run)) return; // the token is single-use and unspent: no cost
             this.language = session.language_code;
-            stream = await navigator.mediaDevices.getUserMedia({
-                audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-                video: false,
-            });
+            this.setState("asking");
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true,
+                    },
+                    video: false,
+                });
+            } catch (error) {
+                if (this.current(run)) this.setState(deviceProblem(error));
+                throw error;
+            }
             if (!this.current(run)) {
                 stopTracks(stream);
                 return;
@@ -184,6 +196,7 @@ export class BrowserSpeech {
             }
             this.openScribe(session);
             await this.openMic(stream, run);
+            if (this.current(run)) this.setState("on");
         } catch (error) {
             if (!this.current(run)) {
                 if (stream !== null) stopTracks(stream);
@@ -200,6 +213,16 @@ export class BrowserSpeech {
         this.running = false;
         this.generation++;
         this.release();
+        // A refused or missing mic stays on the glass until a start gets past it.
+        if (this.state === "on" || this.state === "asking") this.setState("off");
+    }
+
+    private state: DeviceState = "off";
+
+    private setState(state: DeviceState): void {
+        if (state === this.state) return;
+        this.state = state;
+        this.onState(state);
     }
 
     /** The mic was just allowed again: the next start() skips the failure backoff. */

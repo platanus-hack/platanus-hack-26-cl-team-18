@@ -37,6 +37,23 @@ export type SnapshotFacts = Omit<AudienceSnapshot, "v" | "type" | "screen_id" | 
 export type KeyframeFacts = Pick<AudienceKeyframe, "measured_at" | "kept" | "heads">;
 export type PerceptionFacts = Omit<DevPerception, "v" | "type" | "screen_id" | "seq">;
 
+/**
+ * What the operator must know about a device (the screen shows it, sensor/notice.ts):
+ * `asking` = waiting on the browser's permission prompt, `blocked` = permission
+ * refused, `missing` = no such device, `busy` = another app holds it.
+ */
+export type DeviceState =
+    "off" | "starting" | "asking" | "on" | "blocked" | "missing" | "busy" | "failed";
+
+/** A getUserMedia rejection, in the operator's terms. */
+export function deviceProblem(error: unknown): DeviceState {
+    const name = error instanceof Error || error instanceof DOMException ? error.name : "";
+    if (name === "NotAllowedError" || name === "SecurityError") return "blocked";
+    if (name === "NotFoundError" || name === "OverconstrainedError") return "missing";
+    if (name === "NotReadableError" || name === "AbortError") return "busy";
+    return "failed";
+}
+
 const unit = (value: number) => Math.min(1, Math.max(0, value));
 
 /**
@@ -83,7 +100,16 @@ export class BrowserVision {
         private readonly onSnapshot: (facts: SnapshotFacts) => void,
         private readonly onPerception: (facts: PerceptionFacts) => void = () => {},
         private readonly onKeyframe: (facts: KeyframeFacts, jpeg: ArrayBuffer) => void = () => {},
+        private readonly onState: (state: DeviceState) => void = () => {},
     ) {}
+
+    private state: DeviceState = "off";
+
+    private setState(state: DeviceState): void {
+        if (state === this.state) return;
+        this.state = state;
+        this.onState(state);
+    }
 
     async start(): Promise<void> {
         if (this.running) return;
@@ -92,13 +118,27 @@ export class BrowserVision {
         // download) supersedes it: from then on it may only let go of its own camera.
         const run = ++this.generation;
         let stream: MediaStream | null = null;
+        // The permission prompt goes up at once, while the 30 MB model and runtime
+        // download: asked only after the load, the prompt came late and unnoticed.
+        const loading = this.load();
+        loading.catch(() => {}); // awaited below; never an unhandled rejection
+        let asked = false;
         try {
-            await this.load();
-            if (!this.current(run)) return;
-            stream = await navigator.mediaDevices.getUserMedia({
-                video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" },
-                audio: false,
-            });
+            this.setState("asking");
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" },
+                    audio: false,
+                });
+            } finally {
+                asked = true;
+            }
+            if (!this.current(run)) {
+                stopTracks(stream);
+                return;
+            }
+            this.setState("starting");
+            await loading;
             if (!this.current(run)) {
                 stopTracks(stream);
                 return;
@@ -123,6 +163,7 @@ export class BrowserVision {
                 });
             }
             this.watchFrames(video);
+            this.setState("on");
             this.tick();
         } catch (error) {
             if (!this.current(run)) {
@@ -130,8 +171,12 @@ export class BrowserVision {
                 return;
             }
             console.warn(`[sensor] camera unavailable: ${String(error)}`);
+            // A camera that never opened says why; a model or playback failure after
+            // the grant is ours to retry, not the operator's to fix.
+            this.setState(asked && stream === null ? deviceProblem(error) : "failed");
             this.running = false;
             this.release();
+            if (stream !== null) stopTracks(stream);
         }
     }
 
@@ -148,6 +193,7 @@ export class BrowserVision {
     stop(): void {
         this.running = false;
         this.generation++;
+        this.setState("off");
         if (this.timer !== null) clearTimeout(this.timer);
         this.timer = null;
         this.release();
