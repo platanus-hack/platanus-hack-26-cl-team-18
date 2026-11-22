@@ -140,13 +140,13 @@ add a sixth beat):
 seed data (with mock creatives clearly labeled as mock). A judge seeing their
 own company win a basket slot is memorable.
 
-**Brands: the seed is the source of truth** (`app/bootstrap/demo.py`, ADR 0008
-D9): Voltio (energy), Café Patio (coffee), Malta Sur (beer, age-restricted)
-and Rayo (energy, Voltio's competitor). Approved baskets today: Voltio + Café
-Patio, Rayo + Café Patio. The seed uses distinct fictional marks from
-[`assets/campaigns/logos`](../assets/campaigns/logos).
+**Brands: the Chile catalog runs everywhere** (station, simulator, rehearsals and
+the public URL; `DEMO_CATALOG` defaults to `chile`). The fictional seed (Voltio,
+Café Patio, Malta Sur, Rayo in [`demo_catalog.py`](../app/bootstrap/demo_catalog.py),
+ADR 0008 D9) is now only the frozen fixture that unit tests and evals pin with
+`DEMO_CATALOG=fictional`.
 
-**Real-brand catalog (local station only):** `DEMO_CATALOG=chile` swaps in
+**Real-brand catalog:** `DEMO_CATALOG=chile` (the default) loads
 [`demo_catalog_chile.py`](../app/bootstrap/demo_catalog_chile.py): a Pronto Copec
 highway shop with 23 brands across 11 aisles (energy, coffee, the Pronto counter,
 sodas including Bilz y Pap, water, sports drinks, chocolate milk, nectars, ice cream,
@@ -155,8 +155,8 @@ Original 473 ml, Coca-Cola Zero Azúcar, Bilz y Pap Zero 600 ml at CCU's $1.000 
 point, Pronto's completo palta, Savory's "Alarma de helado"). Hero
 basket: Score + Juan Valdez (Red Bull bids for Score's slot). No alcohol (Ley 21.363
 bans it at gas stations); the minor-safety beat blocks the "ALTO EN" snacks instead
-(Ley 20.606). Props use `edge/props/markers-chile.json`. Real trademarks, no
-affiliation: keep it off the public URL. Logo provenance:
+(Ley 20.606). Props use `edge/props/markers-chile.json`; `scripts.demo.rehearse held`
+shows a Juan Valdez cup. Real trademarks, no affiliation (a hackathon demo). Logo provenance:
 [`assets/campaigns/logos/SOURCES.md`](../assets/campaigns/logos/SOURCES.md).
 
 **Imagery never repeats in a row:** each campaign has a primary photo and

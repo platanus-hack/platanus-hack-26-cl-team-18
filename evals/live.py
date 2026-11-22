@@ -99,6 +99,8 @@ def live_backend(
         }
         settings = AppSettings(
             app_env="test",
+            # Evals pin the fictional seed, whatever DEMO_CATALOG the station's .env has.
+            demo_catalog="fictional",
             demo_simulator=True,
             media_dir=media_dir or Path(tmp) / "media",
             elevenlabs_budget_file=Path(tmp) / "elevenlabs-budget.json",

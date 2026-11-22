@@ -7,7 +7,7 @@ import type { Playable } from "./player-machine";
 const HOUSE_LOGO =
     "data:image/svg+xml;utf8," +
     encodeURIComponent(
-        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 80"><rect width="240" height="80" rx="16" fill="#0f1117"/><text x="120" y="52" font-family="Inter,system-ui,sans-serif" font-size="34" font-weight="700" fill="#c6f26b" text-anchor="middle">team18</text></svg>`,
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 80"><rect width="240" height="80" rx="16" fill="#13131e"/><circle cx="50" cy="40" r="7" fill="#d0ff0b"/><text x="132" y="51" font-family="Instrument Sans,system-ui,sans-serif" font-size="32" font-weight="600" fill="#ededf2" text-anchor="middle">advisor</text></svg>`,
     );
 
 export const HOUSE_AD: Playable = {
@@ -19,10 +19,10 @@ export const HOUSE_AD: Playable = {
         slots: [
             {
                 brand_id: "house",
-                brand_name: "team18",
+                brand_name: "advisor",
                 logo_url: HOUSE_LOGO,
                 copy_text: "Acércate. Hay una oferta para tu grupo.",
-                accent_color: "#c6f26b",
+                accent_color: "#d0ff0b",
                 hero_image_url: null,
             },
         ],

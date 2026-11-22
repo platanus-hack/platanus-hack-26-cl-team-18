@@ -33,8 +33,10 @@ from tests.unit.creative.factory import brief
 BRANDS = {brand.slug: brand for brand in CHILE.brands}
 
 
-def test_the_selector_keeps_the_fictional_catalog_as_default() -> None:
-    assert AppSettings(app_env="test").demo_catalog == "fictional"
+def test_the_chile_catalog_is_the_default_everywhere(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DEMO_CATALOG", raising=False)  # tests/conftest.py pins fictional
+    for env in ("local", "test", "prod"):
+        assert AppSettings(app_env=env, _env_file=None).demo_catalog == "chile"
     assert catalog_named("fictional") is FICTIONAL
     assert catalog_named("chile") is CHILE
     with pytest.raises(ValueError):

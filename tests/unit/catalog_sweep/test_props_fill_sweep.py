@@ -41,7 +41,7 @@ from tests.unit.catalog_sweep.markets import CATALOGS, seeded
 
 ROOT = Path(__file__).resolve().parents[3]
 AT = datetime(2026, 11, 21, 15, tzinfo=UTC)  # midday at the venue (America/Santiago)
-HOUSE = "team18"
+HOUSE = "advisor"
 # One scratch media dir for every run (bundle loops are not read here); removed at exit.
 _MEDIA = tempfile.TemporaryDirectory(prefix="catalog-sweep-")
 
@@ -64,7 +64,7 @@ LABELS = _edge_labels()
 @dataclass(frozen=True, slots=True)
 class Aired:
     winners: tuple[str, ...]
-    on_screen: tuple[str, ...]  # brand names in the creative's slots ("team18" = house ad)
+    on_screen: tuple[str, ...]  # brand names in the creative's slots ("advisor" = house ad)
     restricted: tuple[str, ...]  # winners that are age-restricted
 
     @property

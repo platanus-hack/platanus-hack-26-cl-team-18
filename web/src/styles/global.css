@@ -38,25 +38,30 @@
 }
 
 /*
- * Design tokens, ported from Relvo's design system (Puchworks Round 3 palette,
- * relvo/frontend/src/app/globals.css). The scale is closed: every color,
- * radius, shadow, duration and z-index comes from a token here. If a need has
- * no token, add one; never an inline value (`text-[13px]`, `#hex`).
+ * Design tokens: Relvo's brand in its dark expression (Puchworks Round 3
+ * palette on the brand's night canvas, as in the brand deck's dark mockups).
+ * The scale is closed: every color, radius, shadow, duration and z-index comes
+ * from a token here. If a need has no token, add one; never an inline value
+ * (`text-[13px]`, `#hex`).
  *
  * Three layers: raw palette -> semantic roles (--ui-*, --state-*) ->
  * Tailwind utilities generated from @theme (bg-surface, text-muted, ...).
- * The player (/screen) keeps its own dark creative look in creative.css.
+ * `ink` stays the brand black (video frames, labels on bright chips); `fg` is
+ * the text color. The one primary action is fluor on black (`bg-primary`).
+ * The player (/screen) keeps its own creative look in creative.css.
  */
 
 :root {
-    color-scheme: light;
+    color-scheme: dark;
     /* Puchworks Round 3 */
     --palette-negro: #13131e;
+    --palette-noche-profunda: #0c0c13;
     --palette-blanco: #ffffff;
     --palette-gris: #e8e8e8;
     --palette-gris-oscuro: #ababb7;
     --palette-naranjo: #ff9566;
     --palette-morado: #633bf2;
+    --palette-morado-claro: #a48cff;
     --palette-verde: #72ddaa;
     --palette-menta: #dff4eb;
     --palette-lila: #e3c0f2;
@@ -64,6 +69,7 @@
     --palette-verde-oscuro: #186666;
     --palette-noche: #3f28b2;
     --palette-mezcla: #aa5639;
+    --palette-fluor: #d0ff0b;
     /* The player's dark creative theme (creative.css) reads these; keep them. */
     --palette-ink-950: var(--palette-negro);
     --palette-ink-300: #c9c9d2;
@@ -71,50 +77,53 @@
     --palette-mint: var(--palette-verde);
 
     /* Semantic roles (relvo --ui-*) */
-    --ui-selected: var(--palette-morado);
-    --ui-selected-soft: color-mix(in srgb, var(--palette-lila) 38%, white);
-    --ui-selected-text: var(--palette-noche);
-    --ui-neutral-text: #66666f;
+    --ui-selected: var(--palette-morado-claro);
+    --ui-selected-soft: color-mix(in srgb, var(--palette-morado) 22%, var(--palette-negro));
+    --ui-selected-text: var(--palette-lila);
+    --ui-neutral-text: #8c8c9a;
 
-    /* Status families: edge, fill, ink (relvo --state-*) */
-    --state-success-edge: var(--palette-verde);
-    --state-success-fill: var(--palette-menta);
-    --state-success-ink: var(--palette-verde-oscuro);
-    --state-warning-edge: var(--palette-salmon);
-    --state-warning-fill: color-mix(in srgb, var(--palette-salmon) 20%, white);
-    --state-warning-ink: var(--palette-mezcla);
-    --state-danger-edge: color-mix(in srgb, #b42318 45%, white);
-    --state-danger-fill: #fdecea;
-    --state-danger-ink: #b42318;
-    --state-info-edge: color-mix(in srgb, var(--palette-noche) 35%, white);
-    --state-info-fill: color-mix(in srgb, var(--palette-lila) 30%, white);
-    --state-info-ink: var(--palette-noche);
-    --state-neutral-edge: #c9c2b7;
-    --state-neutral-fill: var(--palette-gris);
-    --state-neutral-ink: var(--ui-neutral-text);
+    /* Status families: edge, fill, ink (relvo --state-*), tuned for a dark canvas */
+    --state-success-edge: color-mix(in srgb, var(--palette-verde) 45%, var(--palette-negro));
+    --state-success-fill: color-mix(in srgb, var(--palette-verde) 12%, var(--palette-negro));
+    --state-success-ink: var(--palette-verde);
+    --state-warning-edge: color-mix(in srgb, var(--palette-salmon) 45%, var(--palette-negro));
+    --state-warning-fill: color-mix(in srgb, var(--palette-salmon) 12%, var(--palette-negro));
+    --state-warning-ink: var(--palette-salmon);
+    --state-danger-edge: color-mix(in srgb, #ff6b5e 50%, var(--palette-negro));
+    --state-danger-fill: color-mix(in srgb, #ff6b5e 13%, var(--palette-negro));
+    --state-danger-ink: #ff8a7f;
+    --state-info-edge: color-mix(in srgb, var(--palette-morado-claro) 45%, var(--palette-negro));
+    --state-info-fill: color-mix(in srgb, var(--palette-morado) 18%, var(--palette-negro));
+    --state-info-ink: var(--palette-morado-claro);
+    --state-neutral-edge: #34344a;
+    --state-neutral-fill: #1d1d2a;
+    --state-neutral-ink: #b4b4c2;
 
-    --control-edge: #8f877b;
+    --control-edge: #3a3a50;
     --target-min: 1.5rem;
 }
 
 @theme {
-    --color-canvas: #fffdf8;
-    --color-surface: var(--palette-blanco);
-    --color-surface-raised: #faf9f6;
-    --color-surface-sunken: #faf9f6;
-    --color-surface-hover: #f6f4ef;
-    --color-surface-pressed: #f3f1ed;
-    --color-border: #ddd7cb;
-    --color-border-subtle: #ddd8cf;
-    --color-border-strong: #c9c2b7;
+    --color-canvas: var(--palette-noche-profunda);
+    --color-surface: var(--palette-negro);
+    --color-surface-raised: #181826;
+    --color-surface-sunken: #0f0f18;
+    --color-surface-hover: #1c1c2b;
+    --color-surface-pressed: #222233;
+    --color-border: #262636;
+    --color-border-subtle: #1f1f2e;
+    --color-border-strong: #2c2c3f;
     --color-control-edge: var(--control-edge);
-    --color-fg: var(--palette-negro);
+    --color-fg: #ededf2;
     --color-ink: var(--palette-negro);
-    --color-muted: #63636e;
+    --color-muted: #9a9aab;
     --color-subtle: var(--ui-neutral-text);
-    --color-ring: var(--palette-morado);
+    --color-ring: var(--palette-fluor);
 
-    --color-accent: var(--palette-morado);
+    --color-primary: var(--palette-fluor);
+    --color-primary-hover: color-mix(in srgb, var(--palette-fluor) 86%, white);
+    --color-on-primary: var(--palette-negro);
+    --color-accent: var(--palette-morado-claro);
     --color-accent-soft: var(--ui-selected-soft);
     --color-rule: var(--color-border);
     --color-success: var(--state-success-ink);
@@ -144,11 +153,11 @@
 
     /* Radius tiers */
     --radius-control: 6px;
-    --radius-container: 8px;
+    --radius-container: 10px;
 
-    /* Exactly two elevations */
-    --shadow-resting: 0 1px 2px rgb(19 19 30 / 0.04);
-    --shadow-overlay: 0 4px 12px rgb(19 19 30 / 0.08), 0 1px 3px rgb(19 19 30 / 0.06);
+    /* Exactly two elevations: on a dark canvas depth reads from a faint top light, not a drop. */
+    --shadow-resting: inset 0 1px 0 rgb(255 255 255 / 0.03), 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-overlay: 0 12px 32px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(255 255 255 / 0.04);
 
     /* Motion tiers; --duration-crossfade is the player's swap (docs/stack.md §6) */
     --duration-fast: 120ms;
@@ -216,10 +225,10 @@ input::placeholder {
     opacity: 1;
 }
 input[type="range"] {
-    accent-color: var(--color-ink);
+    accent-color: var(--color-primary);
 }
 ::selection {
-    background: var(--ui-selected-soft);
+    background: color-mix(in srgb, var(--palette-morado) 55%, transparent);
     color: var(--color-fg);
 }
 
@@ -258,6 +267,11 @@ input[type="range"] {
     min-height: 100dvh;
     background: var(--color-canvas);
     color: var(--color-fg);
+}
+/* Workspace scrollbars match the night canvas. */
+.paper-theme,
+.paper-theme * {
+    scrollbar-color: var(--color-border-strong) transparent;
 }
 /* Mono label: relvo's compact metadata voice (uppercase, letter-spaced). */
 .eyebrow {

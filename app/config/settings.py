@@ -47,10 +47,10 @@ class AppSettings(BaseSettings):
     database_url: SecretStr | None = None
     # Each seeded demo campaign's budget (CLP). Small values exercise budget exhaustion.
     demo_budget_clp: int = Field(default=50_000, gt=0)
-    # Which brand catalog the market runs (app/bootstrap/demo_catalog.py): "fictional"
-    # (tests, evals, the public URL) or "chile" (real brands at a Pronto Copec, for the
-    # local station; real trademarks, so keep it off public deploys).
-    demo_catalog: Literal["fictional", "chile"] = "fictional"
+    # Which brand catalog the market runs (app/bootstrap/demo_catalog.py). "chile" (real
+    # brands at a Pronto Copec) everywhere: the station, the simulator and the public URL.
+    # "fictional" is the frozen fixture that unit tests and evals pin explicitly.
+    demo_catalog: Literal["fictional", "chile"] = "chile"
     # Where phones reach the backend through the tunnel (QR → {public_base_url}/r/{code}).
     # Unset on Render: the service's own URL (RENDER_EXTERNAL_URL), which serves /r/{code}.
     public_base_url: str = Field(

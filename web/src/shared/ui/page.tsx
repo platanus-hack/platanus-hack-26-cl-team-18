@@ -3,10 +3,14 @@ import { demoHref, demoKey, rememberedDemoKey } from "@/lib/demo";
 import { Inbox } from "lucide-react";
 import type { ReactNode } from "react";
 
-/** The real station. Demo tools appear only inside the hidden `/demo/<key>` surface. */
+/**
+ * The real station. Demo tools appear only inside the hidden `/demo/<key>` surface;
+ * the advertiser setup is listed here but its API calls still need the demo key.
+ */
 const STATION_NAV: { href: string; label: string; wide?: boolean }[] = [
     { href: "/", label: "Consola" },
     { href: "/screen?id=demo-01", label: "Pantalla" },
+    { href: "/advertisers", label: "Anunciantes" },
 ];
 
 function navFor(key: string | null) {
@@ -35,9 +39,13 @@ export function AppShell({
     const nav = navFor(demoKey(path) ?? rememberedDemoKey());
     return (
         <div className="paper-theme">
-            <header className="sticky top-0 z-(--z-overlay) border-b border-border bg-surface">
+            <header className="sticky top-0 z-(--z-overlay) border-b border-border bg-canvas/85 backdrop-blur-md">
                 <div className="mx-auto flex h-14 max-w-7xl items-center gap-6 px-4 sm:px-6">
-                    <a href="/" className="shrink-0 text-body font-semibold tracking-tight">
+                    <a
+                        href="/"
+                        className="flex shrink-0 items-center gap-2 text-body font-semibold tracking-tight"
+                    >
+                        <span aria-hidden className="size-2 rounded-full bg-primary" />
                         advisor
                     </a>
                     <nav
@@ -54,8 +62,8 @@ export function AppShell({
                                     href={href}
                                     aria-current={current ? "page" : undefined}
                                     className={cn(
-                                        "shrink-0 rounded-control px-2.5 py-1.5 text-compact text-muted transition-colors hover:bg-surface-hover hover:text-fg",
-                                        current && "bg-surface-hover font-medium text-fg",
+                                        "shrink-0 rounded-control px-2.5 py-1.5 text-compact text-muted transition-colors hover:text-fg",
+                                        current && "bg-surface-raised font-medium text-fg",
                                         wide && "hidden md:inline-block",
                                     )}
                                 >

@@ -53,7 +53,7 @@ export function ClerkPage() {
                                     className={cn(
                                         "relative h-6 w-11 shrink-0 rounded-full border transition-colors",
                                         line.in_stock
-                                            ? "border-ink bg-ink"
+                                            ? "border-primary bg-primary"
                                             : "border-control-edge bg-surface-pressed",
                                     )}
                                     onClick={() => {
@@ -70,8 +70,8 @@ export function ClerkPage() {
                                     <span
                                         aria-hidden
                                         className={cn(
-                                            "absolute top-0.5 left-0.5 size-4.5 rounded-full bg-surface shadow-resting transition-transform",
-                                            line.in_stock && "translate-x-5",
+                                            "absolute top-0.5 left-0.5 size-4.5 rounded-full bg-fg shadow-resting transition-transform",
+                                            line.in_stock && "translate-x-5 bg-ink",
                                         )}
                                     />
                                 </button>

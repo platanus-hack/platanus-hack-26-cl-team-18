@@ -5,7 +5,7 @@ Fictional brands (`voltio`, `cafe-patio`, `rayo`, `malta-sur`) are the team's ow
 Real brands (`DEMO_CATALOG=chile`, `app/bootstrap/demo_catalog_chile.py`) are the
 official marks, downloaded unmodified from Wikimedia Commons and placed on a plain
 rounded plate (white; black for Monster, whose mark is designed for dark grounds).
-They are trademarks of their owners, used for a local hackathon demo without
+They are trademarks of their owners, used for a hackathon demo without
 affiliation. Never AI-drawn or redrawn (CLAUDE.md invariant 4).
 
 | File | Commons source |
