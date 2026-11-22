@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { InputHealthSchema, type InputHealth } from "./input-status";
 import { CONNECTION } from "./labels";
 import { stationView } from "./station";
+import { STATIONS } from "./stations";
 
 /** Poll `/health` (inputs and provider keys): devices change on their own. */
 function useHealth(intervalMs = 2000): InputHealth | null {
@@ -79,11 +80,22 @@ export function StationBar({
                                 window.location.assign(url.toString());
                             }}
                         >
-                            {[...new Set([screen, ...screens])].map((id) => (
-                                <option key={id} value={id}>
-                                    {id}
+                            {STATIONS.map((station) => (
+                                <option
+                                    key={station.id}
+                                    value={station.id}
+                                    disabled={!station.live && station.id !== screen}
+                                >
+                                    {station.live ? station.name : `${station.name} · sin señal`}
                                 </option>
                             ))}
+                            {[...new Set([screen, ...screens])]
+                                .filter((id) => !STATIONS.some((station) => station.id === id))
+                                .map((id) => (
+                                    <option key={id} value={id}>
+                                        {id}
+                                    </option>
+                                ))}
                         </select>
                     </label>
                     {status === null ? (

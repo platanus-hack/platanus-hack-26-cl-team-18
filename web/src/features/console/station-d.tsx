@@ -46,10 +46,15 @@ function Section({
     label?: string;
 }) {
     return (
-        <section aria-label={label ?? title} className="flex min-w-0 flex-col gap-2.5">
-            <div className="flex items-baseline justify-between gap-3">
-                <h2 className="text-section font-semibold">{title}</h2>
-                {aside && <span className="text-metadata text-muted">{aside}</span>}
+        <section
+            aria-label={label ?? title}
+            className="flex min-w-0 flex-col gap-3 rounded-container border border-border bg-surface p-4"
+        >
+            <div className="flex items-center justify-between gap-3">
+                <h2 className="eyebrow">{title}</h2>
+                {aside && (
+                    <span className="font-mono text-metadata text-muted tabular-nums">{aside}</span>
+                )}
             </div>
             {children}
         </section>
@@ -77,12 +82,16 @@ export function CameraPanel({ view }: { view: ScreenView }) {
     const looking = fresh?.people.filter((p) => p.looking).length ?? view.moment?.looking ?? 0;
     const people = fresh?.people.length ?? view.moment?.people ?? 0;
     return (
-        <Section title="Lo que ve la cámara">
+        <Section
+            title="Cámara"
+            label="Lo que ve la cámara"
+            aside={people > 0 ? `${looking} mirando` : null}
+        >
             <div
                 className={
                     fresh
                         ? "relative overflow-hidden rounded-container bg-ink"
-                        : "relative overflow-hidden rounded-container border border-dashed border-border-strong bg-surface-raised"
+                        : "relative overflow-hidden rounded-container bg-surface-raised"
                 }
                 style={{
                     aspectRatio: fresh ? `${fresh.frame_w} / ${fresh.frame_h}` : "16 / 9",
@@ -149,24 +158,14 @@ export function CameraPanel({ view }: { view: ScreenView }) {
                 ) : (
                     <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
                         <Camera className="size-6 text-muted" aria-hidden />
-                        <p className="text-body font-medium">
+                        <p className="text-compact text-muted">
                             {people > 0
-                                ? `${people} ${people === 1 ? "persona" : "personas"} · ${looking} mirando`
-                                : "Sin detecciones"}
+                                ? `${people} ${people === 1 ? "persona" : "personas"}`
+                                : "Nadie frente a la pantalla"}
                         </p>
-                        {people > 0 && (
-                            <p className="max-w-xs text-compact text-muted">
-                                Esperando las cajas del agente de cámara.
-                            </p>
-                        )}
                     </div>
                 )}
             </div>
-            {fresh && (
-                <p className="text-compact text-muted">
-                    {people} {people === 1 ? "persona" : "personas"} · {looking} mirando
-                </p>
-            )}
         </Section>
     );
 }
@@ -179,7 +178,7 @@ export function PeopleScreen({ view }: { view: ScreenView }) {
     const waiting = next ? new Date(next.not_before).getTime() - now : null;
     const showNext = next !== null && waiting !== null && waiting > -2000;
     return (
-        <Section title="Lo que ve la gente">
+        <Section title="En pantalla" label="Lo que ve la gente">
             <div
                 className="relative aspect-video overflow-hidden rounded-container border border-border bg-ink shadow-resting"
                 aria-label="Aviso al aire"
