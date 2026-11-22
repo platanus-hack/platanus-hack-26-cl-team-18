@@ -102,9 +102,55 @@ def _letters(normalized: str) -> str:
 
 
 def brand_mentioned(normalized: str, name: str) -> bool:
-    """A brand at a word start, letters possibly split by separators ("R-a-y-o", "Rayos")."""
+    """A brand at a word start, letters possibly split by separators ("R-a-y-o", "Rayos");
+    "&" reads as "y" ("Bilz & Pap" is "Bilz y Pap")."""
     pattern = _brand_pattern(name)
-    return pattern is not None and pattern.search(normalized) is not None
+    return pattern is not None and pattern.search(_ampersand(normalized)) is not None
+
+
+def _ampersand(normalized: str) -> str:
+    return normalized.replace("&", " y ")
+
+
+@lru_cache(maxsize=256)
+def _own_name_pattern(name: str) -> re.Pattern[str] | None:
+    pattern = _brand_pattern(name)
+    return None if pattern is None else re.compile(rf"{pattern.pattern}(?![a-z0-9])")
+
+
+def _names_itself(normalized: str, name: str) -> bool:
+    """The copy spells the brand's whole name, however it is punctuated ("Coca Cola" for
+    "Coca-Cola", "Lay’s" or "Lays" for "Lay's"): a different spelling is not a missing brand."""
+    pattern = _own_name_pattern(name)
+    return pattern is not None and pattern.search(_ampersand(normalized)) is not None
+
+
+@lru_cache(maxsize=256)
+def _competitors(avoid_names: frozenset[str], names: tuple[str, ...]) -> tuple[str, ...]:
+    """Brands this basket's copy must not name: catalog rivals and known brands, minus its own.
+
+    A basket brand's own name may contain a known brand ("Pronto Copec" ⊃ "Copec"), or spell
+    it with other separators ("Coca-Cola" = "Coca Cola"), the same way brand_mentioned
+    ignores them: naming your own brand is never naming a competitor. Cached per basket
+    (catalog names only, never copy): the hot path computed it on every check.
+    """
+    basket = {normalize(name) for name in names}
+    own_letters = {_letters(name) for name in basket}
+    return tuple(
+        name
+        for name in sorted(avoid_names | set(KNOWN_BRANDS))
+        if _letters(normalize(name)) not in own_letters
+        and not any(contains_term(own, normalize(name)) for own in basket)
+    )
+
+
+# A pack size the brand approved ("Original 473 ml", "Bolsa de 170 g") is a size, not a
+# price: copy that repeats it verbatim must not read as a changed price.
+_SIZE = re.compile(r"(?<![\w.,])(\d[\d.,]*)\s?(ml|cc|cl|lts?|l|grs?|g|kg)(?!\w)", re.IGNORECASE)
+
+
+def _sizes(text: str) -> set[tuple[str, str]]:
+    return {(_digits(m.group(1)), m.group(2).casefold()) for m in _SIZE.finditer(text)}
 
 
 _LINK = re.compile(r"https?://|www\.|\.(?:cl|com|net)\b|@\w|\+?\d[\d\s-]{7,}\d")
@@ -140,15 +186,16 @@ class CopyGuard(Specification[tuple[CopyDraft, CreativeBrief]]):
         return check_copy(draft, brief).passed
 
 
-_JOINER = re.compile(r"\s*(?:\+|\by\b|\bmas\b|,)\s*")
+_JOINER = re.compile(r"\s*(?:\+|&|\by\b|\bmas\b|,)\s*")
 
 
 def _carries(line: str, approved: str) -> bool:
-    """`approved` appears in `line`, ignoring case, accents, spacing and how items are joined
-    ("Rayo + Café Patio" = "Rayo y Café Patio"); quantities and items must stay as approved."""
+    """`approved` appears in `line`, ignoring case, accents, spacing, how items are joined
+    ("Rayo + Café Patio" = "Rayo y Café Patio") and how a name is punctuated ("Coca Cola",
+    "Lay’s", "Bilz & Pap"); quantities and items must stay as approved."""
 
     def squash(text: str) -> str:
-        return re.sub(r"\s+", "", _JOINER.sub("+", normalize(text)))
+        return re.sub(r"[^\w+]+", "", _JOINER.sub("+", normalize(text)))
 
     return squash(approved) in squash(line)
 
@@ -199,17 +246,8 @@ def check_copy(draft: CopyDraft, brief: CreativeBrief) -> GuardVerdict:
         )
     )
     approved_price = _digits(str(offer.price.amount)) if offer else None
-    basket = {normalize(name) for name in brief.names}
-    own_letters = {_letters(name) for name in basket}
-    # A basket brand's own name may contain a known brand ("Pronto Copec" ⊃ "Copec"),
-    # or spell it with other separators ("Coca-Cola" = "Coca Cola"), the same way
-    # brand_mentioned ignores them: naming your own brand is never naming a competitor.
-    competitors = tuple(
-        name
-        for name in sorted(brief.avoid_names | set(KNOWN_BRANDS))
-        if _letters(normalize(name)) not in own_letters
-        and not any(contains_term(own, normalize(name)) for own in basket)
-    )
+    approved_sizes = _sizes(approved_text)
+    competitors = _competitors(brief.avoid_names, brief.names)
     allowed_party = party_mentions(approved_text)
     if brief.addressed_party is not None:
         allowed_party.add(brief.addressed_party)
@@ -233,9 +271,16 @@ def check_copy(draft: CopyDraft, brief: CreativeBrief) -> GuardVerdict:
         if (bad := _unsafe_characters(text)) is not None:
             out.append(Violation(kind=ViolationKind.UNSAFE_CHARACTERS, where=where, detail=bad))
         priced = {m.span() for m in _PRICE.finditer(text)}
+        sized = {
+            m.span(1)
+            for m in _SIZE.finditer(text)
+            if (_digits(m.group(1)), m.group(2).casefold()) in approved_sizes
+        }
         for match in _AMOUNT.finditer(text):
             if any(a <= match.start() < b for a, b in priced):
                 continue  # already checked as a $ price
+            if (match.start(), match.end()) in sized:
+                continue  # the brand's own approved pack size ("473 ml")
             amount = _digits(match.group(0))
             if len(amount) >= 3 and amount != approved_price:
                 out.append(
@@ -305,7 +350,7 @@ def check_copy(draft: CopyDraft, brief: CreativeBrief) -> GuardVerdict:
 
     visible = normalize(" ".join((draft.teaser, draft.offer, draft.close)))
     for name in brief.names:
-        if not contains_term(visible, name):
+        if not _names_itself(visible, name):
             out.append(Violation(kind=ViolationKind.BRAND_MISSING, where="all", detail=name))
 
     return GuardVerdict(violations=tuple(out))

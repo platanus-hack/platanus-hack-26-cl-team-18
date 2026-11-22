@@ -148,9 +148,26 @@ def teaser_for(brief: CreativeBrief, angle: Angle) -> str:
     else:
         solo_hook, group_hook = _TEASERS[angle]
         template = group_hook if brief.is_group else solo_hook
-    return template.format(
-        names=_join(brief.names), held=held, partner=_join(partners), group=count or ""
-    )
+    fields = {"names": _join(brief.names), "held": held, "partner": _join(partners)}
+    teaser = template.format(**fields, group=count or "")
+    if not _fits(teaser, brief) and angle in _SHORT_TEASERS:
+        # Long multi-word names ("Pronto Copec" + "Andina del Valle") overflow the
+        # teaser's word cap: the guard would reject it and the sold moment would air
+        # the house ad. The short form keeps the angle's keyword and the partner.
+        teaser = _SHORT_TEASERS[angle].format(**fields)
+    return teaser
+
+
+# Name-bearing hooks, shortened for long brand names (each still names a basket brand).
+_SHORT_TEASERS: dict[Angle, str] = {
+    Angle.COMPLETE_BASKET: "Complétalo con {partner}.",
+    Angle.GENERIC: "{names}, aquí.",
+}
+
+
+def _fits(line: str, brief: CreativeBrief) -> bool:
+    limits = brief.limits
+    return len(line.split()) <= limits.teaser_words and len(line) <= limits.max_chars
 
 
 def offer_for(brief: CreativeBrief) -> str:
