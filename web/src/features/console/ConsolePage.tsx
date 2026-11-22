@@ -79,7 +79,7 @@ export function ConsolePage() {
                     ))}
                 </div>
             )}
-            <div className="grid gap-7 lg:grid-cols-2">
+            <div className="grid gap-7 md:grid-cols-2">
                 <ErrorBoundary label="camera">
                     <CameraPanel view={view} />
                 </ErrorBoundary>

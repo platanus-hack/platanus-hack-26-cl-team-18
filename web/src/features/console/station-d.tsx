@@ -136,9 +136,13 @@ export function CameraPanel({ view }: { view: ScreenView }) {
                             </div>
                         ))}
                         <span className="absolute top-3 right-3 rounded-full bg-ink/80 px-2.5 py-1 text-metadata text-white">
-                            {fresh.preview_jpeg_base64
-                                ? "Vista demo · rostros difuminados · nada se guarda"
-                                : "Solo cajas · nada se guarda"}
+                            {/* Phones get the short form so it never covers the boxes' labels. */}
+                            <span className="hidden sm:inline">
+                                {fresh.preview_jpeg_base64
+                                    ? "Vista demo · rostros difuminados · "
+                                    : "Solo cajas · "}
+                            </span>
+                            nada se guarda
                         </span>
                     </>
                 ) : (
@@ -266,7 +270,7 @@ export function AuctionSection({ view, screen }: { view: ScreenView; screen: str
                 ) : (
                     <>
                         <MobileBids rows={shown} controls={controls} onError={setError} />
-                        <div className="hidden overflow-x-auto md:block">
+                        <div className="hidden overflow-x-auto lg:block">
                             <table className="w-full min-w-[720px] border-collapse text-compact">
                                 <thead>
                                     <tr className="text-left whitespace-nowrap text-muted">
@@ -311,6 +315,8 @@ export function AuctionSection({ view, screen }: { view: ScreenView; screen: str
                                     ))}
                                 </tbody>
                             </table>
+                        </div>
+                        <div className="-mt-4 flex flex-col">
                             {idle.length > 0 && (
                                 <details className="mt-2 pl-3 text-compact text-muted">
                                     <summary className="cursor-pointer">
@@ -375,7 +381,7 @@ export function AuctionSection({ view, screen }: { view: ScreenView; screen: str
 }
 
 /** Standby: every brand as a compact tile, ready to bid, before anyone is seen. */
-/** Phone: one card per bid (who, result, bid, multiplier, price paid); no sideways scroll. */
+/** Phone and tablet: one card per bid (who, result, bid, multiplier, price paid); no sideways scroll. */
 function MobileBids({
     rows,
     controls,
@@ -398,7 +404,7 @@ function MobileBids({
         );
     };
     return (
-        <ul aria-label="Pujas" className="flex flex-col gap-2 md:hidden">
+        <ul aria-label="Pujas" className="flex flex-col gap-2 lg:hidden">
             {rows.map((row) => {
                 const won = row.result?.label === "Gana";
                 return (
@@ -868,7 +874,10 @@ export function WhyPanel({ view }: { view: ScreenView }) {
                     <p className="text-title leading-snug font-medium tracking-tight">
                         {why.headline}
                     </p>
-                    <ol aria-label="Cómo se decidió" className="grid gap-2 sm:grid-cols-4">
+                    <ol
+                        aria-label="Cómo se decidió"
+                        className="grid grid-cols-2 gap-2 xl:grid-cols-4"
+                    >
                         {why.steps.map((step, index) => (
                             <li
                                 key={step.step}

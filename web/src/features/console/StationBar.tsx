@@ -62,7 +62,7 @@ export function StationBar({
     const link = CONNECTION[connection.status];
     return (
         <Card
-            className="sticky top-16 z-(--z-overlay) flex flex-col gap-3 p-4"
+            className="flex flex-col gap-3 p-4"
             aria-label={`En vivo · ${screen}`}
             data-live={status?.live ? "on" : "off"}
         >
