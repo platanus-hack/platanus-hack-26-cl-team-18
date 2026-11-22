@@ -83,7 +83,10 @@ screen shows the house ad. The panel at the top of `/console` has one button:
 The switch is enforced twice: the agents pause themselves (`--await-live`,
 `agent.hello` → `live.status`), and the backend drops anything sensed in
 standby at the socket (`/health` → `live.dropped_in_standby`). It works from
-the second laptop (ADR 0008 D7): `POST /api/live` is plain HTTP. Use
+the second laptop (ADR 0008 D7): `POST /api/live` is plain HTTP. With
+`DEMO_KEY` set it answers this machine (the station laptop, or the second laptop
+through the Vite proxy) and, through the tunnel, only a browser that opened
+`/demo/<key>` once (it sends the remembered key; `app/api/live.py`). Use
 `make demo-live ARGS="--start-live"` to skip standby. Tests, evals and
 `scripts/demo/video_replay.py` keep the old always-live default (`LIVE_STARTS_ON`).
 Code: `app/realtime/live_switch.py`, `edge/agent/live.py`,
