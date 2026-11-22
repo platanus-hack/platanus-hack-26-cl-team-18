@@ -6,7 +6,7 @@ TF  := scripts/tf.sh $(ENV)
 TF_ROOTS := terraform/modules/render-app terraform/modules/render-static-site terraform/envs/prod
 LOCAL_DATABASE_URL := postgresql://team18:team18@localhost:5432/team18
 
-.PHONY: help help-all up station demo-live install edge-install edge-check eval-speech-robustness edge-yoloe edge-probe-objects test-live test-sandbox dev web-install web-dev web-check contract contract-check lint format format-check typecheck test check migrate migrate-status campaign-budgets db-up db-down db-reset \
+.PHONY: help help-all up station demo-live install edge-install edge-check eval-speech-robustness eval-vocab edge-yoloe edge-probe-objects test-live test-sandbox dev web-install web-dev web-check contract contract-check lint format format-check typecheck test check migrate migrate-status campaign-budgets db-up db-down db-reset \
         live-preflight bundle-loops bundle-loops-local \
         eval eval-baseline eval-creative eval-creative-baseline eval-campaigns eval-replay eval-perception eval-record eval-rehearsal eval-beats eval-video-fetch eval-video eval-pipeline eval-demo-video demo-warmup eval-browser \
         tf-init tf-fmt tf-fmt-check tf-validate tf-test tf-check tf-plan tf-apply tf-output tf-lock
@@ -73,6 +73,9 @@ eval-speech: ## Speech facts → live auction → matching player, no provider c
 eval-speech-robustness: ## Real speech x venue noise through VAD/mic path; ARGS="--live" adds real Scribe (paid, cents)
 	cd edge && uv run python -m agent.speech.robustness $(ARGS)
 
+eval-vocab: ## YOLOE store labels on labelled product photos vs baseline; ARGS="--candidate f.json" or "--update-baseline"
+	cd edge && env -u VIRTUAL_ENV uv run python -m agent.vision.vocab_eval $(ARGS)
+
 eval-demo-video: ## The demo video (docs/demo.md §3) beat by beat: complete ads, redeem, receipt, $0
 	uv run python -m evals demo-video
 
@@ -129,6 +132,9 @@ eval-creative-baseline: ## Lock improved creative ratchets into evals/creative/b
 
 eval-campaigns: ## Approved campaign variants: co-brand safety, offers, photos/video and latency
 	uv run python -m evals campaigns
+
+eval-tags: ## Chile campaign tagging: reach matrix + every camera label and spoken aisle through the live loop
+	uv run python -m evals tags
 
 eval-replay: ## Real-video perception recording -> live backend (REC=path.jsonl [SPEED=1])
 	uv run python -m evals replay $(REC) --speed $(or $(SPEED),1)

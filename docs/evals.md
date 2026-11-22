@@ -415,6 +415,35 @@ never synthesized twice.
    results are dropped (0 late upgrades, the screen stays correct), but that
    spend is wasted. Warm-up removes both for the scripted demo.
 
+## 4.3 Recognition feedback loops: a miss becomes a red test, a fix stays fixed
+
+Each sense the screen has (camera labels, speech intents, campaign tags) has a labelled
+set, a command that scores it, and a gate. A miss seen in a rehearsal is added to the
+set first; it turns red; the fix turns it green; the baseline or corpus keeps it green.
+
+| Sense | Labelled set | Command | Gate |
+|---|---|---|---|
+| **YOLO store labels** (does a prompt find its product, and only it?) | `edge/evals/vocab/photos.json`: Commons product photos (fetched on demand, never committed) + our campaign photos, each with the product a person would name | `make eval-vocab` (12 s); `ARGS="--candidate try.json"` scores a prompt list before you edit `vocabulary.py` | Per label, against `edge/evals/vocab/baseline.json`: no label may lose recall or gain false hits (YOLOE gives one class per box, so a new prompt can steal an old one's boxes). `--update-baseline` refuses a regression. Set consistency: `edge/tests/test_vocab_eval.py` (CI) |
+| **Speech intents** (what the hot-path keyterm matcher reads from a phrase) | `evals/fixtures/speech/keyterms_es_cl.json`: es-CL phrases with the intents they must and must not produce (slang, recognizer slips like "plátanos" for Platanus, second meanings like "está helado", negations) | `make test ARGS="tests/unit/audience/test_keyterm_corpus.py"` (CI) | Every phrase exact; every intent, every aisle the Chile screen answers by voice and every guarded second meaning has a phrase |
+| **Campaign tags** (who can reach each brand, and does what airs fit?) | The Chile catalog itself: cues, markers, keyterm segments, photos | `make eval-tags` (10 s, CI) → `evals/results/tags.md` | Every brand reachable by a camera label or a marker cue, with a marker and a Chile photo; every camera label at five dayparts and every spoken intent through the live loop airs a brand that sells it, with a hook that fits its aisle (no "Pilas bajas" for thirst) |
+| Speech under noise | Real speech × venue noise | `make eval-speech-robustness` | §6 |
+| People, minors, held products on real video | Hand-labelled clips | `make eval-perception`, `make eval-video` | §4, §4.1 |
+
+**When a rehearsal misses:**
+
+- The camera missed or mislabelled a product → add its photo to `photos.json`, run
+  `make eval-vocab` (red), try prompts with `--candidate`, keep one that raises that label
+  and lowers none, edit `edge/agent/vision/vocabulary.py` (and the `gpu/service/` copy),
+  `make eval-vocab ARGS=--update-baseline`, `make edge-yoloe` to re-bake, commit.
+  A product YOLOE can't tell apart (a chocolate bar, a milk carton) gets a marker cue
+  instead (`Catalog.marker_cues`).
+- Speech misheard or mis-read a phrase → add the line to `keyterms_es_cl.json` (red),
+  add the variant (or the misheard form, or the second-meaning guard) in
+  `app/contract/speech_matching.py`, `make contract` to copy it to the agent, green.
+  Synthetic phrases only: never paste a real utterance heard at a venue.
+- The wrong ad aired for a product or a phrase → `make eval-tags` shows the row; fix the
+  segment, cue, angle or hook in the catalog; green.
+
 ## 5. Rehearsals are data
 
 ```sh

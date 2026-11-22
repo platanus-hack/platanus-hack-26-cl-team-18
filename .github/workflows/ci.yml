@@ -25,6 +25,8 @@ jobs:
       # The scorecard goes to the job summary and is kept as an artifact.
       - run: uv run python -m evals --soak 300
       - run: uv run python -m evals campaigns
+      # Chile campaign tagging: every camera label and spoken aisle through the live loop.
+      - run: uv run python -m evals tags
       # Full ad pipeline (copy + voice + billing) with replayed provider timing.
       - run: uv run python -m evals pipeline --dwell 3
       - if: always()

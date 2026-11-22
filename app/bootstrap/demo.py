@@ -13,7 +13,7 @@ from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from app.bootstrap import demo_catalog, dev_stream
-from app.bootstrap.demo_catalog import wordmark
+from app.bootstrap.demo_catalog import Catalog, wordmark
 from app.bootstrap.demo_console import decision_messages
 from app.contract.messages import (
     AdvertiserAudience,
@@ -513,20 +513,8 @@ def register_demo(
     )
     # Canonical keyterms the agent reports (edge/agent/speech/keyterms.py) -> segments.
     keyterm_catalog = {
-        "gym": fitness,
-        "energía": fitness,
-        "café": coffee,
-        "hambre": food,
-        "comida": food,
-        "cerveza": beer,
-    }
-    keyterm_catalog = {term: cue_segments.get(term, seg) for term, seg in keyterm_catalog.items()}
-    # A market may also give a segment to a keyterm the base map leaves unheard ("sed",
-    # "helado", "jugo"...): only canonical keyterms the agent can report count.
-    keyterm_catalog |= {
-        term: segment
-        for term, segment in cue_segments.items()
-        if term in DEFAULT_KEYTERMS.variants and term not in keyterm_catalog
+        term: SegmentId.create(segment)
+        for term, segment in keyterm_segments(market.catalog).items()
     }
     # Creative generation (docs/creative-generation.md): targeted stock copy on the hot
     # path, guarded AI copy as a warm upgrade when a copywriter is configured.
@@ -2152,6 +2140,33 @@ def _house_logo_url() -> str:
         .joinpath("web", "public", "brand", "adverse-mark-on-dark.svg")
     )
     return "data:image/svg+xml;base64," + b64encode(mark.read_bytes()).decode("ascii")
+
+
+# Canonical keyterms the agent reports -> IAB segment, before a market's overrides.
+BASE_KEYTERM_SEGMENTS: dict[str, str] = {
+    "gym": "408",  # Fitness and Exercise
+    "energía": "408",
+    "café": "977",  # Coffee
+    "hambre": "1404",  # Fast Food
+    "comida": "1404",
+    "cerveza": "369",  # Alcoholic Beverages
+}
+
+
+def keyterm_segments(catalog: Catalog) -> dict[str, str]:
+    """What each spoken intent means at this market: the base map with the market's
+    overrides (Catalog.cue_segments: "energía" is an energy drink at a gas station),
+    plus the keyterms only the market answers ("sed", "helado", "hackathon"...). Only
+    canonical keyterms the agent can report count. The live loop and evals/tags.py both
+    read it, so what the eval checks is what the screen does."""
+    overrides = dict(catalog.cue_segments)
+    segments = {term: overrides.get(term, seg) for term, seg in BASE_KEYTERM_SEGMENTS.items()}
+    segments |= {
+        term: segment
+        for term, segment in catalog.cue_segments
+        if term in DEFAULT_KEYTERMS.variants and term not in segments
+    }
+    return segments
 
 
 def _brand_logo(slug: str, name: str, color: str) -> str:

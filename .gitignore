@@ -119,6 +119,8 @@ Thumbs.db
 evals/results/
 evals/perception/videos/
 evals/perception/recordings/
+# The YOLOE vocabulary eval downloads its Commons photos here (edge/agent/vision/vocab_eval.py).
+edge/evals/vocab/.cache/
 
 # The in-browser pose model (/screen senses; ADR 0010) ships with the web build.
 !web/public/models/*.onnx

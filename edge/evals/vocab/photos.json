@@ -1,0 +1,265 @@
+{
+ "_comment": "Labelled product photos for the YOLOE store vocabulary eval (cd edge && uv run python -m agent.vision.vocab_eval). 'label' is the canonical label a person would expect for the product in hand, even when the vocabulary cannot emit it yet (chocolate bar, candy, milk, sports drink): kept so a candidate prompt can be measured against them. Commons files are fetched on demand into the gitignored .cache/ and never committed; 'repo' photos are our own campaign assets. Add a photo whenever a rehearsal shows the camera missing or mislabelling a product.",
+ "photos": [
+  {
+   "id": "chips-bag-of-potato-chips-0",
+   "commons": "File:Opened bag of Ruffles All Dressed potato chips (cropped).jpg",
+   "label": "chips"
+  },
+  {
+   "id": "chips-bag-of-potato-chips-2",
+   "commons": "File:Opened bag of Ruffles All Dressed potato chips.jpg",
+   "label": "chips"
+  },
+  {
+   "id": "chocolate-bar-chocolate-bar-wrapper-1",
+   "commons": "File:Hershey's Milk Chocolate wrapper (2012-2015).png",
+   "label": "chocolate bar"
+  },
+  {
+   "id": "chocolate-bar-chocolate-bar-wrapper-2",
+   "commons": "File:Rakhat Kazakhstan dark chocolate bar (vertical).jpg",
+   "label": "chocolate bar"
+  },
+  {
+   "id": "chocolate-bar-candy-bar-wrapper-1",
+   "commons": "File:Fudge bar wrapper.JPG",
+   "label": "chocolate bar"
+  },
+  {
+   "id": "chocolate-bar-candy-bar-wrapper-2",
+   "commons": "File:2019-03-30 02 43 17 A Baby Ruth candy bar still in its wrapper in the Dulles section of Sterling, Loudoun County, Virginia.jpg",
+   "label": "chocolate bar"
+  },
+  {
+   "id": "candy-bag-of-candy-0",
+   "commons": "File:2008-03-06 bag of gummi candy in Kaohsiung.jpg",
+   "label": "candy"
+  },
+  {
+   "id": "candy-bag-of-candy-1",
+   "commons": "File:Candy Raisins 01.jpg",
+   "label": "candy"
+  },
+  {
+   "id": "candy-lollipop-0",
+   "commons": "File:Rock candy on a stick, top half licked.jpg",
+   "label": "candy"
+  },
+  {
+   "id": "candy-lollipop-1",
+   "commons": "File:Bacon-flavored lollipops.jpg",
+   "label": "candy"
+  },
+  {
+   "id": "candy-lollipop-2",
+   "commons": "File:Lollipop in the package.jpg",
+   "label": "candy"
+  },
+  {
+   "id": "ice-cream-ice-cream-cone-hand-0",
+   "commons": "File:Ice cream cone with spoon.jpg",
+   "label": "ice cream"
+  },
+  {
+   "id": "ice-cream-ice-cream-cone-hand-1",
+   "commons": "File:Ice cream cone - superman flavor.jpg",
+   "label": "ice cream"
+  },
+  {
+   "id": "ice-cream-ice-cream-cone-hand-2",
+   "commons": "File:It's time to have ice cream on the beach.jpg",
+   "label": "ice cream"
+  },
+  {
+   "id": "juice-orange-juice-carton-0",
+   "commons": "File:Refuelling Project 365(3) Day 153.jpg",
+   "label": "juice"
+  },
+  {
+   "id": "sports-drink-gatorade-bottle-0",
+   "commons": "File:Gatorade Zero Fruit Punch, Canada (French side), 2026-02-19.jpg",
+   "label": "sports drink"
+  },
+  {
+   "id": "sports-drink-gatorade-bottle-1",
+   "commons": "File:Gatorade Zero Fruit Punch, Canada (English side), 2026-02-19.jpg",
+   "label": "sports drink"
+  },
+  {
+   "id": "sports-drink-gatorade-bottle-2",
+   "commons": "File:Gatorade Thirst Quencher.jpg",
+   "label": "sports drink"
+  },
+  {
+   "id": "sports-drink-sports-drink-bottle-2",
+   "commons": "File:John O'Brien has a drink (2006).jpg",
+   "label": "sports drink"
+  },
+  {
+   "id": "energy-drink-can-monster-energy-can-0",
+   "commons": "File:Monster Energy drinks 09.jpg",
+   "label": "energy drink can"
+  },
+  {
+   "id": "energy-drink-can-monster-energy-can-1",
+   "commons": "File:Monster Energy Mega can.jpg",
+   "label": "energy drink can"
+  },
+  {
+   "id": "energy-drink-can-monster-energy-can-2",
+   "commons": "File:Monster Energy drinks 04.jpg",
+   "label": "energy drink can"
+  },
+  {
+   "id": "soda-can-coca-cola-can-1",
+   "commons": "File:Coca-cola 50cl can - Italia.jpg",
+   "label": "soda can"
+  },
+  {
+   "id": "cup-paper-coffee-cup-0",
+   "commons": "File:Paper coffee cup, Novosibirsk 02.jpg",
+   "label": "cup"
+  },
+  {
+   "id": "cup-paper-coffee-cup-1",
+   "commons": "File:Paper coffee cup, Novosibirsk 01.jpg",
+   "label": "cup"
+  },
+  {
+   "id": "cup-paper-coffee-cup-2",
+   "commons": "File:Disposable , paper coffee cups, Christmas in Australia, 2021.jpg",
+   "label": "cup"
+  },
+  {
+   "id": "cup-takeaway-coffee-cup-0",
+   "commons": "File:Coffee cup in woman's hands (Unsplash).jpg",
+   "label": "cup"
+  },
+  {
+   "id": "cup-takeaway-coffee-cup-1",
+   "commons": "File:Biodegradable coffee cup in compost heap.jpg",
+   "label": "cup"
+  },
+  {
+   "id": "cup-takeaway-coffee-cup-2",
+   "commons": "File:Takeaway littering (54174081300).jpg",
+   "label": "cup"
+  },
+  {
+   "id": "bottle-water-bottle-plastic-0",
+   "commons": "File:Water bottle 3.jpg",
+   "label": "bottle"
+  },
+  {
+   "id": "bottle-water-bottle-plastic-2",
+   "commons": "File:Water bottle (13779).jpg",
+   "label": "bottle"
+  },
+  {
+   "id": "milk-chocolate-milk-carton-0",
+   "commons": "File:Chocolate milk (441196553).jpg",
+   "label": "milk"
+  },
+  {
+   "id": "juice-tetra-pak-juice-0",
+   "commons": "File:SMAK tetra pak 01.jpg",
+   "label": "juice"
+  },
+  {
+   "id": "cl-chocolate",
+   "repo": "assets/campaigns/photos/cl-chocolate.webp",
+   "label": "chocolate bar"
+  },
+  {
+   "id": "cl-dulces",
+   "repo": "assets/campaigns/photos/cl-dulces.webp",
+   "label": "candy"
+  },
+  {
+   "id": "cl-helado-playa",
+   "repo": "assets/campaigns/photos/cl-helado-playa.webp",
+   "label": "ice cream"
+  },
+  {
+   "id": "cl-papas-rusticas",
+   "repo": "assets/campaigns/photos/cl-papas-rusticas.webp",
+   "label": "chips"
+  },
+  {
+   "id": "cl-chocolatada",
+   "repo": "assets/campaigns/photos/cl-chocolatada.webp",
+   "label": "milk"
+  },
+  {
+   "id": "cl-nectar",
+   "repo": "assets/campaigns/photos/cl-nectar.webp",
+   "label": "juice"
+  },
+  {
+   "id": "cl-medialunas",
+   "repo": "assets/campaigns/photos/cl-medialunas.webp",
+   "label": "pastry"
+  },
+  {
+   "id": "cl-completo-palta",
+   "repo": "assets/campaigns/photos/cl-completo-palta.webp",
+   "label": "hot dog"
+  },
+  {
+   "id": "cl-cappuccino",
+   "repo": "assets/campaigns/photos/cl-cappuccino.webp",
+   "label": "cup"
+  },
+  {
+   "id": "cl-monster-lineup",
+   "repo": "assets/campaigns/photos/cl-monster-lineup.webp",
+   "label": "energy drink can"
+  },
+  {
+   "id": "cl-agua",
+   "repo": "assets/campaigns/photos/cl-agua.webp",
+   "label": "bottle"
+  },
+  {
+   "id": "cl-cachantun-botella",
+   "repo": "assets/campaigns/photos/cl-cachantun-botella.webp",
+   "label": "bottle"
+  },
+  {
+   "id": "cl-desayuno",
+   "repo": "assets/campaigns/photos/cl-desayuno.webp",
+   "label": "cup"
+  },
+  {
+   "id": "cl-score-cafe",
+   "repo": "assets/campaigns/photos/cl-score-cafe.webp",
+   "label": "cup"
+  },
+  {
+   "id": "cl-red-bull-cafe",
+   "repo": "assets/campaigns/photos/cl-red-bull-cafe.webp",
+   "label": "cup"
+  },
+  {
+   "id": "cl-monster-sixpack",
+   "repo": "assets/campaigns/photos/cl-monster-sixpack.webp",
+   "label": "energy drink can"
+  },
+  {
+   "id": "cl-guinness-pint",
+   "repo": "assets/campaigns/photos/cl-guinness-pint.webp",
+   "label": "beer bottle"
+  },
+  {
+   "id": "cl-domino-completos",
+   "repo": "assets/campaigns/photos/cl-domino-completos.webp",
+   "label": "hot dog"
+  },
+  {
+   "id": "cl-vital-picnic",
+   "repo": "assets/campaigns/photos/cl-vital-picnic.webp",
+   "label": "bottle"
+  }
+ ]
+}

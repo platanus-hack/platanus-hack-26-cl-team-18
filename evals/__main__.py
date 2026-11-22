@@ -7,6 +7,7 @@ python -m evals perception LABELS REC.jsonl   score the agent against hand label
 python -m evals record --out FILE    record a live rehearsal from a running backend
 python -m evals rehearsal FILE       score a recorded rehearsal
 python -m evals creative [--writer stock|recorded|claude]   creative generation eval
+python -m evals tags                 Chile campaign tagging: who reaches each brand, does it fit
 """
 
 from __future__ import annotations
@@ -80,6 +81,7 @@ def main(argv: list[str] | None = None) -> int:
         "--harvest", action="store_true", help="append rejected/demoted drafts to harvested.json"
     )
     sub.add_parser("campaigns", help="campaign catalog, media, safety, quality and latency")
+    sub.add_parser("tags", help="Chile campaign tagging: reach matrix, camera and voice sweeps")
     sub.add_parser("speech", help="speech event → auction → player regression suite")
     sub.add_parser("demo-video", help="docs/demo.md §3 five beats end to end, complete ads")
 
@@ -110,6 +112,10 @@ def main(argv: list[str] | None = None) -> int:
         from evals.campaigns import main as campaign_eval
 
         return campaign_eval(args.out)
+    if command == "tags":
+        from evals.tags import main as tags_eval
+
+        return tags_eval(args.out)
     if command == "beats":
         from evals import beats as bt
 

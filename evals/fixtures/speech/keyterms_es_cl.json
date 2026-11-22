@@ -1,0 +1,304 @@
+{
+ "_comment": "Spoken es-CL phrases and the intents the hot-path keyterm matcher (app/contract/speech_matching.py) must read from them. Synthetic fixtures only: never paste a real utterance heard at a venue (privacy, CLAUDE.md). When a rehearsal shows a phrase misheard or mis-read, add the line here (the test turns red), then add the variant or guard.",
+ "cases": [
+  {
+   "text": "tengo hambre",
+   "wanted": [
+    "hambre"
+   ],
+   "rejected": []
+  },
+  {
+   "text": "qué bajón tengo",
+   "wanted": [
+    "hambre"
+   ],
+   "rejected": []
+  },
+  {
+   "text": "qué bajón, perdimos",
+   "wanted": [],
+   "rejected": [],
+   "why": "'qué bajón' is a bummer, not the munchies"
+  },
+  {
+   "text": "se me quitó el hambre",
+   "wanted": [],
+   "rejected": [
+    "hambre"
+   ],
+   "why": "a need that passed retracts it"
+  },
+  {
+   "text": "quiero un completo",
+   "wanted": [
+    "comida"
+   ],
+   "rejected": []
+  },
+  {
+   "text": "el bus está completo",
+   "wanted": [],
+   "rejected": [],
+   "why": "'está completo' is full, not the hot dog"
+  },
+  {
+   "text": "tomemos once",
+   "wanted": [
+    "comida"
+   ],
+   "rejected": []
+  },
+  {
+   "text": "llegamos a las once",
+   "wanted": [],
+   "rejected": [],
+   "why": "'a las once' is eleven o'clock"
+  },
+  {
+   "text": "un cafecito",
+   "wanted": [
+    "café"
+   ],
+   "rejected": []
+  },
+  {
+   "text": "un cortado por favor",
+   "wanted": [
+    "café"
+   ],
+   "rejected": []
+  },
+  {
+   "text": "quiero un acfe",
+   "wanted": [
+    "café"
+   ],
+   "rejected": [],
+   "why": "a recognizer slip"
+  },
+  {
+   "text": "ya no quiero café",
+   "wanted": [],
+   "rejected": [
+    "café"
+   ]
+  },
+  {
+   "text": "vengo del gimnasio",
+   "wanted": [
+    "gym"
+   ],
+   "rejected": []
+  },
+  {
+   "text": "voy a entrenar un modelo",
+   "wanted": [],
+   "rejected": [],
+   "why": "a hackathon trains models, not legs"
+  },
+  {
+   "text": "hoy toca entreno de modelos",
+   "wanted": [],
+   "rejected": [],
+   "why": "a hackathon trains models, not legs"
+  },
+  {
+   "text": "vengo del entreno",
+   "wanted": [
+    "gym"
+   ],
+   "rejected": []
+  },
+  {
+   "text": "tengo sed",
+   "wanted": [
+    "sed"
+   ],
+   "rejected": []
+  },
+  {
+   "text": "quiero agua",
+   "wanted": [
+    "sed"
+   ],
+   "rejected": []
+  },
+  {
+   "text": "una chela",
+   "wanted": [
+    "cerveza"
+   ],
+   "rejected": []
+  },
+  {
+   "text": "una cerveza sin alcohol",
+   "wanted": [
+    "sin alcohol"
+   ],
+   "rejected": [
+    "cerveza"
+   ],
+   "why": "the beer is rejected; the 0.0 is its own want (Guinness 0.0)"
+  },
+  {
+   "text": "estoy muy cansado",
+   "wanted": [
+    "energía"
+   ],
+   "rejected": []
+  },
+  {
+   "text": "tengo sueño",
+   "wanted": [
+    "energía"
+   ],
+   "rejected": []
+  },
+  {
+   "text": "mi sueño es ganar",
+   "wanted": [],
+   "rejected": [],
+   "why": "a dream, not tiredness"
+  },
+  {
+   "text": "quiero un helado",
+   "wanted": [
+    "helado"
+   ],
+   "rejected": []
+  },
+  {
+   "text": "está helado afuera",
+   "wanted": [],
+   "rejected": [],
+   "why": "freezing, not an ice cream"
+  },
+  {
+   "text": "no quiero helado",
+   "wanted": [],
+   "rejected": [
+    "helado"
+   ]
+  },
+  {
+   "text": "unas papitas",
+   "wanted": [
+    "papas"
+   ],
+   "rejected": []
+  },
+  {
+   "text": "mis papás vienen a buscarme",
+   "wanted": [],
+   "rejected": [],
+   "why": "accents fold 'papás' (parents) into 'papas'"
+  },
+  {
+   "text": "un chocolatito",
+   "wanted": [
+    "chocolate"
+   ],
+   "rejected": []
+  },
+  {
+   "text": "algo dulce",
+   "wanted": [
+    "dulce"
+   ],
+   "rejected": []
+  },
+  {
+   "text": "qué dulce eres",
+   "wanted": [],
+   "rejected": [],
+   "why": "a compliment, not a craving"
+  },
+  {
+   "text": "un juguito",
+   "wanted": [
+    "jugo"
+   ],
+   "rejected": []
+  },
+  {
+   "text": "un néctar de durazno",
+   "wanted": [
+    "jugo"
+   ],
+   "rejected": []
+  },
+  {
+   "text": "una chocolatada",
+   "wanted": [
+    "leche"
+   ],
+   "rejected": []
+  },
+  {
+   "text": "una bebida",
+   "wanted": [
+    "bebida"
+   ],
+   "rejected": []
+  },
+  {
+   "text": "algo isotónico",
+   "wanted": [
+    "isotónica"
+   ],
+   "rejected": []
+  },
+  {
+   "text": "una cero alcohol",
+   "wanted": [
+    "sin alcohol"
+   ],
+   "rejected": []
+  },
+  {
+   "text": "estamos en la hackatón",
+   "wanted": [
+    "hackathon"
+   ],
+   "rejected": []
+  },
+  {
+   "text": "esto es Platanus",
+   "wanted": [
+    "hackathon"
+   ],
+   "rejected": []
+  },
+  {
+   "text": "unos plátanos",
+   "wanted": [
+    "hackathon"
+   ],
+   "rejected": [],
+   "why": "how the recognizer writes 'Platanus'"
+  },
+  {
+   "text": "no es una hackatón",
+   "wanted": [],
+   "rejected": [
+    "hackathon"
+   ],
+   "why": "a negated mention sells nothing"
+  },
+  {
+   "text": "I'm starving",
+   "wanted": [
+    "hambre"
+   ],
+   "rejected": []
+  },
+  {
+   "text": "I want ice cream",
+   "wanted": [
+    "helado"
+   ],
+   "rejected": []
+  }
+ ]
+}

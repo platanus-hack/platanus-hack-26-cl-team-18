@@ -335,3 +335,24 @@ def test_the_hackathon_promo_airs_the_six_pack_photo_and_its_own_loop() -> None:
     assert (ROOT / "var" / "media" / "loops" / "monster-energy.mp4").is_file()
     offer = next(b for b in CHILE.baskets if b.slugs == frozenset({"monster-energy"}))
     assert offer.tiers == ((1, "6x Monster", " six pack", 1990),)
+
+
+def test_spoken_intents_mean_what_the_screen_answers() -> None:
+    # The live loop and evals/tags.py read the same map (demo.keyterm_segments).
+    from app.bootstrap.demo import keyterm_segments
+    from app.bootstrap.demo_catalog import FICTIONAL
+
+    base = {
+        "gym": "408",
+        "energía": "408",
+        "café": "977",
+        "hambre": "1404",
+        "comida": "1404",
+        "cerveza": "369",
+    }
+    assert keyterm_segments(FICTIONAL) == base
+    chile = keyterm_segments(CHILE)
+    assert chile["energía"] == "997"  # a tired driver at a gas station: energy drinks
+    assert chile["sed"] == "1000" and chile["hackathon"] == "702"
+    for word, segment in chile.items():
+        assert any(segment in brand.segments for brand in CHILE.brands), (word, segment)
