@@ -149,6 +149,7 @@ export type DetectedObject = z.infer<typeof DetectedObjectSchema>;
 export const MinorLikelySchema = z.strictObject({
   value: z.boolean(),
   confidence: z.number().gte(0.0).lte(1.0),
+  uncertain: z.boolean(),
 });
 export type MinorLikely = z.infer<typeof MinorLikelySchema>;
 
@@ -243,6 +244,7 @@ export const BookLineSchema = z.strictObject({
   brand_name: z.string().max(80),
   category: z.string().max(64),
   accent_color: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable(),
+  logo_url: z.string(),
   multiplier: z.string().max(8).regex(/^\d+(\.\d{1,2})?$/),
   multiplier_seq: z.number().int().gte(0),
   in_stock: z.boolean(),

@@ -1186,6 +1186,7 @@ def register_demo(
                     brand_name=kit.name,
                     category=bidder.category,
                     accent_color=kit.accent_color,
+                    logo_url=kit.logo_url,
                     multiplier=format(bidder.live_multiplier.value.normalize(), "f"),
                     multiplier_seq=entry.multiplier_seq,
                     in_stock=bidder.brand_id not in out,

@@ -124,6 +124,9 @@ class SoundScene(_Model):
 class MinorLikely(_Model):
     value: bool
     confidence: Score
+    # No usable safety evidence (cropped/occluded body, unsettled vote). This only
+    # blocks restricted categories; it is never counted as a detected child.
+    uncertain: bool = False
 
 
 class PerceptionTiming(_Model):
@@ -667,6 +670,9 @@ class BookLine(_Model):
     brand_name: Annotated[str, Field(max_length=80)]
     category: Annotated[str, Field(max_length=64)]
     accent_color: Annotated[str, Field(pattern=r"^#[0-9a-fA-F]{6}$")] | None = None
+    # The brand kit's real mark (official file, or a deterministic initials tile when the
+    # brand hasn't sent one). Never AI-generated (invariant 4).
+    logo_url: str
     multiplier: Multiplier
     multiplier_seq: Seq
     in_stock: bool

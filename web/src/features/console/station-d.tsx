@@ -8,6 +8,7 @@ import { Button } from "@/shared/ui/button";
 import { Card } from "@/shared/ui/card";
 import { Camera, Minus, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
+import { BrandLogo } from "./BrandLogo";
 import { bidRows, splitRows, stepMultiplier, type BidRow } from "./bids";
 import type { ScreenView } from "./console-state";
 import { categoryLabel, money, SOURCE } from "./labels";
@@ -417,11 +418,12 @@ function MobileBids({
                                 : "flex flex-col gap-2 rounded-control border border-border-subtle p-3"
                         }
                     >
-                        <span className="flex items-center gap-2">
-                            <span
-                                aria-hidden
-                                className="size-2.5 shrink-0 rounded-full"
-                                style={{ background: row.accent ?? "var(--color-border)" }}
+                        <span className="flex items-center gap-2.5">
+                            <BrandLogo
+                                src={row.logo}
+                                accent={row.accent}
+                                size="sm"
+                                highlight={won}
                             />
                             <span className="font-medium">{row.brand}</span>
                             {row.onAir && (
@@ -522,11 +524,7 @@ function BrandGrid({
                         data-brand={row.brand}
                         className="flex items-center gap-3 rounded-control border border-border-subtle bg-surface-raised px-3 py-2"
                     >
-                        <span
-                            aria-hidden
-                            className="size-2.5 shrink-0 rounded-full"
-                            style={{ background: row.accent ?? "var(--color-border)" }}
-                        />
+                        <BrandLogo src={row.logo} accent={row.accent} highlight={row.onAir} />
                         <span className="flex min-w-0 flex-1 flex-col">
                             <span className="truncate font-medium">{row.brand}</span>
                             <span className="truncate text-metadata text-muted">
@@ -657,38 +655,38 @@ function AuctionRow({
             }
         >
             <td className="border-b border-border-subtle py-2 pr-2 pl-3">
-                <span className="flex flex-col gap-0.5">
-                    <span className="flex items-center gap-2 font-medium whitespace-nowrap">
-                        <span
-                            aria-hidden
-                            className="size-2.5 shrink-0 rounded-full"
-                            style={{ background: row.accent ?? "var(--color-border)" }}
-                        />
-                        {row.brand}
-                        {row.onAir && <span className="text-metadata text-success">· al aire</span>}
-                    </span>
-                    <span className="flex items-center gap-2 pl-4.5 text-metadata whitespace-nowrap text-muted">
-                        {categoryLabel(row.category)} · {money(row.remaining)}
-                        {controls ? (
-                            <button
-                                type="button"
-                                role="switch"
-                                aria-checked={row.inStock}
-                                aria-label={`Stock de ${row.brand}`}
-                                className={
-                                    row.inStock
-                                        ? "rounded-control border border-control-edge px-1.5 whitespace-nowrap"
-                                        : "rounded-control border border-(--state-danger-edge) px-1.5 whitespace-nowrap text-danger"
-                                }
-                                onClick={() => {
-                                    run(setStock(screen, row.brandId, !row.inStock));
-                                }}
-                            >
-                                {row.inStock ? "Con stock" : "Sin stock"}
-                            </button>
-                        ) : (
-                            !row.inStock && <span className="text-danger">Sin stock</span>
-                        )}
+                <span className="flex items-center gap-3">
+                    <BrandLogo src={row.logo} accent={row.accent} highlight={won} />
+                    <span className="flex flex-col gap-0.5">
+                        <span className="flex items-center gap-2 font-medium whitespace-nowrap">
+                            {row.brand}
+                            {row.onAir && (
+                                <span className="text-metadata text-success">· al aire</span>
+                            )}
+                        </span>
+                        <span className="flex items-center gap-2 text-metadata whitespace-nowrap text-muted">
+                            {categoryLabel(row.category)} · {money(row.remaining)}
+                            {controls ? (
+                                <button
+                                    type="button"
+                                    role="switch"
+                                    aria-checked={row.inStock}
+                                    aria-label={`Stock de ${row.brand}`}
+                                    className={
+                                        row.inStock
+                                            ? "rounded-control border border-control-edge px-1.5 whitespace-nowrap"
+                                            : "rounded-control border border-(--state-danger-edge) px-1.5 whitespace-nowrap text-danger"
+                                    }
+                                    onClick={() => {
+                                        run(setStock(screen, row.brandId, !row.inStock));
+                                    }}
+                                >
+                                    {row.inStock ? "Con stock" : "Sin stock"}
+                                </button>
+                            ) : (
+                                !row.inStock && <span className="text-danger">Sin stock</span>
+                            )}
+                        </span>
                     </span>
                 </span>
             </td>

@@ -12,6 +12,8 @@ export interface BidRow {
     readonly brandId: string;
     readonly brand: string;
     readonly accent: string | null;
+    /** The brand kit's real mark (never AI-drawn), resolved against the backend origin. */
+    readonly logo: string;
     readonly multiplier: string;
     readonly multiplierSeq: number;
     readonly autobid: boolean;
@@ -79,6 +81,7 @@ export function bidRows(book: ConsoleBook, auction: ConsoleAuction | null): BidR
             brandId: line.brand_id,
             brand: line.brand_name,
             accent: line.accent_color ?? null,
+            logo: line.logo_url,
             multiplier: line.multiplier,
             multiplierSeq: line.multiplier_seq,
             autobid: line.autobid,

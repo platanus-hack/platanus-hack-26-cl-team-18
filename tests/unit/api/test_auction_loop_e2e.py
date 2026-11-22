@@ -378,6 +378,12 @@ def test_bidding_war_flips_the_screen_after_the_teaser_hold(loop: Loop) -> None:
     book = loop.next_of(ConsoleBook)
     rayo = next(line for line in book.lines if line.brand_name == "Rayo")
     assert rayo.multiplier == "1.5" and rayo.multiplier_seq == 2
+    # Every bidder shows its brand kit's real mark in the console (invariant 4).
+    assert rayo.logo_url == "/campaign-assets/logos/rayo.svg"
+    assert all(
+        line.logo_url.startswith(("/campaign-assets/logos/", "data:image/svg+xml"))
+        for line in book.lines
+    )
 
 
 def test_bidding_war_inputs_are_idempotent_bounded_and_validated(loop: Loop) -> None:

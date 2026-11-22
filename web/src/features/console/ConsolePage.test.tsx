@@ -65,6 +65,7 @@ const book: ConsoleOutbound = {
             accent_color: "#c6f26b",
             multiplier: "1",
             multiplier_seq: 3,
+            logo_url: "/campaign-assets/logos/voltio.svg",
             in_stock: true,
             on_air: false,
             budget: money("50000"),

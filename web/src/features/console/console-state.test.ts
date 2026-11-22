@@ -190,6 +190,7 @@ describe("market and receipts", () => {
                     accent_color: "#c6f26b",
                     multiplier: "1.5",
                     multiplier_seq: 2,
+                    logo_url: "/campaign-assets/logos/voltio.svg",
                     in_stock: true,
                     on_air: true,
                     budget: money("50000"),
