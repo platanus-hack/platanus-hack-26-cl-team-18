@@ -6,7 +6,9 @@
 repo_url = "https://github.com/platanus-hack/platanus-hack-26-cl-team-18"
 
 # app/main.py (FastAPI). Must bind $PORT.
-start_command = "uv run --frozen uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+# --ws-max-size: uvicorn buffers a whole frame before the app sees it; 4 MiB covers
+# the largest keyframe (ws_max_frame_bytes, 2 MB) instead of the 16 MiB default.
+start_command = "uv run --frozen uvicorn app.main:app --host 0.0.0.0 --port $PORT --ws-max-size 4194304"
 
 health_check_path = "/health"
 

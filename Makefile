@@ -27,7 +27,7 @@ install: ## Create .venv with locked dev dependencies
 	uv sync --extra dev
 
 dev: ## Run the backend with reload on :8000 (HTTP + WebSockets)
-	uv run uvicorn app.main:app --reload --port 8000
+	uv run uvicorn app.main:app --reload --port 8000 --ws-max-size 4194304
 
 edge-install: ## Install the perception agent (edge/, Python 3.12): camera, audio and dev tools
 	cd edge && env -u VIRTUAL_ENV uv sync --extra dev --extra vision --extra audio
