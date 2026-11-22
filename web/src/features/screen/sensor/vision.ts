@@ -1,14 +1,18 @@
 /**
  * The /screen camera as the vision sensor (ADR 0010). Frames live only in this
  * tab's memory: each one is drawn to an offscreen canvas, run through
- * YOLO26-pose on-device (onnxruntime-web) and dropped. Only counts, anonymous
- * tracklets and distance bands leave, as `audience.snapshot`.
+ * YOLO26-pose on-device (onnxruntime-web) and dropped. Counts, anonymous
+ * tracklets and distance bands leave as `audience.snapshot`; every 1.5 s while
+ * someone is present, an allow-list keyframe (black except people, heads black)
+ * goes to the backend for the warm tagger, as the edge agent does (keyframe.ts).
  *
  * One inference in flight; the camera's newest frame is the only one read
  * (stale frames are skipped, never queued).
  */
-import type { AudienceSnapshot, DevPerception } from "@/contract";
+import type { AudienceKeyframe, AudienceSnapshot, DevPerception } from "@/contract";
 import type * as Ort from "onnxruntime-web";
+import { allowlistKeyframe } from "./keyframe";
+import { MinorVote } from "./minor";
 import { decodePeople, distanceBand, isLooking, letterbox, MODEL_SIZE } from "./pose";
 import { Tracker } from "./tracker";
 
@@ -17,9 +21,12 @@ const MODEL_URL = "/models/yolo26n-pose.onnx";
 const FRAME_INTERVAL_MS = 200;
 /** The backend treats a vision agent silent for longer as gone (ws.py AGENT_SILENCE). */
 const HEARTBEAT_MS = 1_000;
+/** The edge agent's `keyframe_interval`. */
+const KEYFRAME_INTERVAL_MS = 1_500;
 
 export type SnapshotFacts = Omit<AudienceSnapshot, "v" | "type" | "screen_id" | "seq">;
 /** The console camera panel's boxes (no image): what the edge agent sends as `dev.perception`. */
+export type KeyframeFacts = Pick<AudienceKeyframe, "measured_at" | "kept" | "heads">;
 export type PerceptionFacts = Omit<DevPerception, "v" | "type" | "screen_id" | "seq">;
 
 const unit = (value: number) => Math.min(1, Math.max(0, value));
@@ -36,10 +43,13 @@ export class BrowserVision {
     private detector = "yolo26n-pose-web";
 
     private frames = 0;
+    private readonly minor = new MinorVote();
+    private lastKeyframeMs = 0;
 
     constructor(
         private readonly onSnapshot: (facts: SnapshotFacts) => void,
         private readonly onPerception: (facts: PerceptionFacts) => void = () => {},
+        private readonly onKeyframe: (facts: KeyframeFacts, jpeg: ArrayBuffer) => void = () => {},
     ) {}
 
     async start(): Promise<void> {
@@ -80,6 +90,8 @@ export class BrowserVision {
         this.timer = null;
         this.release();
         this.tracker.reset();
+        this.minor.reset();
+        this.lastKeyframeMs = 0;
     }
 
     private release(): void {
@@ -124,13 +136,33 @@ export class BrowserVision {
         const height = video.videoHeight;
         if (width === 0 || height === 0) return;
         const measuredAt = new Date();
-        const input = this.preprocess(video, width, height);
+        // One still for both inference and the keyframe: redacting a later frame
+        // could show a face that moved out of the head box detected on this one.
+        const frame = await createImageBitmap(video);
+        let keyframing = false;
+        try {
+            keyframing = await this.detect(frame, width, height, measuredAt, session, ort);
+        } finally {
+            if (!keyframing) frame.close();
+        }
+    }
+
+    /** Returns true when it handed `frame` to the keyframe encoder (which closes it). */
+    private async detect(
+        frame: ImageBitmap,
+        width: number,
+        height: number,
+        measuredAt: Date,
+        session: Ort.InferenceSession,
+        ort: typeof Ort,
+    ): Promise<boolean> {
+        const input = this.preprocess(frame, width, height);
         const t0 = performance.now();
         const tensor = new ort.Tensor("float32", input, [1, 3, MODEL_SIZE, MODEL_SIZE]);
         const outputs = await session.run({ images: tensor });
         const inferenceMs = performance.now() - t0;
         const first = Object.values(outputs)[0];
-        if (first === undefined) return;
+        if (first === undefined) return false;
         const people = decodePeople(first.data as Float32Array, letterbox(width, height));
         const now = Date.now();
         const detections = people.map((p) => ({ person: p, looking: isLooking(p) }));
@@ -168,8 +200,32 @@ export class BrowserVision {
             stale_frames: 0,
             preview_jpeg_base64: null,
         });
+        const minor = this.minor.update(people, height);
+        let keyframing = false;
+        if (people.length > 0 && now - this.lastKeyframeMs >= KEYFRAME_INTERVAL_MS) {
+            this.lastKeyframeMs = now;
+            keyframing = true;
+            void allowlistKeyframe(frame, width, height, people)
+                .then((keyframe) => {
+                    if (keyframe === null || !this.isRunning()) return;
+                    this.onKeyframe(
+                        {
+                            measured_at: measuredAt.toISOString(),
+                            kept: keyframe.kept,
+                            heads: keyframe.heads,
+                        },
+                        keyframe.jpeg,
+                    );
+                })
+                .catch((error: unknown) => {
+                    console.warn(`[sensor] keyframe skipped: ${String(error)}`);
+                })
+                .finally(() => {
+                    frame.close();
+                });
+        }
         // A heartbeat when the room is unchanged and empty; every frame otherwise.
-        if (people.length === 0 && now - this.lastSentMs < HEARTBEAT_MS) return;
+        if (people.length === 0 && now - this.lastSentMs < HEARTBEAT_MS) return keyframing;
         this.lastSentMs = now;
         const looking = detections.filter((d) => d.looking).length;
         const at = measuredAt.toISOString();
@@ -188,9 +244,8 @@ export class BrowserVision {
             })),
             objects: [],
             sound_scene: [],
-            // No age model in the browser: unsettled evidence only blocks restricted
-            // categories (invariant 2), it never counts as a detected child.
-            minor_likely: { value: false, confidence: 0, uncertain: people.length > 0 },
+            // Pose-geometry vote (minor.ts, edge parity): it only ever blocks.
+            minor_likely: minor,
             perception: {
                 detector: this.detector,
                 inference_ms: roundedMs,
@@ -198,10 +253,11 @@ export class BrowserVision {
                 primary_attempt_ms: null,
             },
         });
+        return keyframing;
     }
 
     /** Letterbox the frame into the model's square input, CHW float 0..1. */
-    private preprocess(video: HTMLVideoElement, width: number, height: number): Float32Array {
+    private preprocess(video: CanvasImageSource, width: number, height: number): Float32Array {
         const canvas = (this.canvas ??=
             typeof OffscreenCanvas !== "undefined"
                 ? new OffscreenCanvas(MODEL_SIZE, MODEL_SIZE)

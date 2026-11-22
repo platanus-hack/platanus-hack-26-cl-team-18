@@ -125,6 +125,14 @@ export class TypedSocket<In, Out = never> {
         return true;
     }
 
+    /** A header and the binary frame it announces, back to back on one open socket. */
+    sendWithBytes(message: Out, bytes: ArrayBuffer): boolean {
+        if (this.socket?.readyState !== WebSocket.OPEN) return false;
+        this.socket.send(JSON.stringify(message));
+        this.socket.send(bytes);
+        return true;
+    }
+
     private connect(): void {
         if (this.stopped || this.socket !== null || this.retryTimer !== null) return;
         this.setState({ status: "connecting", attempt: this.attempt });

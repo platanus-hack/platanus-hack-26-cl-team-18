@@ -37,7 +37,7 @@ export class ScreenSensor {
     private readonly socket: TypedSocket<AgentOutbound, AgentInbound>;
     private readonly vision: BrowserVision;
     private readonly speech: BrowserSpeech;
-    private seq = { snapshot: 0, utterance: 0, hello: 0, perception: 0 };
+    private seq = { snapshot: 0, utterance: 0, hello: 0, perception: 0, keyframe: 0 };
     private open = false;
     private listening = false;
     private lastPeopleAtMs: number | null = null;
@@ -81,6 +81,24 @@ export class ScreenSensor {
                     seq: ++this.seq.perception,
                     ...facts,
                 });
+            },
+            (facts, jpeg) => {
+                this.socket.sendWithBytes(
+                    {
+                        v: 1,
+                        type: "audience.keyframe",
+                        screen_id: screenId,
+                        seq: ++this.seq.keyframe,
+                        content_type: "image/jpeg",
+                        byte_length: jpeg.byteLength,
+                        session_id: null,
+                        track_id: null,
+                        video_time_s: null,
+                        redaction: "allowlist",
+                        ...facts,
+                    },
+                    jpeg,
+                );
             },
         );
         this.speech = new BrowserSpeech(screenId, token, (facts) => {
