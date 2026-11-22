@@ -11,6 +11,14 @@ export const MoneyDTOSchema = z.strictObject({
 });
 export type MoneyDTO = z.infer<typeof MoneyDTOSchema>;
 
+// One audience a campaign bids on, with its max price per attention-second.
+export const AdvertiserAudienceSchema = z.strictObject({
+  segment_id: z.string().min(1).max(32).regex(/^[A-Za-z0-9_-]+$/),
+  label: z.string().max(120),
+  rate_per_attention_s: MoneyDTOSchema,
+});
+export type AdvertiserAudience = z.infer<typeof AdvertiserAudienceSchema>;
+
 // Turn rule-based auto-bidding on or off for one campaign (a manual slider move turns it off).
 export const AdvertiserAutoBidSchema = z.strictObject({
   v: z.literal(1),
@@ -30,6 +38,58 @@ export const AdvertiserBidMultiplierSchema = z.strictObject({
   seq: z.number().int().gte(0),
 });
 export type AdvertiserBidMultiplier = z.infer<typeof AdvertiserBidMultiplierSchema>;
+
+// The advertiser adds budget to one campaign; idempotent by `idempotency_key`.
+export const AdvertiserBudgetTopUpSchema = z.strictObject({
+  v: z.literal(1),
+  type: z.literal("advertiser.budget_top_up"),
+  campaign_id: z.string().min(1).max(64),
+  amount: z.string().regex(/^[1-9]\d{0,6}$|^10000000$/),
+  currency: z.literal("CLP"),
+  idempotency_key: z.string().min(8).max(64).regex(/^[A-Za-z0-9_-]+$/),
+});
+export type AdvertiserBudgetTopUp = z.infer<typeof AdvertiserBudgetTopUpSchema>;
+
+// One approved offer tier (label, text and price come from the brands, never AI).
+export const AdvertiserOfferSchema = z.strictObject({
+  min_party: z.number().int().gte(1).lte(12),
+  label: z.string().max(80),
+  text: z.string().max(200),
+  price: MoneyDTOSchema,
+});
+export type AdvertiserOffer = z.infer<typeof AdvertiserOfferSchema>;
+
+// A pre-approved partner brand and the basket offers the two of them share.
+export const AdvertiserPartnerSchema = z.strictObject({
+  brand_name: z.string().max(80),
+  offers: z.array(AdvertiserOfferSchema),
+});
+export type AdvertiserPartner = z.infer<typeof AdvertiserPartnerSchema>;
+
+// What a brand is set up to buy: audiences, partners, offers and rivals.
+export const AdvertiserProfileSchema = z.strictObject({
+  campaign_id: z.string().min(1).max(64),
+  brand_name: z.string().max(80),
+  category: z.string().max(64),
+  accent_color: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable(),
+  logo_url: z.string(),
+  tagline: z.string().max(200).nullable(),
+  age_restricted: z.boolean(),
+  broad_match: z.boolean(),
+  audiences: z.array(AdvertiserAudienceSchema),
+  partners: z.array(AdvertiserPartnerSchema),
+  solo_offers: z.array(AdvertiserOfferSchema),
+  competitors: z.array(z.string().max(80)),
+});
+export type AdvertiserProfile = z.infer<typeof AdvertiserProfileSchema>;
+
+// GET /api/advertiser/profiles: every campaign's setup (the self-serve onboarding).
+export const AdvertiserProfilesSchema = z.strictObject({
+  v: z.literal(1),
+  type: z.literal("advertiser.profiles"),
+  profiles: z.array(AdvertiserProfileSchema),
+});
+export type AdvertiserProfiles = z.infer<typeof AdvertiserProfilesSchema>;
 
 export const AgentRoleSchema = z.enum(["vision", "speech"]);
 export type AgentRole = z.infer<typeof AgentRoleSchema>;
@@ -920,6 +980,6 @@ export type ConsoleOutbound = z.infer<typeof ConsoleOutboundSchema>;
 export const DevOutboundSchema = z.discriminatedUnion("type", [ConsoleMomentSchema, ConsoleAuctionSchema, ConsoleLatencySchema, ConsoleDegradationSchema, CreativeReadySchema, CreativeUpgradedSchema, ErrorMessageSchema, ConsoleBookSchema, ConsoleReceiptSchema, ConsoleRedemptionSchema, LiveStatusSchema, ConsoleNextSchema, DevPerceptionSchema, DevVlmSchema, DevSpeechSchema, DevJobSchema, DevCreativeSchema, DevPlayerSchema, DevKeyframeSchema]);
 export type DevOutbound = z.infer<typeof DevOutboundSchema>;
 
-export const MESSAGE_TYPES = ["audience.snapshot", "audience.keyframe", "audience.utterance", "creative.ready", "creative.upgraded", "playback.report", "console.moment", "console.auction", "console.latency", "console.degradation", "system.error", "advertiser.bid_multiplier", "stock.set", "console.book", "console.receipt", "recognition.snapshot", "player.displayed", "player.voice", "screen.attention", "console.redemption", "agent.hello", "live.set", "live.status", "advertiser.autobid", "dev.perception", "dev.vlm", "dev.speech", "dev.job", "dev.creative", "dev.player", "dev.keyframe", "campaign.catalog", "campaign.generate", "campaign.generated", "console.next"] as const;
+export const MESSAGE_TYPES = ["audience.snapshot", "audience.keyframe", "audience.utterance", "creative.ready", "creative.upgraded", "playback.report", "console.moment", "console.auction", "console.latency", "console.degradation", "system.error", "advertiser.bid_multiplier", "stock.set", "console.book", "console.receipt", "recognition.snapshot", "player.displayed", "player.voice", "screen.attention", "console.redemption", "agent.hello", "live.set", "live.status", "advertiser.autobid", "dev.perception", "dev.vlm", "dev.speech", "dev.job", "dev.creative", "dev.player", "dev.keyframe", "campaign.catalog", "campaign.generate", "campaign.generated", "console.next", "advertiser.profiles", "advertiser.budget_top_up"] as const;
 
 export type MessageType = (typeof MESSAGE_TYPES)[number];

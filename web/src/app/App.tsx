@@ -15,6 +15,7 @@ const AdvertiserPage = lazy(() =>
 );
 const ClerkPage = lazy(() => import("@/features/clerk").then((m) => ({ default: m.ClerkPage })));
 const DevPage = lazy(() => import("@/features/dev").then((m) => ({ default: m.DevPage })));
+const SetupPage = lazy(() => import("@/features/setup").then((m) => ({ default: m.SetupPage })));
 const CampaignsPage = lazy(() =>
     import("@/features/campaigns").then((m) => ({ default: m.CampaignsPage })),
 );
@@ -24,6 +25,8 @@ const ROUTES: Record<string, () => React.JSX.Element> = {
     "/": () => <ConsolePage />,
     "/screen": () => <ScreenPage />,
     "/console": () => <ConsolePage />,
+    // Advertiser self-serve setup; its reads and writes still need the demo key.
+    "/advertisers": () => <SetupPage />,
 };
 
 /** The hidden demo surface (`/demo/<key>/…`); the backend checks the key on every call. */

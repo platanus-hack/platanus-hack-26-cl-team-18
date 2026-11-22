@@ -56,7 +56,70 @@ const links = () => [...host.querySelectorAll("nav a")].map((a) => a.getAttribut
 it("the home page is the admin console with the live switch", async () => {
     await open("/");
     expect(host.querySelector('[aria-label="En vivo · demo-01"]')).not.toBeNull();
-    expect(links()).toEqual(["/", "/screen?id=demo-01"]);
+    expect(links()).toEqual(["/", "/screen?id=demo-01", "/advertisers"]);
+});
+
+it("the advertiser setup asks for access when this browser has no key", async () => {
+    await open("/advertisers");
+    for (let i = 0; i < 50 && !host.textContent.includes("Necesitas acceso"); i++) {
+        await act(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+        });
+    }
+    expect(host.querySelector("h1")?.textContent).toBe("Anunciantes");
+    expect(host.textContent).toContain("Necesitas acceso de anunciante");
+    expect(fetch).not.toHaveBeenCalledWith(
+        expect.stringContaining("/api/advertiser/profiles"),
+        expect.anything(),
+    );
+});
+
+it("the advertiser setup lists the brands once the key is known", async () => {
+    window.localStorage.setItem("team18.demoKey", "k3y");
+    const profile = {
+        campaign_id: "c-1",
+        brand_name: "Voltio",
+        category: "sports_goods",
+        accent_color: "#c6f26b",
+        logo_url: "data:image/svg+xml;base64,PHN2Zy8+",
+        tagline: null,
+        age_restricted: false,
+        broad_match: true,
+        audiences: [
+            {
+                segment_id: "408",
+                label: "Fitness",
+                rate_per_attention_s: { amount: "8", currency: "CLP" },
+            },
+        ],
+        partners: [],
+        solo_offers: [],
+        competitors: ["Rayo"],
+    };
+    vi.stubGlobal(
+        "fetch",
+        vi.fn((url: string) =>
+            url.includes("/api/advertiser/profiles")
+                ? Promise.resolve(
+                      new Response(
+                          JSON.stringify({
+                              type: "advertiser.profiles",
+                              v: 1,
+                              profiles: [profile],
+                          }),
+                      ),
+                  )
+                : Promise.reject(new Error("no book in this test")),
+        ),
+    );
+    await open("/advertisers");
+    for (let i = 0; i < 50 && !host.textContent.includes("Voltio"); i++) {
+        await act(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+        });
+    }
+    expect(host.textContent).toContain("Voltio");
+    expect(host.textContent).toContain("Bebida energética");
 });
 
 it.each(["/advertiser", "/clerk", "/campaigns", "/dev", "/demo", "/demo/k3y/admin"])(

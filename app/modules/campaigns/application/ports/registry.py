@@ -48,3 +48,7 @@ class CampaignRegistry(Protocol):
     ) -> None:
         """Record an applied multiplier. Never blocks; an older seq never overwrites a newer one."""
         ...
+
+    def budget_changed(self, campaign_id: CampaignId, budget: Money) -> None:
+        """Record a topped-up budget. Never blocks; a smaller budget never overwrites a larger one."""
+        ...

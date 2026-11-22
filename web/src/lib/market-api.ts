@@ -1,7 +1,10 @@
 import {
+    AdvertiserProfilesSchema,
     ConsoleBookSchema,
     type AdvertiserAutoBid,
     type AdvertiserBidMultiplier,
+    type AdvertiserBudgetTopUp,
+    type AdvertiserProfiles,
     type ConsoleBook,
     type StockSet,
 } from "@/contract";
@@ -77,6 +80,45 @@ export async function setAutoBid(campaignId: string, enabled: boolean): Promise<
         target_cost_per_redemption: null,
     };
     return post("/api/advertiser/autobid", message);
+}
+
+/** Each campaign's setup (audiences, partners, offers, rivals) for the self-serve page. */
+export async function fetchProfiles(signal?: AbortSignal): Promise<AdvertiserProfiles> {
+    const response = await fetch(
+        `${backendHttpUrl}/api/advertiser/profiles`,
+        signal ? { signal, headers: demoHeaders() } : { headers: demoHeaders() },
+    );
+    if (!response.ok) throw new Error(`profiles: HTTP ${response.status}`);
+    return AdvertiserProfilesSchema.parse(await response.json());
+}
+
+/**
+ * Add whole pesos to a campaign's budget. The caller keeps `idempotencyKey` for a retry of
+ * the same top-up, so a lost response never charges the advertiser twice.
+ */
+export async function topUpBudget(
+    campaignId: string,
+    amountClp: number,
+    idempotencyKey: string,
+): Promise<"applied" | "duplicate"> {
+    const message: AdvertiserBudgetTopUp = {
+        type: "advertiser.budget_top_up",
+        v: 1,
+        campaign_id: campaignId,
+        amount: String(Math.trunc(amountClp)),
+        currency: "CLP",
+        idempotency_key: idempotencyKey,
+    };
+    const result = await post("/api/advertiser/budget", message);
+    if (
+        typeof result !== "object" ||
+        result === null ||
+        !("outcome" in result) ||
+        (result.outcome !== "applied" && result.outcome !== "duplicate")
+    ) {
+        throw new Error("Unexpected top-up response");
+    }
+    return result.outcome;
 }
 
 export async function setStock(

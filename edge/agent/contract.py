@@ -574,6 +574,65 @@ class AdvertiserAutoBid(_Message):
     target_cost_per_redemption: MoneyDTO | None = None
 
 
+class AdvertiserBudgetTopUp(_Message):
+    """The advertiser adds budget to one campaign; idempotent by `idempotency_key`."""
+
+    type: Literal["advertiser.budget_top_up"] = "advertiser.budget_top_up"
+    campaign_id: EntityId
+    # Whole pesos, at most CLP 10.000.000 per top-up: one tap can't flood the market.
+    amount: Annotated[str, Field(pattern=r"^[1-9]\d{0,6}$|^10000000$")]
+    currency: Literal["CLP"] = "CLP"
+    idempotency_key: Annotated[str, Field(min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")]
+
+
+class AdvertiserAudience(_Model):
+    """One audience a campaign bids on, with its max price per attention-second."""
+
+    segment_id: SegmentId
+    label: Annotated[str, Field(max_length=120)]
+    rate_per_attention_s: MoneyDTO
+
+
+class AdvertiserOffer(_Model):
+    """One approved offer tier (label, text and price come from the brands, never AI)."""
+
+    min_party: Annotated[int, Field(ge=1, le=12)]
+    label: Annotated[str, Field(max_length=80)]
+    text: Annotated[str, Field(max_length=200)]
+    price: MoneyDTO
+
+
+class AdvertiserPartner(_Model):
+    """A pre-approved partner brand and the basket offers the two of them share."""
+
+    brand_name: Annotated[str, Field(max_length=80)]
+    offers: list[AdvertiserOffer]
+
+
+class AdvertiserProfile(_Model):
+    """What a brand is set up to buy: audiences, partners, offers and rivals."""
+
+    campaign_id: EntityId
+    brand_name: Annotated[str, Field(max_length=80)]
+    category: Annotated[str, Field(max_length=64)]
+    accent_color: Annotated[str, Field(pattern=r"^#[0-9a-fA-F]{6}$")] | None = None
+    logo_url: str
+    tagline: Annotated[str, Field(max_length=200)] | None = None
+    age_restricted: bool
+    broad_match: bool
+    audiences: list[AdvertiserAudience]
+    partners: list[AdvertiserPartner]
+    solo_offers: list[AdvertiserOffer]
+    competitors: list[Annotated[str, Field(max_length=80)]]
+
+
+class AdvertiserProfiles(_Message):
+    """GET /api/advertiser/profiles: every campaign's setup (the self-serve onboarding)."""
+
+    type: Literal["advertiser.profiles"] = "advertiser.profiles"
+    profiles: list[AdvertiserProfile]
+
+
 class StockSet(_Message):
     """A clerk's stock toggle for one brand at one screen. A stock-out re-auctions."""
 
@@ -1163,6 +1222,7 @@ class CampaignGenerated(_Message):
 # HTTP messages share the generated schemas without joining any socket union.
 ALL_MESSAGES += (CampaignCatalog, CampaignGenerate, CampaignGenerated)
 ALL_MESSAGES += (ConsoleNext,)
+ALL_MESSAGES += (AdvertiserProfiles, AdvertiserBudgetTopUp)
 
 # Socket unions exported to TS, by name.
 SOCKET_UNIONS: dict[str, tuple[type[_Message], ...]] = {

@@ -41,6 +41,13 @@ UPDATE campaign SET live_multiplier = %s, multiplier_seq = %s, updated_at = %s
 WHERE campaign_id = %s AND multiplier_seq < %s
 """
 
+# Budgets only grow (top-ups), so the larger value wins: a late or replayed write
+# from an older instance never shrinks what the advertiser paid in.
+UPDATE_BUDGET = """
+UPDATE campaign SET budget = %s, updated_at = %s
+WHERE campaign_id = %s AND currency = %s AND budget < %s
+"""
+
 
 class InMemoryCampaignRegistry:
     """Fresh ids per process; reopening a slug in the same process returns the same campaign."""
@@ -75,6 +82,9 @@ class InMemoryCampaignRegistry:
         self, campaign_id: CampaignId, multiplier: BidMultiplier, seq: int
     ) -> None:
         return None  # the live book already holds it; nothing outlives the process
+
+    def budget_changed(self, campaign_id: CampaignId, budget: Money) -> None:
+        return None  # same: the live book is the only copy in memory
 
 
 class PostgresCampaignRegistry:
@@ -156,6 +166,22 @@ class PostgresCampaignRegistry:
                 (
                     UPDATE_MULTIPLIER,
                     (multiplier.value, seq, self._clock.now_utc(), str(campaign_id), seq),
+                ),
+            )
+        )
+
+    def budget_changed(self, campaign_id: CampaignId, budget: Money) -> None:
+        self._writer.submit(
+            (
+                (
+                    UPDATE_BUDGET,
+                    (
+                        budget.amount,
+                        self._clock.now_utc(),
+                        str(campaign_id),
+                        str(budget.currency),
+                        budget.amount,
+                    ),
                 ),
             )
         )

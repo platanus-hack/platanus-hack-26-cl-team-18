@@ -92,6 +92,13 @@ class BudgetAccount:
             reservations=tuple(item for item in self.reservations if item.key != key),
         )
 
+    def top_up(self, amount: Money) -> BudgetAccount:
+        """The advertiser adds money: the budget only ever grows (spend stays the ledger's)."""
+        self._same_currency(amount)
+        if amount.amount <= 0:
+            raise ValueError("A top-up must be positive")
+        return replace(self, budget=self.budget + amount)
+
     def release(self, key: str) -> BudgetAccount:
         return replace(
             self, reservations=tuple(item for item in self.reservations if item.key != key)

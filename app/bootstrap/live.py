@@ -18,6 +18,7 @@ from app.bootstrap.demo import (
 from app.bootstrap.demo_catalog import catalog_named
 from app.contract.messages import (
     AdvertiserBidMultiplier,
+    AdvertiserBudgetTopUp,
     AudienceKeyframe,
     AudienceSnapshot,
     AudienceUtterance,
@@ -27,7 +28,7 @@ from app.contract.messages import (
     PlayerVoice,
     StockSet,
 )
-from app.modules.campaigns.application.live_book import MultiplierOutcome
+from app.modules.campaigns.application.live_book import MultiplierOutcome, TopUpOutcome
 from app.modules.campaigns.application.ports.registry import CampaignRegistry
 from app.modules.creative.application.campaigns import CampaignGenerator
 from app.modules.creative.application.loops import bundle_key
@@ -163,6 +164,17 @@ def register_live_market(container: Container) -> DemoControls:
                     runtime.controls.reauction_bids()
         return outcome
 
+    def top_up(message: AdvertiserBudgetTopUp) -> TopUpOutcome:
+        # One shared book: every other screen reconsiders its moment too.
+        if default.controls.top_up is None:
+            raise RuntimeError("the default screen has no budget control")
+        outcome = default.controls.top_up(message)
+        if outcome is TopUpOutcome.APPLIED:
+            for runtime in runtimes():
+                if runtime is not default:
+                    runtime.controls.reauction_bids()
+        return outcome
+
     def set_stock(message: StockSet) -> bool:
         return screen(message.screen_id).controls.set_stock(message)
 
@@ -190,6 +202,8 @@ def register_live_market(container: Container) -> DemoControls:
         # auctions and plays are the observations the rules learn from.
         set_autobid=default.controls.set_autobid,
         book_for=lambda screen_id: screen(screen_id).controls.book_view(),
+        profiles=default.controls.profiles,
+        top_up=top_up,
         # Each screen learns its own hooks (its room, its light); the API shows them all.
         hook_results=lambda: [
             result for runtime in runtimes() for result in runtime.controls.hook_results()

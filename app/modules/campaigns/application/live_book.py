@@ -35,6 +35,26 @@ class ConflictingMultiplierSeq(DomainError):
         )
 
 
+class ConflictingTopUp(DomainError):
+    def __init__(self, **_: Any) -> None:
+        super().__init__(
+            code="campaigns.conflicting_top_up",
+            msg="This idempotency key was already used for a different top-up.",
+        )
+
+
+class UncappedCampaign(DomainError):
+    def __init__(self, **_: Any) -> None:
+        super().__init__(
+            code="campaigns.uncapped_campaign", msg="This campaign has no budget to top up."
+        )
+
+
+class TopUpOutcome(StrEnum):
+    APPLIED = "applied"
+    DUPLICATE = "duplicate"  # same key, same campaign and amount: idempotent retry
+
+
 class MultiplierOutcome(StrEnum):
     APPLIED = "applied"
     DUPLICATE = "duplicate"  # same seq, same value: idempotent retry
@@ -49,12 +69,14 @@ class BookEntry:
 
 
 type MultiplierRecorder = Callable[[CampaignId, BidMultiplier, int], None]
+type BudgetRecorder = Callable[[CampaignId, Money], None]
 
 
 class LiveCampaignBook:
     """`budget_remaining` on a bidder is its budget; `spent` and `multiplier_seqs` restore
     what a previous process already booked (the campaign registry). `on_multiplier` hears
-    every applied multiplier, under the book's lock, so it must never block."""
+    every applied multiplier and `on_budget` every new budget, under the book's lock, so
+    neither may block."""
 
     def __init__(
         self,
@@ -63,11 +85,14 @@ class LiveCampaignBook:
         spent: Mapping[CampaignId, Money] | None = None,
         multiplier_seqs: Mapping[CampaignId, int] | None = None,
         on_multiplier: MultiplierRecorder | None = None,
+        on_budget: BudgetRecorder | None = None,
     ) -> None:
         self._lock = Lock()
         self._entries: dict[CampaignId, BookEntry] = {}
         self._seen: dict[CampaignId, dict[int, BidMultiplier]] = {}
+        self._top_ups: dict[str, tuple[CampaignId, Money]] = {}
         self._on_multiplier = on_multiplier
+        self._on_budget = on_budget
         self.version = 0
         spent = spent or {}
         multiplier_seqs = multiplier_seqs or {}
@@ -168,6 +193,28 @@ class LiveCampaignBook:
             if self._on_multiplier is not None:
                 self._on_multiplier(campaign_id, multiplier, seq)
             return MultiplierOutcome.APPLIED
+
+    def top_up(self, campaign_id: CampaignId, amount: Money, *, key: str) -> TopUpOutcome:
+        """Add `amount` to the campaign's budget once per idempotency `key`.
+
+        A retry with the same key and body is a no-op; the same key with another
+        campaign or amount fails, so a replayed request can never double the money.
+        """
+        with self._lock:
+            entry = self._entry(campaign_id)
+            if entry.account is None:
+                raise UncappedCampaign()
+            seen = self._top_ups.get(key)
+            if seen is not None:
+                if seen != (campaign_id, amount):
+                    raise ConflictingTopUp()
+                return TopUpOutcome.DUPLICATE
+            account = entry.account.top_up(amount)
+            self._top_ups[key] = (campaign_id, amount)
+            self._apply_accounts({campaign_id: account})
+            if self._on_budget is not None:
+                self._on_budget(campaign_id, account.budget)
+            return TopUpOutcome.APPLIED
 
     def reserve(self, key: str, holds: dict[CampaignId, Money], *, at: datetime) -> None:
         with self._lock:

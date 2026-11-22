@@ -16,8 +16,14 @@ from app.bootstrap import demo_catalog, dev_stream
 from app.bootstrap.demo_catalog import wordmark
 from app.bootstrap.demo_console import decision_messages
 from app.contract.messages import (
+    AdvertiserAudience,
     AdvertiserAutoBid,
     AdvertiserBidMultiplier,
+    AdvertiserBudgetTopUp,
+    AdvertiserOffer,
+    AdvertiserPartner,
+    AdvertiserProfile,
+    AdvertiserProfiles,
     AudienceKeyframe,
     AudienceSnapshot,
     AudienceUtterance,
@@ -91,6 +97,7 @@ from app.modules.campaigns.application.live_book import (
     RESERVATION_TTL,
     LiveCampaignBook,
     MultiplierOutcome,
+    TopUpOutcome,
     UnknownCampaign,
 )
 from app.modules.campaigns.application.ports.registry import CampaignRegistry
@@ -175,6 +182,9 @@ class DemoControls:
     reauction_bids: Callable[[], None]
     set_autobid: Callable[[AdvertiserAutoBid], bool] | None = None
     book_for: Callable[[str], ConsoleBook] | None = None
+    # Advertiser self-serve setup (/advertisers): what each campaign buys, and budget top-ups.
+    profiles: Callable[[], AdvertiserProfiles] | None = None
+    top_up: Callable[[AdvertiserBudgetTopUp], TopUpOutcome] | None = None
     # The live switch (app/realtime/live_switch.py): standby airs what an empty room
     # gets; forget_speech drops spoken topics when the mic goes off mid-moment.
     standby: Callable[[], None] = lambda: None
@@ -310,6 +320,7 @@ def seed_market(
             campaign.campaign_id: campaign.multiplier_seq for campaign in stored.values()
         },
         on_multiplier=registry.multiplier_changed,
+        on_budget=registry.budget_changed,
     )
     return LiveMarket(
         kits=kits,
@@ -1181,6 +1192,79 @@ def register_demo(
                 multiplier_needed=(rival / value) if outbid and value > 0 else None,
             )
 
+    def offers_dto(brands: frozenset[BrandId]) -> list[AdvertiserOffer]:
+        return [
+            AdvertiserOffer(
+                min_party=offer.min_party,
+                label=offer.label,
+                text=offer.text,
+                price=_money(offer.price),
+            )
+            for offer in offer_book.tiers(brands)
+        ]
+
+    def profiles() -> AdvertiserProfiles:
+        """Each campaign's setup, read-only: the catalog is approved data, not self-serve."""
+        bidders_now = [entry.bidder for entry in book.entries()]
+        out = []
+        for bidder in bidders_now:
+            kit = kits_by_id[bidder.brand_id]
+            out.append(
+                AdvertiserProfile(
+                    campaign_id=str(bidder.campaign_id),
+                    brand_name=kit.name,
+                    category=bidder.category,
+                    accent_color=kit.accent_color,
+                    logo_url=kit.logo_url,
+                    tagline=kit.tagline,
+                    age_restricted=bidder.age_restricted,
+                    broad_match=bidder.broad_match,
+                    audiences=[
+                        AdvertiserAudience(
+                            segment_id=bid.segment_id.value,
+                            label=audience_catalog.label(bid.segment_id),
+                            rate_per_attention_s=MoneyDTO(
+                                amount=format(bid.rate.amount.normalize(), "f"),
+                                currency=str(bid.rate.currency),
+                            ),
+                        )
+                        for bid in bidder.segment_bids
+                    ],
+                    partners=[
+                        AdvertiserPartner(
+                            brand_name=kits_by_id[partner].name,
+                            offers=offers_dto(frozenset({bidder.brand_id, partner})),
+                        )
+                        for partner in sorted(
+                            bidder.partners, key=lambda brand: kits_by_id[brand].name
+                        )
+                        if partner in kits_by_id
+                    ],
+                    solo_offers=offers_dto(frozenset({bidder.brand_id})),
+                    competitors=sorted(
+                        kits_by_id[rival.brand_id].name
+                        for rival in bidders_now
+                        if rival.category == bidder.category
+                        and rival.campaign_id != bidder.campaign_id
+                    ),
+                )
+            )
+        return AdvertiserProfiles(profiles=out)
+
+    def top_up(message: AdvertiserBudgetTopUp) -> TopUpOutcome:
+        campaign_id = _campaign_id(message.campaign_id)
+        if campaign_id not in campaign_of:
+            raise UnknownCampaign()
+        outcome = book.top_up(
+            campaign_id,
+            Money.create(currency=message.currency, amount=message.amount),
+            key=message.idempotency_key,
+        )
+        if outcome is TopUpOutcome.APPLIED:
+            # A campaign priced out by its budget may now win the moment on air.
+            reauction(Trigger.BID_CHANGED)
+        return outcome
+
     def set_autobid(message: AdvertiserAutoBid) -> bool:
         nonlocal autobid_running
         campaign_id = _campaign_id(message.campaign_id)
@@ -1878,6 +1962,8 @@ def register_demo(
         forget_speech=forget_speech,
         hook_results=hook_lab.results,
         set_autobid=set_autobid,
+        profiles=profiles,
+        top_up=top_up,
     )
 
 

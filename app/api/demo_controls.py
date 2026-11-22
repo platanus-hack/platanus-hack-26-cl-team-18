@@ -16,9 +16,18 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from app.api.demo_access import require_demo_key
 from app.bootstrap.container import Container
 from app.bootstrap.demo import DemoControls, UnknownBrand
-from app.contract.messages import AdvertiserAutoBid, AdvertiserBidMultiplier, ConsoleBook, StockSet
+from app.contract.messages import (
+    AdvertiserAutoBid,
+    AdvertiserBidMultiplier,
+    AdvertiserBudgetTopUp,
+    AdvertiserProfiles,
+    ConsoleBook,
+    StockSet,
+)
 from app.modules.campaigns.application.live_book import (
     ConflictingMultiplierSeq,
+    ConflictingTopUp,
+    UncappedCampaign,
     UnknownCampaign,
 )
 
@@ -83,6 +92,34 @@ async def autobid(
     except UnknownCampaign as exc:
         raise HTTPException(status_code=404, detail=exc.msg) from exc
     return {"enabled": enabled}
+
+
+@router.get("/advertiser/profiles")
+async def advertiser_profiles(request: Request) -> AdvertiserProfiles:
+    """The self-serve setup (/advertisers): each campaign's audiences, partners and offers."""
+    controls = _controls(request)
+    if controls.profiles is None:
+        raise HTTPException(status_code=404, detail="advertiser setup is not available")
+    return await anyio.to_thread.run_sync(controls.profiles)
+
+
+@router.post("/advertiser/budget")
+async def advertiser_budget(
+    request: Request, message: Annotated[AdvertiserBudgetTopUp, Body()]
+) -> dict[str, str]:
+    """Add budget to one campaign; a retried key is a no-op, a reused key with a new body 409s."""
+    controls = _controls(request)
+    if controls.top_up is None:
+        raise HTTPException(status_code=404, detail="budget top-ups are not available")
+    try:
+        outcome = await anyio.to_thread.run_sync(controls.top_up, message)
+    except UnknownCampaign as exc:
+        raise HTTPException(status_code=404, detail=exc.msg) from exc
+    except ConflictingTopUp as exc:
+        raise HTTPException(status_code=409, detail=exc.msg) from exc
+    except UncappedCampaign as exc:
+        raise HTTPException(status_code=422, detail=exc.msg) from exc
+    return {"outcome": outcome.value}
 
 
 @router.get("/hooks")
