@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass, field
@@ -99,6 +100,18 @@ class ConnectionHub:
         self._agents: dict[str, dict[Sink, AgentRole]] = defaultdict(dict)
         self._loop: asyncio.AbstractEventLoop | None = None
         self.stats = HubStats()
+        # Worker threads ask "is anyone watching?" while the event loop mutates the sets
+        # above; they read these counts (kept under a lock) instead of the live sets.
+        self._counts_lock = threading.Lock()
+        self._station_count = 0
+        self._dev_count = 0
+
+    def _recount(self) -> None:
+        """Call after any change to consoles, devs or live (event loop thread)."""
+        station = len(self._consoles & self._live)
+        devs = len(self._devs)
+        with self._counts_lock:
+            self._station_count, self._dev_count = station, devs
 
     def bind_loop(self, loop: asyncio.AbstractEventLoop) -> None:
         self._loop = loop
@@ -114,10 +127,12 @@ class ConnectionHub:
             self._attention.add(sink)
         if live:
             self._live.add(sink)
+            self._recount()
 
     def remove_player(self, screen_id: str, sink: Sink) -> None:
         self._attention.discard(sink)
         self._live.discard(sink)
+        self._recount()
         sinks = self._players.get(screen_id)
         if sinks is not None:
             sinks.discard(sink)
@@ -130,23 +145,29 @@ class ConnectionHub:
         self._consoles.add(sink)
         if live:
             self._live.add(sink)
+        self._recount()
 
     def remove_console(self, sink: Sink) -> None:
         self._consoles.discard(sink)
         self._live.discard(sink)
+        self._recount()
         self._retire_if_unused(sink)
 
     def add_dev(self, sink: Sink) -> None:
         self._send_states.setdefault(sink, _SendState())
         self._devs.add(sink)
+        self._recount()
 
     def remove_dev(self, sink: Sink) -> None:
         self._devs.discard(sink)
+        self._recount()
         self._retire_if_unused(sink)
 
     def dev_count(self) -> int:
-        """Emitters check this first: dev messages cost nothing when nobody watches."""
-        return len(self._devs)
+        """Emitters check this first: dev messages cost nothing when nobody watches.
+        Safe from worker threads (a count, not the loop-owned set)."""
+        with self._counts_lock:
+            return self._dev_count
 
     def add_agent(self, screen_id: str, role: AgentRole, sink: Sink) -> None:
         self._send_states.setdefault(sink, _SendState())
@@ -212,8 +233,10 @@ class ConnectionHub:
         await self._fan_out(recipients, (message.model_dump_json(),))
 
     def has_station_consoles(self) -> bool:
-        """Emitters check this first: station extras cost nothing when nobody watches."""
-        return bool((self._consoles & self._live) or self._devs)
+        """Emitters check this first: station extras cost nothing when nobody watches.
+        Safe from worker threads (counts, not the loop-owned sets)."""
+        with self._counts_lock:
+            return bool(self._station_count or self._dev_count)
 
     def is_station_console(self, sink: Sink) -> bool:
         """A console that subscribed with ?live=1 (the station page), not a raw reader."""
@@ -305,6 +328,7 @@ class ConnectionHub:
         for group in self._agents.values():
             group.pop(sink, None)
         self._live.discard(sink)
+        self._recount()
         self._retire_if_unused(sink)
 
     async def _close_slow_sink(self, sink: Sink) -> None:
