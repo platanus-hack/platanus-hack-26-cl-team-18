@@ -31,9 +31,14 @@ resource "render_static_site" "this" {
   # /screen runs YOLO on the CPU (ADR 0010); multithreaded WASM needs a
   # cross-origin isolated page. `credentialless` (not require-corp) keeps the
   # backend's logos, video loops and voice-overs loading without CORP headers.
-  # Scoped to /screen: the console and demo tools stay as they were.
+  # Scoped to /screen: the console and demo tools stay as they were. The ORT
+  # thread workers load a chunk from /assets, and a worker script in an
+  # isolated page needs its own COEP or the browser blocks it
+  # (ERR_BLOCKED_BY_RESPONSE). COEP alone doesn't isolate the other pages
+  # (that takes COOP too).
   headers = [
     { path = "/assets/*", name = "Cache-Control", value = "public, max-age=31536000, immutable" },
+    { path = "/assets/*", name = "Cross-Origin-Embedder-Policy", value = "credentialless" },
     { path = "/screen", name = "Cross-Origin-Opener-Policy", value = "same-origin" },
     { path = "/screen", name = "Cross-Origin-Embedder-Policy", value = "credentialless" },
     { path = "/screen/*", name = "Cross-Origin-Opener-Policy", value = "same-origin" },
