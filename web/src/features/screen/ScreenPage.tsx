@@ -127,7 +127,7 @@ function ScreenPlayer() {
         });
     });
     const state = useStore(store, (s) => s);
-    const { camera: cameraOn, mic: micOpen } = useStore(sensing, (s) => s);
+    const { mic: micOpen } = useStore(sensing, (s) => s);
 
     useEffect(() => {
         socket.start();
@@ -290,21 +290,13 @@ function ScreenPlayer() {
                     </div>
                 );
             })}
-            {(cameraOn || micOpen) && (
+            {micOpen && (
                 // Title-safe and sized to the glass (creative.css): legible on 4K, never overscanned.
                 <div className="screen-sensing">
-                    {cameraOn && (
-                        <div className="screen-camera-indicator" role="status" data-camera="on">
-                            <span className="screen-camera-indicator-dot" aria-hidden />
-                            Cámara activa · grupos anónimos, nada se graba
-                        </div>
-                    )}
-                    {micOpen && (
-                        <div className="screen-mic-indicator" role="status" data-listening="on">
-                            <span className="screen-mic-indicator-dot" aria-hidden />
-                            Micrófono activo · solo temas, nada se graba
-                        </div>
-                    )}
+                    <div className="screen-mic-indicator" role="status" data-listening="on">
+                        <span className="screen-mic-indicator-dot" aria-hidden />
+                        Micrófono activo · solo temas, nada se graba
+                    </div>
                 </div>
             )}
         </main>

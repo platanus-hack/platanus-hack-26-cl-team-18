@@ -34,6 +34,7 @@ uv run pytest tests/unit/audience/test_recognition_vlm.py \
 | Mic audio (speech mode only) | Yes | ElevenLabs Scribe (STT) | No |
 | Utterance text (speech mode only) | Yes | Backend → keyterm matcher, Claude `TopicExtractor` | No: only IAB topics with a TTL |
 | QR redemption | n/a | Backend | Code + **hash** of a device nonce |
+| Venue weather lookup (auction context) | Yes, the backend | Open-Meteo: **only the venue's configured lat/lon**, no screen id or audience data ([`open_meteo.py`](../app/modules/auction/infrastructure/open_meteo.py); `tests/unit/auction/test_conditions.py::test_open_meteo_sends_only_the_venue_coordinates`) | Latest reading in memory |
 
 ## 2. Concern → enforcement → test
 
@@ -96,7 +97,6 @@ uv run pytest tests/unit/audience/test_recognition_vlm.py \
 
 | Concern | Enforced by | Test |
 |---|---|---|
-| People can see the camera is on | "Cámara activa · grupos anónimos, nada se graba" on the TV whenever the live switch has sensing on ([`ScreenPage.tsx`](../web/src/features/screen/ScreenPage.tsx), `data-camera`) | `web/src/features/screen/ScreenPage.test.tsx` ("shows the camera chip whenever the live switch has sensing on") |
 
 ### Who can connect
 
@@ -124,7 +124,6 @@ uv run pytest tests/unit/audience/test_recognition_vlm.py \
 | G1 | The scene keyframe blurred only heads YOLO detected; a missed face went to Claude | Allow-list redaction: only detected people and objects are copied onto black |
 | G2 | The backend trusted the agent's blur | The backend checks the pixels against the declared regions, fail closed |
 | G3 | Gaussian blur, which is reversible in principle | Opaque black everywhere (keyframe and preview) |
-| G4 | No camera indicator on the TV | "Cámara activa" chip whenever sensing is on |
 
 ## 4. Answers for judges (backed by §2)
 
@@ -132,7 +131,6 @@ uv run pytest tests/unit/audience/test_recognition_vlm.py \
 - **"Can the AI guess my race, age or mood?"** The model's output schema has no field for any of it: segment ids are a closed list of interests. There's a test for that.
 - **"Do you record?"** No. The GPU service has a test that patches every file write and asserts none happen. The database holds per-moment counts, prices and hashed redemptions, nothing else.
 - **"Are you listening?"** Only on an opted-in screen, with "Micrófono activo" on the TV. Transcripts are never logged (tested) or stored; topics expire.
-- **"How would I know it's watching?"** The TV says "Cámara activa · grupos anónimos, nada se graba" whenever it senses, and "Micrófono activo" when the mic is open.
 - **What's still open:** G5–G10 above. The biggest is legal (G7): signage and a DPIA before a real venue.
 
 ## Station restart and uncertain safety (2026-11-22)

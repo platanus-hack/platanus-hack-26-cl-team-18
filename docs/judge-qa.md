@@ -85,7 +85,7 @@ Answer from [`privacy.md`](privacy.md) §4. The short version:
 - **Not facial recognition.** No face model, no embeddings, and track ids are per-session counters.
 - **What the AI sees:** only the people and products the detector found, with every head blacked out. Everything else is black. The backend verifies that before anything goes to Claude.
 - **Nothing is stored:** no frames, no audio, no transcripts. There's a test that blocks every file write on the GPU service.
-- **You can see it's on:** "Cámara activa" and "Micrófono activo" on the TV.
+- **You can see when it listens:** "Micrófono activo" on the TV whenever the mic is open.
 - **Minors:** only protected (they block alcohol and junk food), never targeted.
 - **Still to do before a real venue:** signage, a legal basis and a privacy impact assessment under Ley 21.719 (privacy.md G7).
 

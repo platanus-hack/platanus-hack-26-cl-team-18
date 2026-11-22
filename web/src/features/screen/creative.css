@@ -459,7 +459,6 @@
     gap: 0.6em;
     font-size: max(0.875rem, 2.1vmin);
 }
-.screen-camera-indicator,
 .screen-mic-indicator {
     display: flex;
     align-items: center;
@@ -472,14 +471,10 @@
     font-weight: 500;
     box-shadow: var(--shadow-overlay);
 }
-.screen-camera-indicator-dot,
 .screen-mic-indicator-dot {
     width: 0.55em;
     height: 0.55em;
     border-radius: 999px;
-}
-.screen-camera-indicator-dot {
-    background: var(--palette-ink-50);
 }
 .screen-mic-indicator-dot {
     background: var(--color-danger);

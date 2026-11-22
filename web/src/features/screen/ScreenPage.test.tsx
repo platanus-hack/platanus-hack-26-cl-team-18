@@ -534,41 +534,6 @@ it("starts optional voice preparation before the visual crossfade finishes", asy
     expect(visibleCopy()).toContain("prefetched");
 });
 
-it("shows the camera chip whenever the live switch has sensing on", async () => {
-    const status = (sensing: boolean, screen = "demo-01"): PlayerOutbound => ({
-        type: "live.status",
-        v: 1,
-        screen_id: screen,
-        revision: 1,
-        live: sensing,
-        mic: false,
-        speech_opt_in: false,
-        sensing,
-        listening: false,
-        ai_generation: sensing,
-        agents: ["vision"],
-        changed_at: new Date().toISOString(),
-    });
-    const chip = () => host.querySelector('[data-camera="on"]');
-    expect(chip()).toBeNull(); // standby until told otherwise
-    await act(async () => {
-        harness.receive(status(true));
-        await Promise.resolve();
-    });
-    expect(chip()?.textContent).toContain("Cámara activa");
-    expect(host.querySelector('[data-listening="on"]')).toBeNull(); // mic closed: no mic chip
-    await act(async () => {
-        harness.receive(status(false, "other-screen"));
-        await Promise.resolve();
-    });
-    expect(chip()).not.toBeNull(); // another screen's switch never changes ours
-    await act(async () => {
-        harness.receive(status(false));
-        await Promise.resolve();
-    });
-    expect(chip()).toBeNull();
-});
-
 it("shows the listening indicator only while the live switch has the mic open", async () => {
     const live = (listening: boolean, screen = "demo-01"): PlayerOutbound => ({
         type: "live.status",
