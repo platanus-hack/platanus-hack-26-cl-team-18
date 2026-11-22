@@ -1,3 +1,4 @@
+import { cn } from "@/lib/cn";
 import { backendHttpUrl } from "@/lib/config";
 import { useLive } from "@/lib/live-api";
 import type { ConnectionState } from "@/lib/ws/typed-socket";
@@ -68,9 +69,11 @@ export function StationBar({
                 <div className="flex flex-wrap items-center gap-3">
                     <ScreenPicker screen={screen} />
                     {status === null ? (
-                        <Badge tone={unreachable ? "danger" : "neutral"} appearance="soft">
-                            {unreachable ? "Sin conexión con el backend" : "Cargando…"}
-                        </Badge>
+                        !unreachable && (
+                            <Badge tone="neutral" appearance="soft">
+                                Cargando…
+                            </Badge>
+                        )
                     ) : (
                         <StateWord view={stationView(status, health)} />
                     )}
@@ -167,32 +170,42 @@ function Controls({
  */
 function ScreenPicker({ screen }: { screen: string }) {
     return (
-        <div role="group" aria-label="Pantallas" className="flex flex-wrap items-center gap-1">
-            {stationScreens(screen).map((entry) =>
-                entry.id !== null ? (
-                    <Button
+        <div
+            role="group"
+            aria-label="Pantallas"
+            className="inline-flex max-w-full items-center gap-0.5 overflow-x-auto rounded-lg border border-border-subtle bg-surface-sunken p-0.5"
+        >
+            {stationScreens(screen).map((entry) => {
+                const active = entry.id !== null;
+                return (
+                    <button
                         key={entry.label}
-                        size="sm"
-                        variant="primary"
-                        aria-pressed
-                        title={`Pantalla ${entry.label}`}
+                        type="button"
+                        aria-pressed={active}
+                        disabled={!active}
+                        title={active ? `Pantalla ${entry.label}` : `${entry.label} · En espera`}
+                        className={cn(
+                            "inline-flex h-7 shrink-0 items-center gap-2 rounded-md px-2.5 font-mono text-compact tracking-tight transition-colors",
+                            "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                            active
+                                ? "bg-surface-raised text-fg shadow-sm ring-1 ring-border"
+                                : "cursor-not-allowed text-subtle",
+                        )}
                     >
-                        <span className="font-mono">{entry.label}</span>
-                    </Button>
-                ) : (
-                    <Button
-                        key={entry.label}
-                        size="sm"
-                        variant="outline"
-                        aria-pressed={false}
-                        disabled
-                        title={`${entry.label} · En espera`}
-                    >
-                        <span className="font-mono">{entry.label}</span>
-                        <span className="text-metadata text-muted">En espera</span>
-                    </Button>
-                ),
-            )}
+                        <span
+                            aria-hidden
+                            className={cn(
+                                "size-1.5 rounded-full",
+                                active
+                                    ? "bg-success shadow-[0_0_0_3px_var(--color-success-soft)]"
+                                    : "bg-border-strong",
+                            )}
+                        />
+                        {entry.label}
+                        {!active && <span className="sr-only">En espera</span>}
+                    </button>
+                );
+            })}
         </div>
     );
 }
