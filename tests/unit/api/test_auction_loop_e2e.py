@@ -786,8 +786,17 @@ def test_a_far_away_viewer_is_filtered_off_the_bill(loop: Loop) -> None:
             "tracklets": [far.tracklets[0].model_copy(update={"distance_band": DistanceBand.FAR})]
         }
     )
+    # Barrier: the agent and player sockets are not ordered against each other, so
+    # wait until the loop has applied the far reading before the clock jumps and the
+    # report bills (else it raced, ~1 in 20 runs: 4.000 AS billed as if still near).
+    # Router handlers run in order, so this one fires after the demo loop's.
+    applied = threading.Event()
+    loop.container.router.on(
+        AudienceSnapshot, lambda snapshot, _received: snapshot.seq == 50 and applied.set()
+    )
     loop.clock.advance(timedelta(seconds=0.2))
     loop.agent.send_text(far.model_dump_json())
+    assert applied.wait(5), "the far reading never reached the loop"
     loop.clock.advance(timedelta(seconds=4))
     played(loop, creative, seconds=4)
     receipt = loop.next_of(ConsoleReceipt)
