@@ -95,7 +95,6 @@ export function StationBar({
                     )}
                 </div>
             </div>
-            {status && <Dots view={stationView(status, health)} />}
             {((unreachable && status !== null) || failed) && (
                 <p className="text-compact text-danger" role="status">
                     {unreachable
@@ -162,40 +161,6 @@ function Controls({
         </>
     );
 }
-
-function Dots({ view }: { view: ReturnType<typeof stationView> }) {
-    return (
-        <div className="flex flex-col gap-2">
-            <ul className="flex flex-wrap gap-x-5 gap-y-1" aria-label="Estado de los equipos">
-                {view.dots.map((dot) => (
-                    <li key={dot.key}>
-                        <Badge tone={dot.tone}>{dot.label}</Badge>
-                    </li>
-                ))}
-            </ul>
-            {view.warnings.map((warning) => (
-                <p key={warning} className="text-compact text-warning" role="status">
-                    {warning.split(/(\/screen\?id=\S+)/).map((part, index) =>
-                        part.startsWith("/screen?") ? (
-                            <a
-                                key={index}
-                                href={part}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="font-mono underline underline-offset-2"
-                            >
-                                {part}
-                            </a>
-                        ) : (
-                            part
-                        ),
-                    )}
-                </p>
-            ))}
-        </div>
-    );
-}
-
 /**
  * The screen selector: MUT_01 is the real screen and stays selected; MUT_02… are
  * display-only (disabled, "En espera") so only one screen can ever be live.

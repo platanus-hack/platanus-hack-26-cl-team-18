@@ -162,11 +162,9 @@ it("subscribes as a station console", () => {
 
 it("starts in standby with one calm state and no mic button, then goes live", async () => {
     expect(host.textContent).toContain("En espera");
-    expect(host.textContent).toContain("Cámara lista");
     expect(host.textContent).not.toContain("Silenciar micrófono");
     await click("Iniciar en vivo");
     expect(requests[0]).toMatchObject({ path: "/api/live", body: { live: true, mic: null } });
-    expect(host.textContent).toContain("Cámara analizando");
     await click("Silenciar micrófono");
     expect(requests.at(-1)?.body).toMatchObject({ live: null, mic: false });
     // Live has no stop button on the console: a round ends by people walking away.
