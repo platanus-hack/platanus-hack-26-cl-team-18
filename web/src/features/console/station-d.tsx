@@ -10,8 +10,7 @@ import { Camera, Minus, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { bidRows, splitRows, stepMultiplier, type BidRow } from "./bids";
 import type { ScreenView } from "./console-state";
-import { categoryLabel, money, ms, SOURCE } from "./labels";
-import { serverDecisionMs } from "./metrics";
+import { categoryLabel, money, SOURCE } from "./labels";
 import { DEMO_BRANDS } from "./panels";
 import { baskets, explain } from "./why";
 
@@ -77,10 +76,7 @@ export function CameraPanel({ view }: { view: ScreenView }) {
     const looking = fresh?.people.filter((p) => p.looking).length ?? view.moment?.looking ?? 0;
     const people = fresh?.people.length ?? view.moment?.people ?? 0;
     return (
-        <Section
-            title="Lo que ve la cámara"
-            aside={fresh && `${fresh.detector} · ${Math.round(fresh.inference_ms)} ms`}
-        >
+        <Section title="Lo que ve la cámara">
             <div
                 className={
                     fresh
@@ -153,11 +149,11 @@ export function CameraPanel({ view }: { view: ScreenView }) {
                                 ? `${people} ${people === 1 ? "persona" : "personas"} · ${looking} mirando`
                                 : "Sin detecciones"}
                         </p>
-                        <p className="max-w-xs text-compact text-muted">
-                            {people > 0
-                                ? "La vista de cajas aparece cuando el agente de cámara envía sus detecciones."
-                                : "Las cajas aparecen cuando la cámara está en vivo y ve a alguien."}
-                        </p>
+                        {people > 0 && (
+                            <p className="max-w-xs text-compact text-muted">
+                                Esperando las cajas del agente de cámara.
+                            </p>
+                        )}
                     </div>
                 )}
             </div>
@@ -178,10 +174,7 @@ export function PeopleScreen({ view }: { view: ScreenView }) {
     const waiting = next ? new Date(next.not_before).getTime() - now : null;
     const showNext = next !== null && waiting !== null && waiting > -2000;
     return (
-        <Section
-            title="Lo que ve la gente"
-            aside={onAir && (onAir.auction_id === null ? "aviso de la casa" : "aviso pagado")}
-        >
+        <Section title="Lo que ve la gente">
             <div
                 className="relative aspect-video overflow-hidden rounded-container border border-border bg-ink shadow-resting"
                 aria-label="Aviso al aire"
@@ -248,7 +241,7 @@ export function AuctionSection({ view, screen }: { view: ScreenView; screen: str
                     <h2 className="text-section font-semibold">La subasta</h2>
                     {!auction && (
                         <span className="text-compact text-muted">
-                            {shown.length} marcas listas · la subasta empieza cuando alguien mire
+                            {shown.length} marcas
                         </span>
                     )}
                     {auction && (
@@ -880,15 +873,9 @@ export function WhyPanel({ view }: { view: ScreenView }) {
     const decided =
         view.next && view.next.auction_id === view.auction?.auction_id ? view.next : view.onAir;
     const why = explain(view.moment, view.auction, decided);
-    const decision = view.lastTrace ? serverDecisionMs(view.lastTrace) : null;
     return (
         <Card className="flex flex-col gap-3.5 p-5" aria-label="Por qué este aviso">
-            <div className="flex items-baseline justify-between">
-                <h2 className="text-section font-semibold">Por qué este aviso</h2>
-                {decision !== null && (
-                    <span className="text-metadata text-muted">decidido en {ms(decision)}</span>
-                )}
-            </div>
+            <h2 className="text-section font-semibold">Por qué este aviso</h2>
             {!why ? (
                 <p className="text-compact text-muted">Sin decisión todavía.</p>
             ) : (
