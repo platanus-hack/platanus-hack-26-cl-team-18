@@ -331,7 +331,9 @@ def test_the_hackathon_promo_is_reached_by_speech_or_its_marker_never_by_a_lapto
 def test_the_hackathon_promo_airs_its_zero_sugar_can_and_its_own_loop() -> None:
     found = media_for(load_campaign_media(), (("monster-energy", "energy_pack"),))
     assert found is not None
-    assert found[1].photo_urls[0].endswith("/cl-monster-ultra.webp")  # "CERO AZÚCAR"
+    # A real "MONSTER ENERGY ULTRA" case of white cans leads; the "CERO AZÚCAR" can rotates.
+    assert found[1].photo_urls[0].endswith("/cl-monster-ultra-pack.webp")
+    assert found[1].photo_urls[1].endswith("/cl-monster-ultra.webp")
     assert (ROOT / "var" / "media" / "loops" / "monster-energy.mp4").is_file()
     offer = next(b for b in CHILE.baskets if b.slugs == frozenset({"monster-energy"}))
     assert offer.tiers == ((1, "6x Monster Ultra", " Ultra six pack", 1990),)

@@ -115,6 +115,14 @@ COMMONS: tuple[CommonsPhoto, ...] = (
     CommonsPhoto(
         stem="cl-monster-ultra", title="File:Monster Energy Ultra Strawberry Dreams.jpg", pack=True
     ),
+    # ...and a real case of it: the "MONSTER ENERGY ULTRA" tray of white cans on a shop
+    # shelf, cut to that tray (the six-pack visual for "6x Monster Ultra").
+    CommonsPhoto(
+        stem="cl-monster-ultra-pack",
+        title="File:Shelf with many varieties of energy drink 'Monster' (cropped to Monster).jpg",
+        pack=True,
+        region=(0.284, 0.664, 0.499, 0.83),
+    ),
     CommonsPhoto(
         stem="cl-monster-ultra-blanca",
         title="File:Monster Energy Zero Ultra (China Version) 330ml 20260628130320.jpg",

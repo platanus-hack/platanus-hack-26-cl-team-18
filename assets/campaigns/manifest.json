@@ -362,9 +362,10 @@
       ]
     },
     "monster-energy": {
-      "photo": "cl-monster-ultra",
-      "video": "cl-monster-ultra",
+      "photo": "cl-monster-ultra-pack",
+      "video": "cl-monster-ultra-pack",
       "alternates": [
+        "cl-monster-ultra",
         "cl-monster-ultra-blanca"
       ]
     },
