@@ -101,6 +101,9 @@ class Container:
     topic_extractor: TopicExtractor | None = None  # speech topics (AUDIENCE_AI)
     loop_keys: tuple[str, ...] = ()
     campaign_generator: CampaignGenerator | None = None
+    # May a player socket attach to this screen id (may it create a new runtime)?
+    # "ok" | "unauthorized" | "full" | "invalid"; the live market sets it (live.py).
+    admit_screen: Callable[[str, bool], str] = lambda _screen_id, _may_create: "ok"
     # Async cleanups run at shutdown (HTTP clients, ...).
     closers: list[Callable[[], Awaitable[None]]] = field(default_factory=list)
 
@@ -249,14 +252,29 @@ def build_records(container: Container) -> None:
         return  # unit tests never touch a database, even with a developer's .env
     import psycopg2  # infrastructure only: the hot path never touches the DB
 
+    from app.modules.common.infrastructure.postgres.spill import SpillFile, replay_spill
+    from app.modules.delivery.infrastructure.ledger import INSERT_CHARGE
+
     dsn = url.get_secret_value()
+
+    def transient(exc: BaseException) -> bool:
+        return isinstance(exc, psycopg2.OperationalError | psycopg2.InterfaceError)
+
+    # Charges a previous run could not write (database down at shutdown or a full
+    # overflow): replayed before this process serves, idempotent per charge.
+    spill = SpillFile(container.settings.charge_spill_file)
+    replay_spill(spill, lambda: psycopg2.connect(dsn, connect_timeout=5), transient=transient)
     writer = WriteBehindWriter(
         lambda: psycopg2.connect(dsn, connect_timeout=5),
         name="records",
         # Charges are money: a full queue spills to a bounded overflow instead of dropping.
         overflow_capacity=50_000,
         # Lost connections retry; a refused row (constraint, bad data) is skipped alone.
-        transient=lambda exc: isinstance(exc, psycopg2.OperationalError | psycopg2.InterfaceError),
+        transient=transient,
+        # Past the overflow, or a database still down at shutdown: charges go to a local
+        # file instead of vanishing (ids, amounts and instants only: no personal data).
+        spill=spill,
+        durable=lambda unit: all(sql == INSERT_CHARGE for sql, _ in unit),
     )
     container.writer = writer
 

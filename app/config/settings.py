@@ -16,6 +16,19 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 _LOOPBACK_HOSTS = {"localhost", "0.0.0.0", "::"}
 # app/api/demo_access.py and device_auth.py refuse shorter secrets in prod.
 _PROD_MIN_SECRET_LENGTH = 24
+# What a fresh `terraform apply` stores in every secret (terraform/modules/render-app/
+# main.tf `secret_placeholder`) until someone sets the real value in the dashboard.
+SECRET_PLACEHOLDER = "set-in-render-dashboard"
+_SECRET_FIELDS = (
+    "database_url",
+    "anthropic_api_key",
+    "demo_key",
+    "agent_token",
+    "screen_token",
+    "console_token",
+    "elevenlabs_api_key",
+    "fal_key",
+)
 
 
 def _is_loopback(host: str) -> bool:
@@ -86,6 +99,16 @@ class AppSettings(BaseSettings):
     # Demo only: the console's camera panel shows a face-blurred, downscaled camera
     # view under the boxes (in memory, never stored). Always off in prod.
     demo_camera_preview: bool = True
+
+    @field_validator(*_SECRET_FIELDS)
+    @classmethod
+    def _placeholder_is_unset(cls, value: SecretStr | None) -> SecretStr | None:
+        # The Render placeholder is not a key: treat it (and blank) as unset, so a
+        # fresh apply never reads as a configured provider or token.
+        if value is None:
+            return None
+        secret = value.get_secret_value().strip()
+        return None if not secret or secret == SECRET_PLACEHOLDER else value
 
     @field_validator("log_level")
     @classmethod
@@ -161,8 +184,14 @@ class AppSettings(BaseSettings):
     )
     # Largest accepted WS frame; a keyframe JPEG is the biggest legitimate one.
     ws_max_frame_bytes: int = Field(default=2_000_000, gt=0)
+    # Screens one process runs (each a full audience/auction/creative runtime, never
+    # evicted). The demo uses demo-01 and rehearsal; a socket past the cap is refused.
+    max_screen_runtimes: int = Field(default=16, ge=1, le=1000)
     # Pending agent messages per connection before the oldest is dropped.
     ws_agent_mailbox_size: int = Field(default=32, gt=0)
+    # Charges Postgres could not take (down at shutdown, overflow full), replayed at the
+    # next start (write-behind spill). Created only when needed; outside the served /media.
+    charge_spill_file: Path = Path("var/charge-spill.jsonl")
     # Local media cache (voice-overs, video loops, hero images), served at /media.
     media_dir: Path = Path("var/media")
     # Max concurrent warm calls per provider (WarmWorker); JSON object in the env.

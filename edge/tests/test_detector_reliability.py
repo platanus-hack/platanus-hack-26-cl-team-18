@@ -9,14 +9,16 @@ import pytest
 
 from agent.vision.adapters import UltralyticsDetector
 from agent.vision.detector import CompositeDetector, FailoverDetector
-from agent.vision.remote import HEADER_PREFIX, RemoteGpuDetector
+from agent.vision.remote import HEADER_PREFIX, RemoteGpuDetector, check_gpu_url
 from agent.vision.types import FrameDetections
 
 T0 = datetime(2026, 11, 21, tzinfo=UTC)
 
 
 def remote(monkeypatch, replies):
-    detector = RemoteGpuDetector("ws://unused", encoder=lambda f: (b"jpeg", f.shape[1], f.shape[0]))
+    detector = RemoteGpuDetector(
+        "ws://localhost", encoder=lambda f: (b"jpeg", f.shape[1], f.shape[0])
+    )
     answers = iter(replies)
     request = {}
 
@@ -67,7 +69,7 @@ def test_malformed_remote_reply_uses_local_fallback(monkeypatch, payload):
 
 @pytest.mark.parametrize("seq", [True, 1.0, "1"])
 def test_non_integer_reply_sequence_never_settles_a_frame(seq):
-    detector = RemoteGpuDetector("ws://unused", encoder=lambda _: (b"jpeg", 10, 10))
+    detector = RemoteGpuDetector("ws://localhost", encoder=lambda _: (b"jpeg", 10, 10))
     detector._in_flight[1] = 0.0
     detector._settle(json.dumps({"seq": seq}))
     assert detector.in_flight == 1
@@ -134,3 +136,47 @@ def test_marker_composition_preserves_latency_breakdown():
     )
     markers = SimpleNamespace(detect=lambda _, at: FrameDetections(at, 20, 20))
     assert CompositeDetector(main, markers).detect(None, T0).extras == {"round_trip_ms": 12}
+
+
+# Raw, unblurred frames: plaintext only inside the venue (invariant 3, ADR 0007).
+@pytest.mark.parametrize(
+    "url",
+    [
+        "wss://gpu.example.com/infer",
+        "wss://203.0.113.7/infer",
+        "ws://127.0.0.1:8080/infer",
+        "ws://localhost:8080/infer",
+        "ws://[::1]:8080/infer",
+        "ws://10.0.0.5:8080/infer",
+        "ws://172.20.1.2/infer",
+        "ws://192.168.1.50:8080/infer",
+        "ws://169.254.10.10/infer",
+        "ws://[fd12:3456::1]/infer",
+        "ws://gpu-box.local:8080/infer",
+    ],
+)
+def test_gpu_url_allows_tls_anywhere_and_plaintext_on_the_lan(url):
+    assert check_gpu_url(url) == url
+    RemoteGpuDetector(url, encoder=lambda _: (b"", 1, 1))  # construction never connects
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "ws://gpu.example.com/infer",
+        "ws://203.0.113.7:8080/infer",
+        "ws://8.8.8.8/infer",
+        "ws://172.32.0.1/infer",  # just outside 172.16/12
+        "ws://[2001:db8::1]/infer",
+        "ws://[::ffff:8.8.8.8]/infer",
+        "ws://localhost.example.com/infer",
+        "http://192.168.1.50/infer",
+        "gpu-box:8080",
+        "ws:///infer",
+    ],
+)
+def test_gpu_url_rejects_plaintext_off_the_lan(url):
+    with pytest.raises(ValueError):
+        check_gpu_url(url)
+    with pytest.raises(ValueError):
+        RemoteGpuDetector(url, encoder=lambda _: (b"", 1, 1))

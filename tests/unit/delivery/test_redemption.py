@@ -134,3 +134,42 @@ def test_forgotten_offers_take_their_redemptions_with_them(
     assert not redemptions._redeemed and not redemptions._devices.get(code)
     with pytest.raises(UnknownRedemptionCode):  # never a new sale for a forgotten code
         redemptions.redeem(code, "device-bbbb", at=T0)
+
+
+def _issue(redemptions: RedemptionDesk, n: int, at: datetime) -> str:
+    return redemptions.issue(
+        auction_id=f"a{n}",
+        creative_id=f"c{n}",
+        screen_id="demo-01",
+        campaign_ids=CAMPAIGNS,
+        brand_names=("Voltio",),
+        offer_text=None,
+        at=at,
+    ).code
+
+
+def test_over_the_cap_expired_offers_go_first_and_a_valid_qr_keeps_working(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(redemptions_module, "MAX_OFFERS_REMEMBERED", 3)
+    redemptions = RedemptionDesk(ids=IdGenerator(), ledger=InMemoryRedemptionLedger())
+    stale = _issue(redemptions, 0, T0 - timedelta(minutes=30))  # long expired
+    valid = _issue(redemptions, 1, T0)  # older than the next ones, still open
+    _issue(redemptions, 2, T0 + timedelta(seconds=1))
+    _issue(redemptions, 3, T0 + timedelta(seconds=2))  # over the cap
+    assert redemptions.offer(stale) is None
+    assert redemptions.offer(valid) is not None
+    _, created = redemptions.redeem(valid, "phone-aaaa", at=T0 + timedelta(minutes=1))
+    assert created
+
+
+def test_when_every_offer_is_open_the_oldest_goes_with_a_warning(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(redemptions_module, "MAX_OFFERS_REMEMBERED", 2)
+    redemptions = RedemptionDesk(ids=IdGenerator(), ledger=InMemoryRedemptionLedger())
+    oldest = _issue(redemptions, 0, T0)
+    kept = [_issue(redemptions, n, T0 + timedelta(seconds=n)) for n in (1, 2)]
+    assert redemptions.offer(oldest) is None
+    assert all(redemptions.offer(code) is not None for code in kept)
+    assert "still-valid" in caplog.text

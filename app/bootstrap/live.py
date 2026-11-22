@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from threading import RLock
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from app.bootstrap.demo import (
     DEMO_SCREEN,
@@ -22,6 +23,7 @@ from app.contract.messages import (
     AudienceKeyframe,
     AudienceSnapshot,
     AudienceUtterance,
+    ConsoleBook,
     LiveStatus,
     PlaybackReport,
     PlayerDisplayed,
@@ -40,6 +42,10 @@ if TYPE_CHECKING:
     from app.bootstrap.container import Container
 
 logger = logging.getLogger(__name__)
+
+# The wire's screen id (app/contract/messages.py ScreenId): a short slug.
+SCREEN_ID = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
+Admission = Literal["ok", "unauthorized", "full", "invalid"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,53 +117,84 @@ def register_live_market(container: Container) -> DemoControls:
     )
     screens: dict[str, ScreenRuntime] = {}
     registry_lock = RLock()
+    capacity = settings.max_screen_runtimes
+    refused = 0
 
-    def screen(screen_id: str) -> ScreenRuntime:
-        with registry_lock:
-            if screen_id not in screens:
-                router = InboundRouter()
-                controls = register_demo(
-                    wire_screen_id=screen_id,
-                    market=market,
-                    router=router,
-                    hub=container.hub,
-                    clock=container.clock,
-                    ids=ids,
-                    warm=GatedWarm(
-                        container.warm,
-                        lambda: container.live.ai_generation(screen_id),
-                    ),
-                    voiceovers=container.voiceovers,
-                    narrator_voice_id=settings.elevenlabs_narrator_voice_id,
-                    speech_screens=frozenset(settings.speech_mode_screens),
-                    speech_ttl=timedelta(seconds=settings.speech_topic_ttl_s),
-                    swap_holds=settings.swap_holds_enabled,
-                    scheduler=container.scheduler,
-                    tagger=container.tagger,
-                    topic_extractor=container.topic_extractor,
-                    public_base_url=settings.public_base_url,
-                    media_dir=settings.media_dir,
-                    dev_keyframe_preview=settings.dev_keyframe_preview_enabled,
-                    receipt_history=receipt_history,
-                    copywriter=container.copywriter,
-                    copy_timeout_s=settings.creative_copy_timeout_s,
-                    hourly_budget_usd=settings.creative_hourly_budget_usd,
-                    startup=container.startup
-                    if settings.voiceover_prewarm and not screens
-                    else None,
+    def create(screen_id: str) -> ScreenRuntime | None:
+        """A new runtime, or None past the cap (a live runtime is never evicted)."""
+        nonlocal refused
+        if not SCREEN_ID.fullmatch(screen_id):
+            return None
+        if len(screens) >= capacity and screen_id != DEMO_SCREEN:
+            refused += 1
+            if refused == 1 or refused % 1000 == 0:
+                logger.warning(
+                    "screen runtimes at capacity (%d): refused a new screen (%d so far)",
+                    capacity,
+                    refused,
                 )
-                screens[screen_id] = ScreenRuntime(router, controls)
-            return screens[screen_id]
+            return None
+        router = InboundRouter()
+        controls = register_demo(
+            wire_screen_id=screen_id,
+            market=market,
+            router=router,
+            hub=container.hub,
+            clock=container.clock,
+            ids=ids,
+            warm=GatedWarm(
+                container.warm,
+                lambda: container.live.ai_generation(screen_id),
+            ),
+            voiceovers=container.voiceovers,
+            narrator_voice_id=settings.elevenlabs_narrator_voice_id,
+            speech_screens=frozenset(settings.speech_mode_screens),
+            speech_ttl=timedelta(seconds=settings.speech_topic_ttl_s),
+            swap_holds=settings.swap_holds_enabled,
+            scheduler=container.scheduler,
+            tagger=container.tagger,
+            topic_extractor=container.topic_extractor,
+            public_base_url=settings.public_base_url,
+            media_dir=settings.media_dir,
+            dev_keyframe_preview=settings.dev_keyframe_preview_enabled,
+            receipt_history=receipt_history,
+            copywriter=container.copywriter,
+            copy_timeout_s=settings.creative_copy_timeout_s,
+            hourly_budget_usd=settings.creative_hourly_budget_usd,
+            startup=container.startup if settings.voiceover_prewarm and not screens else None,
+        )
+        runtime = screens[screen_id] = ScreenRuntime(router, controls)
+        return runtime
+
+    def screen(screen_id: str) -> ScreenRuntime | None:
+        """The screen's runtime, created on first use while under the cap."""
+        with registry_lock:
+            return screens.get(screen_id) or create(screen_id)
+
+    def admit(screen_id: str, may_create: bool) -> Admission:
+        """May a player socket attach to `screen_id`? Creates the runtime when allowed."""
+        with registry_lock:
+            if screen_id in screens:
+                return "ok"
+            if not SCREEN_ID.fullmatch(screen_id):
+                return "invalid"
+            if not may_create:
+                return "unauthorized"
+            return "ok" if create(screen_id) is not None else "full"
 
     def runtimes() -> tuple[ScreenRuntime, ...]:
         with registry_lock:
             return tuple(screens.values())
 
     def dispatch(message: Inbound, received: Received) -> None:
-        screen(message.screen_id).router.dispatch_sync(message, received)
+        runtime = screen(message.screen_id)
+        if runtime is not None:  # past the cap: no runtime, the reading goes nowhere
+            runtime.router.dispatch_sync(message, received)
 
     def player_connected(screen_id: str, sink: Sink) -> None:
-        screen(screen_id).router.player_connected_sync(screen_id, sink)
+        runtime = screen(screen_id)
+        if runtime is not None:
+            runtime.router.player_connected_sync(screen_id, sink)
 
     def console_connected(sink: Sink) -> None:
         for runtime in runtimes():
@@ -166,7 +203,10 @@ def register_live_market(container: Container) -> DemoControls:
     def live_changed(before: LiveStatus, after: LiveStatus) -> None:
         # Sensing off: the screen airs what an empty room gets. Mic off while still
         # live: spoken topics are forgotten at once instead of riding out their TTL.
-        controls = screen(after.screen_id).controls
+        runtime = screen(after.screen_id)
+        if runtime is None:
+            return
+        controls = runtime.controls
         if before.sensing and not after.sensing:
             controls.standby()
         elif before.listening and not after.listening:
@@ -194,9 +234,18 @@ def register_live_market(container: Container) -> DemoControls:
         return outcome
 
     def set_stock(message: StockSet) -> bool:
-        return screen(message.screen_id).controls.set_stock(message)
+        runtime = screen(message.screen_id)
+        return False if runtime is None else runtime.controls.set_stock(message)
 
-    default = screen(DEMO_SCREEN)
+    def book_for(screen_id: str) -> ConsoleBook:
+        runtime = screen(screen_id) or default
+        return runtime.controls.book_view()
+
+    first = screen(DEMO_SCREEN)  # the default screen is always admitted
+    if first is None:
+        raise RuntimeError("the default screen could not start")
+    default = first
+    container.admit_screen = admit
     for message_type in (
         AudienceSnapshot,
         AudienceKeyframe,
@@ -219,7 +268,7 @@ def register_live_market(container: Container) -> DemoControls:
         # One shared book: auto-bid moves apply to every screen; the default screen's
         # auctions and plays are the observations the rules learn from.
         set_autobid=default.controls.set_autobid,
-        book_for=lambda screen_id: screen(screen_id).controls.book_view(),
+        book_for=book_for,
         profiles=default.controls.profiles,
         top_up=top_up,
         # Each screen learns its own hooks (its room, its light); the API shows them all.

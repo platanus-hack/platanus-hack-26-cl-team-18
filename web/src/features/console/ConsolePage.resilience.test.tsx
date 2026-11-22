@@ -56,8 +56,8 @@ afterEach(async () => {
 });
 
 it("a section that throws is contained; the rest of the console stays up", () => {
-    expect(host.textContent).toContain("Lo que ve la cámara");
-    expect(host.textContent).toContain("Lo que ve la gente");
+    expect(host.textContent).toContain("Cámara");
+    expect(host.textContent).toContain("En pantalla");
     expect(host.textContent).toContain("Sesión");
     expect(host.textContent).toContain("No se pudo mostrar esta sección.");
 });

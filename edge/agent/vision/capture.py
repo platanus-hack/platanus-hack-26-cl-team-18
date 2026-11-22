@@ -50,6 +50,7 @@ class LatestFrameCamera:
         self._latest: tuple[Any, datetime] | None = None
         self._serial = 0
         self._stop = threading.Event()
+        self._released = threading.Event()
         self._thread = threading.Thread(target=self._loop, name="camera", daemon=True)
         self._thread.start()
 
@@ -65,10 +66,28 @@ class LatestFrameCamera:
         return cap
 
     def _loop(self) -> None:
+        # The capture thread owns the device: it alone reads, reopens and finally
+        # releases it, so `close()` can never release a handle mid-read.
+        try:
+            self._capture()
+        finally:
+            try:
+                self._cap.release()
+            except Exception:
+                pass
+            self._released.set()
+
+    def _capture(self) -> None:
         failing_since: float | None = None
         while not self._stop.is_set():
+            frame = None
             try:
-                ok, frame = self._cap.read()
+                # grab() returns once the sensor frame is in; stamp it before the
+                # MJPG decode in retrieve(), so decode time isn't hidden in measured_at.
+                ok = bool(self._cap.grab())
+                measured_at = datetime.now(UTC)
+                if ok:
+                    ok, frame = self._cap.retrieve()
             except Exception:  # cv2.error from a vanished device
                 ok, frame = False, None
             if not ok or frame is None or getattr(frame, "size", 1) == 0:
@@ -83,7 +102,7 @@ class LatestFrameCamera:
                 continue
             failing_since = None
             with self._lock:
-                self._latest = (frame, datetime.now(UTC))
+                self._latest = (frame, measured_at)
                 self._serial += 1
 
     def _reopen(self) -> None:
@@ -104,10 +123,18 @@ class LatestFrameCamera:
             frame, measured_at = self._latest
             return frame, measured_at, self._serial
 
-    def close(self) -> None:
+    def close(self, timeout: float = 3.0) -> None:
+        """Stop capturing. The capture thread releases the device on its way out."""
         self._stop.set()
-        self._thread.join(timeout=1)
-        self._cap.release()
+        self._thread.join(timeout=timeout)
+        if self._thread.is_alive():
+            # A wedged read: releasing under it can crash OpenCV. The thread still
+            # releases the device if the read ever returns; a daemon dies with us.
+            logger.warning(
+                "camera %s capture thread still busy after %.1fs; not releasing under it",
+                self._index,
+                timeout,
+            )
 
 
 class VideoFileSource:

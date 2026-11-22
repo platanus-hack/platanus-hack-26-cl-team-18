@@ -9,6 +9,7 @@ import { AppShell } from "@/shared/ui/page";
 import { useEffect, useState } from "react";
 import { consoleReducer, emptyScreen, initialConsoleState } from "./console-state";
 import { DEGRADATION } from "./labels";
+import { AuctionRace, Meters, WinnerPanel } from "./live";
 import { AuctionSection, CameraPanel, PeopleScreen, TagsPanel, WhyPanel } from "./station-d";
 import { SessionPanel, Timeline } from "./station-panels";
 import { StationBar } from "./StationBar";
@@ -78,33 +79,55 @@ export function ConsolePage() {
                     ))}
                 </div>
             )}
-            <div className="grid gap-7 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <ErrorBoundary label="camera">
                     <CameraPanel view={view} />
+                </ErrorBoundary>
+                <ErrorBoundary label="winner">
+                    <WinnerPanel view={view} />
                 </ErrorBoundary>
                 <ErrorBoundary label="people">
                     <PeopleScreen view={view} />
                 </ErrorBoundary>
             </div>
-            <ErrorBoundary label="auction">
-                <AuctionSection view={view} screen={screen} />
+            <ErrorBoundary label="race">
+                <AuctionRace view={view} />
             </ErrorBoundary>
-            <div className="grid items-start gap-7 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
-                <ErrorBoundary label="tags">
-                    <TagsPanel view={view} />
-                </ErrorBoundary>
-                <ErrorBoundary label="why">
-                    <WhyPanel view={view} />
-                </ErrorBoundary>
-            </div>
-            <div className="grid items-start gap-7 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
-                <ErrorBoundary label="session">
-                    <SessionPanel view={view} />
-                </ErrorBoundary>
-                <ErrorBoundary label="timeline">
-                    <Timeline view={view} />
-                </ErrorBoundary>
-            </div>
+            <ErrorBoundary label="meters">
+                <Meters view={view} />
+            </ErrorBoundary>
+            {/* Everything an operator or a judge may ask about, one click away. */}
+            <details className="group flex flex-col gap-4">
+                <summary className="cursor-pointer list-none text-compact text-muted transition-colors hover:text-fg">
+                    <span className="inline-flex items-center gap-2">
+                        <span className="transition-transform group-open:rotate-90" aria-hidden>
+                            ›
+                        </span>
+                        Detalle
+                    </span>
+                </summary>
+                <div className="mt-4 flex flex-col gap-4">
+                    <ErrorBoundary label="auction">
+                        <AuctionSection view={view} screen={screen} />
+                    </ErrorBoundary>
+                    <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+                        <ErrorBoundary label="tags">
+                            <TagsPanel view={view} />
+                        </ErrorBoundary>
+                        <ErrorBoundary label="why">
+                            <WhyPanel view={view} />
+                        </ErrorBoundary>
+                    </div>
+                    <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+                        <ErrorBoundary label="session">
+                            <SessionPanel view={view} />
+                        </ErrorBoundary>
+                        <ErrorBoundary label="timeline">
+                            <Timeline view={view} />
+                        </ErrorBoundary>
+                    </div>
+                </div>
+            </details>
         </AppShell>
     );
 }

@@ -283,6 +283,14 @@ input[type="range"] {
     }
 }
 
+/* Console: the auction pulse dot flashes the accent once per new auction. */
+@keyframes auction-beat {
+    from {
+        background-color: var(--color-accent);
+        box-shadow: 0 0 0 4px var(--color-accent-soft);
+    }
+}
+
 /* Player: each dwell stage's line enters with a short rise (CSS only, docs/stack.md §6). */
 @keyframes stage-in {
     from {

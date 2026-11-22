@@ -7,7 +7,7 @@
 `top-up` sets the budget to spent + AMOUNT, so each campaign has exactly AMOUNT CLP
 left. Spend is never edited: it is the append-only charge ledger. The running app
 reads budgets at startup, so restart it (or redeploy) for a top-up to take effect.
-Reads DATABASE_URL (`make tf-output OUT=database_url_external` for Render).
+Reads DATABASE_URL from the environment or .env (`make tf-output OUT=database_url_external` for Render).
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ import argparse
 import os
 import sys
 from decimal import Decimal
+from pathlib import Path
 
 SPENT = """
 SELECT c.brand_slug, c.currency, c.budget, COALESCE(SUM(ch.amount), 0), c.live_multiplier
@@ -40,7 +41,14 @@ def _connect():  # type: ignore[no-untyped-def]  # pragma: no cover - needs a da
 
     url = os.environ.get("DATABASE_URL")
     if not url:
-        raise SystemExit("ERROR: DATABASE_URL is not set.")
+        # Same source as the station: .env through AppSettings (run as a plain script too).
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+        from app.config.settings import AppSettings
+
+        secret = AppSettings().database_url
+        url = secret.get_secret_value() if secret else None
+    if not url:
+        raise SystemExit("ERROR: DATABASE_URL is not set (env or .env).")
     return psycopg2.connect(url, connect_timeout=5)
 
 

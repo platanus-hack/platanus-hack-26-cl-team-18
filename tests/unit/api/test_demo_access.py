@@ -100,3 +100,22 @@ def test_the_dev_socket_needs_the_key_as_a_query_parameter(tmp_path: Path) -> No
         with c.websocket_connect(f"/ws/dev?key={KEY}") as ws:
             ws.send_text("{}")
             assert ws.receive_json()["code"] == "dev.read_only"
+
+
+def test_hook_results_are_read_off_the_event_loop(tmp_path: Path) -> None:
+    import dataclasses
+    import threading
+
+    with client(tmp_path, demo_key=KEY) as c:
+        container = c.app.state.container  # type: ignore[attr-defined]
+        threads: list[str] = []
+
+        def hook_results() -> list[object]:
+            threads.append(threading.current_thread().name)
+            return []
+
+        container.demo = dataclasses.replace(container.demo, hook_results=hook_results)
+        assert c.get("/api/hooks", headers={"X-Demo-Key": KEY}).json() == []
+        assert c.portal is not None
+        loop_thread = c.portal.call(lambda: threading.current_thread().name)
+    assert threads and threads[0] != loop_thread

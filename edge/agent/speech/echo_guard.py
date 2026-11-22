@@ -16,6 +16,10 @@ from agent.speech.keyterms import normalize
 # Speech heard just after the voice-over ends may still be its room echo/reverb.
 TAIL = timedelta(milliseconds=400)
 SIMILARITY = 0.72
+# Windows older than this can't be echo any more; also a hard cap so the list
+# stays bounded even if announcements arrive with no transcript to check.
+HORIZON = timedelta(seconds=30)
+MAX_WINDOWS = 64
 
 
 @dataclass(frozen=True)
@@ -35,7 +39,10 @@ class EchoGuard:
     def announce(self, window: AudioWindow) -> None:
         if window.ends_at < window.starts_at:
             raise ValueError("audio window ends before it starts")
+        # Prune on insert too: `is_echo` may never run (speech mode off, silence).
+        self._expire(window.starts_at)
         self._windows.append(window)
+        del self._windows[:-MAX_WINDOWS]
 
     def is_echo(self, text: str, heard_at: datetime) -> bool:
         self._expire(heard_at)
@@ -57,5 +64,5 @@ class EchoGuard:
         return SequenceMatcher(None, heard, spoken).ratio() >= self._similarity
 
     def _expire(self, now: datetime) -> None:
-        horizon = now - timedelta(seconds=30)
+        horizon = now - HORIZON
         self._windows = [w for w in self._windows if w.ends_at >= horizon]

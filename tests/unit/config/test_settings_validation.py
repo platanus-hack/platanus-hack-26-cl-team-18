@@ -60,3 +60,29 @@ def test_a_loopback_qr_origin_is_reported_because_phones_cannot_open_it() -> Non
         "PUBLIC_BASE_URL" in w
         for w in _settings(public_base_url="https://abc.trycloudflare.com").misconfigurations()
     )
+
+
+SECRET_ENV = (
+    "DATABASE_URL",
+    "ANTHROPIC_API_KEY",
+    "DEMO_KEY",
+    "AGENT_TOKEN",
+    "SCREEN_TOKEN",
+    "CONSOLE_TOKEN",
+    "ELEVENLABS_API_KEY",
+    "FAL_KEY",
+)
+
+
+@pytest.mark.parametrize("name", SECRET_ENV)
+@pytest.mark.parametrize("value", ["set-in-render-dashboard", "  ", ""])
+def test_the_render_placeholder_or_a_blank_secret_reads_as_unset(
+    monkeypatch: pytest.MonkeyPatch, name: str, value: str
+) -> None:
+    # A fresh `terraform apply` stores the placeholder in every secret: it is not a key.
+    monkeypatch.setenv(name, value)
+    assert getattr(_settings(), name.lower()) is None
+
+
+def test_a_real_secret_is_kept() -> None:
+    assert _settings(fal_key="fal-real-key").fal_key is not None  # type: ignore[arg-type]

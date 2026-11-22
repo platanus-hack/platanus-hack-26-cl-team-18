@@ -84,6 +84,10 @@ def decode_jpeg(jpeg: bytes, header: FrameHeader) -> np.ndarray:
     return np.ascontiguousarray(rgb[:, :, ::-1])
 
 
+# A token anyone could guess protects nothing; `openssl rand -hex 16` gives 32.
+MIN_TOKEN_LENGTH = 16
+
+
 class AnonymousExposure(RuntimeError):
     """The service would accept raw frames from anyone who can reach it."""
 
@@ -104,7 +108,17 @@ def check_exposure(host: str, token: str | None, *, allow_anonymous: bool | None
     Loopback (local dev GPU, tests) stays open. The opt-out is for a trusted,
     isolated venue LAN only and logs a loud warning.
     """
-    if token or _is_loopback(host):
+    if token:
+        if len(token) < MIN_TOKEN_LENGTH and not _is_loopback(host):
+            # A warning, not a refusal: a shorter token may already be deployed and
+            # pinned in the agent's config; refusing would take the remote GPU down.
+            logger.warning(
+                "GPU_TOKEN has %d chars; use %d+ on a reachable bind (openssl rand -hex 16)",
+                len(token),
+                MIN_TOKEN_LENGTH,
+            )
+        return
+    if _is_loopback(host):
         return
     if allow_anonymous is None:
         allow_anonymous = os.environ.get("GPU_ALLOW_ANONYMOUS", "").strip() == "1"
