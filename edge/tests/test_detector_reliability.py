@@ -157,7 +157,7 @@ def test_marker_composition_preserves_latency_breakdown():
 )
 def test_gpu_url_allows_tls_anywhere_and_plaintext_on_the_lan(url):
     assert check_gpu_url(url) == url
-    RemoteGpuDetector(url)  # construction never connects
+    RemoteGpuDetector(url, encoder=lambda _: (b"", 1, 1))  # construction never connects
 
 
 @pytest.mark.parametrize(
@@ -179,4 +179,4 @@ def test_gpu_url_rejects_plaintext_off_the_lan(url):
     with pytest.raises(ValueError):
         check_gpu_url(url)
     with pytest.raises(ValueError):
-        RemoteGpuDetector(url)
+        RemoteGpuDetector(url, encoder=lambda _: (b"", 1, 1))
