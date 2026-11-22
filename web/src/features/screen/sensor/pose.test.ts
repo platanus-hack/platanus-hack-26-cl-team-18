@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { SPEECH_LINGER_MS, speechWanted } from "./link";
 import { decodePeople, distanceBand, isLooking, KP, letterbox, ROW, type Person } from "./pose";
 import { toPcm16 } from "./speech";
 import { Tracker } from "./tracker";
@@ -85,5 +86,14 @@ describe("toPcm16", () => {
         const pcm = toPcm16(new Float32Array(480).fill(2), 48_000);
         expect(pcm).toHaveLength(160);
         expect(pcm[0]).toBe(0x7fff);
+    });
+});
+
+describe("speechWanted", () => {
+    it("opens the mic only while listening and someone was seen recently", () => {
+        expect(speechWanted(true, null, 0)).toBe(false);
+        expect(speechWanted(false, 0, 0)).toBe(false);
+        expect(speechWanted(true, 0, SPEECH_LINGER_MS)).toBe(true);
+        expect(speechWanted(true, 0, SPEECH_LINGER_MS + 1)).toBe(false);
     });
 });

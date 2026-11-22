@@ -7,7 +7,7 @@
  * One inference in flight; the camera's newest frame is the only one read
  * (stale frames are skipped, never queued).
  */
-import type { AudienceSnapshot } from "@/contract";
+import type { AudienceSnapshot, DevPerception } from "@/contract";
 import type * as Ort from "onnxruntime-web";
 import { decodePeople, distanceBand, isLooking, letterbox, MODEL_SIZE } from "./pose";
 import { Tracker } from "./tracker";
@@ -19,6 +19,10 @@ const FRAME_INTERVAL_MS = 200;
 const HEARTBEAT_MS = 1_000;
 
 export type SnapshotFacts = Omit<AudienceSnapshot, "v" | "type" | "screen_id" | "seq">;
+/** The console camera panel's boxes (no image): what the edge agent sends as `dev.perception`. */
+export type PerceptionFacts = Omit<DevPerception, "v" | "type" | "screen_id" | "seq">;
+
+const unit = (value: number) => Math.min(1, Math.max(0, value));
 
 export class BrowserVision {
     private session: Ort.InferenceSession | null = null;
@@ -31,7 +35,12 @@ export class BrowserVision {
     private readonly tracker = new Tracker();
     private detector = "yolo26n-pose-web";
 
-    constructor(private readonly onSnapshot: (facts: SnapshotFacts) => void) {}
+    private frames = 0;
+
+    constructor(
+        private readonly onSnapshot: (facts: SnapshotFacts) => void,
+        private readonly onPerception: (facts: PerceptionFacts) => void = () => {},
+    ) {}
 
     async start(): Promise<void> {
         if (this.running) return;
@@ -129,6 +138,36 @@ export class BrowserVision {
             detections.map((d) => ({ box: d.person.box, looking: d.looking })),
             now,
         );
+        this.frames++;
+        const roundedMs = Math.round(inferenceMs * 10) / 10;
+        this.onPerception({
+            measured_at: measuredAt.toISOString(),
+            frame_w: width,
+            frame_h: height,
+            detector: this.detector,
+            inference_ms: roundedMs,
+            round_trip_ms: null,
+            raw_people: people.length,
+            people: detections.slice(0, 64).map((d, i) => ({
+                track_id: tracks[i]?.id ?? `b0-${i}`,
+                box: {
+                    x1: unit(d.person.box.x1 / width),
+                    y1: unit(d.person.box.y1 / height),
+                    x2: unit(d.person.box.x2 / width),
+                    y2: unit(d.person.box.y2 / height),
+                },
+                confidence: unit(d.person.score),
+                looking: d.looking,
+                distance_band: distanceBand(d.person, width, height),
+                dwell_s: Math.max(0, (now - (tracks[i]?.firstSeenMs ?? now)) / 1000),
+            })),
+            objects: [],
+            markers: [],
+            held: [],
+            frames: this.frames,
+            stale_frames: 0,
+            preview_jpeg_base64: null,
+        });
         // A heartbeat when the room is unchanged and empty; every frame otherwise.
         if (people.length === 0 && now - this.lastSentMs < HEARTBEAT_MS) return;
         this.lastSentMs = now;
@@ -154,7 +193,7 @@ export class BrowserVision {
             minor_likely: { value: false, confidence: 0, uncertain: people.length > 0 },
             perception: {
                 detector: this.detector,
-                inference_ms: Math.round(inferenceMs * 10) / 10,
+                inference_ms: roundedMs,
                 round_trip_ms: null,
                 primary_attempt_ms: null,
             },
