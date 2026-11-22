@@ -63,3 +63,14 @@ def test_a_postgres_mirror_keeps_only_recent_charges_but_the_record_keeps_all() 
     assert len(mirror.charges()) == 2  # two brands of the last play only
     assert {c.creative_id for c in mirror.charges()} == {"c2"}
     assert len(record.charges()) == 6
+
+
+def test_a_play_re_aired_under_the_same_creative_is_never_evicted_while_on_air() -> None:
+    billing, _ = desk()
+    billing.aired(_play("c-loop", "demo-01", 0))
+    for n in range(MAX_PLAYS_REMEMBERED - 1):
+        billing.aired(_play(f"later-{n}", f"other-{n}", 1))
+    billing.aired(_play("c-loop", "demo-01", 2))  # the same creative airs again
+    billing.aired(_play("newest", "elsewhere", 3))  # over the cap: the oldest goes
+    assert "c-loop" in billing._plays
+    assert "later-0" not in billing._plays

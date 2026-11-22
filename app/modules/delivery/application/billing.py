@@ -124,6 +124,9 @@ class DeliveryDesk:
     def aired(self, play: PlayRecord) -> None:
         with self._lock:
             self._end_plays(play.screen_id, play.aired_at)
+            # Re-aired under the same creative id: move it to the newest end, so the
+            # eviction below never forgets a play that is on air right now.
+            self._plays.pop(play.creative_id, None)
             self._plays[play.creative_id] = play
             while len(self._plays) > MAX_PLAYS_REMEMBERED:
                 evicted = self._plays.pop(next(iter(self._plays)))
