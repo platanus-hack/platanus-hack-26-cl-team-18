@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { isFullscreenKey, toggleFullscreen } from "./fullscreen";
+import { isExitKey, isFullscreenKey, toggleFullscreen } from "./fullscreen";
 
 const key = (init: KeyboardEventInit) => new KeyboardEvent("keydown", init);
 
@@ -10,6 +10,11 @@ describe("fullscreen shortcut", () => {
         expect(isFullscreenKey(key({ key: "f", ctrlKey: true }))).toBe(false);
         expect(isFullscreenKey(key({ key: "f", repeat: true }))).toBe(false);
         expect(isFullscreenKey(key({ key: "g" }))).toBe(false);
+    });
+
+    it("treats Esc as exit only", () => {
+        expect(isExitKey(key({ key: "Escape" }))).toBe(true);
+        expect(isExitKey(key({ key: "f" }))).toBe(false);
     });
 
     it("enters when windowed and exits when fullscreen", () => {

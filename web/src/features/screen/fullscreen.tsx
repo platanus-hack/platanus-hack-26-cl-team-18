@@ -1,5 +1,6 @@
 /**
- * Fullscreen for the TV: `F` or a double-click toggles it. Browsers allow
+ * Fullscreen for the TV: `F` or a double-click toggles it, and `Esc` always
+ * exits (the browser's own Esc is not reliable in every host). Browsers allow
  * `requestFullscreen()` only inside a user gesture, so the page can't start
  * fullscreen by itself; a short hint says how, and never covers the ad for long.
  * (Kiosk Chromium, `--kiosk`, is already fullscreen and never shows the hint.)
@@ -33,10 +34,19 @@ export function isFullscreenKey(event: KeyboardEvent): boolean {
     return event.key === "f" || event.key === "F";
 }
 
+/** `Esc` exits fullscreen; never enters it. */
+export function isExitKey(event: KeyboardEvent): boolean {
+    return event.key === "Escape" || event.key === "Esc";
+}
+
 export function useFullscreenShortcut(doc: Document = document): boolean {
     const [full, setFull] = useState(() => isFullscreen(doc));
     useEffect(() => {
         const onKey = (event: KeyboardEvent) => {
+            if (isExitKey(event)) {
+                if (isFullscreen(doc)) toggleFullscreen(doc);
+                return;
+            }
             if (!isFullscreenKey(event)) return;
             event.preventDefault();
             toggleFullscreen(doc);
@@ -47,11 +57,12 @@ export function useFullscreenShortcut(doc: Document = document): boolean {
         const onChange = () => {
             setFull(isFullscreen(doc));
         };
-        doc.addEventListener("keydown", onKey);
+        // Capture phase: a child handler that stops propagation can't eat Esc.
+        doc.addEventListener("keydown", onKey, true);
         doc.addEventListener("dblclick", onDoubleClick);
         doc.addEventListener("fullscreenchange", onChange);
         return () => {
-            doc.removeEventListener("keydown", onKey);
+            doc.removeEventListener("keydown", onKey, true);
             doc.removeEventListener("dblclick", onDoubleClick);
             doc.removeEventListener("fullscreenchange", onChange);
         };
