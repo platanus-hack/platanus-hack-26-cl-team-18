@@ -139,7 +139,20 @@ def teaser_for(brief: CreativeBrief, angle: Angle) -> str:
     held = brief.held_brand or brief.names[0]
     partners = tuple(name for name in brief.names if name != held) or brief.names
     count = _GROUP_WORDS.get(brief.addressed_party or 0)
-    by_category = _CATEGORY_TEASERS.get(lead.category) if angle is Angle.HUNGER else None
+    # A basket with a craving product in it ("Pack verano": water + ice cream) speaks
+    # for the craving, whichever brand leads.
+    by_category = (
+        next(
+            (
+                _CATEGORY_TEASERS[b.category]
+                for b in brief.brands
+                if b.category in _CATEGORY_TEASERS
+            ),
+            None,
+        )
+        if angle in (Angle.HUNGER, Angle.ENERGY)
+        else None
+    )
     by_hour = _DAYPART_TEASERS.get((angle, brief.daypart)) if brief.daypart else None
     if by_category is not None:
         solo_hook, counted_hook = by_category

@@ -25,7 +25,7 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
-from PIL import Image, ImageChops, ImageOps
+from PIL import Image, ImageChops, ImageEnhance, ImageFilter, ImageOps
 
 ROOT = Path(__file__).resolve().parents[1] / "assets" / "campaigns" / "photos"
 SIZE = (1600, 900)
@@ -41,6 +41,10 @@ class CommonsPhoto:
     zoom: float = 1.0
     # Put the subject on the right so the ad's copy has the left (only photos without text).
     mirror: bool = False
+    # A brand's own product photo (a real can or bottle, its real label): shown whole at
+    # screen height on the right, over a blurred, darkened copy of the same photo, so a
+    # portrait pack shot is never cropped mid-label and the copy keeps the left.
+    pack: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,13 +111,26 @@ COMMONS: tuple[CommonsPhoto, ...] = (
     CommonsPhoto(stem="cl-agua", title="File:Bottles (4782930999).jpg"),
     CommonsPhoto(stem="cl-chocolate", title="File:Opened Tupla chocolate bar.jpg"),
     CommonsPhoto(stem="cl-dulces", title="File:HardCandy.jpg"),
+    # The brands' own products, real labels (pack shots): a brand's campaign shows its
+    # product, never a rival's; category scenes stay unbranded.
+    CommonsPhoto(
+        stem="cl-monster-mega",
+        title="File:Monster Energy Mega can.jpg",
+        pack=True,
+    ),
+    CommonsPhoto(stem="cl-monster-lineup", title="File:Monster Energy drinks 04.jpg"),
+    CommonsPhoto(
+        stem="cl-coca-cola-zero", title="File:Coca Cola Zero 1L Sense Sucre Cara A.jpg", pack=True
+    ),
+    CommonsPhoto(stem="cl-pepsi-max", title="File:Pepsi Max can.jpg", pack=True),
+    CommonsPhoto(stem="cl-bilz", title="File:Botella Bilz 2023.jpg", pack=True),
+    CommonsPhoto(
+        stem="cl-cachantun-botella",
+        title="File:Botella de Cachantún, MAC Quinta Normal, Santiago 20230520.jpg",
+        pack=True,
+    ),
     # The venue itself: a real Copec station in La Reina (Pronto Copec's own campaigns).
     CommonsPhoto(stem="cl-copec-estacion", title="File:Copec La Reina.jpg", focus=(0.5, 0.45)),
-    CommonsPhoto(
-        stem="cl-helado-bombon",
-        title="File:Liat Portal for Foodie Disorder - Chocolate coated ice cream bar with nuts.jpg",
-        focus=(0.5, 0.4),
-    ),
 )
 
 # PIL hue: lime ≈ 50-75, violet ≈ 170-200, yellow ≈ 30-34, blue ≈ 150-160.
@@ -174,6 +191,30 @@ def _frame(image: Image.Image, focus: tuple[float, float], zoom: float) -> Image
     return image.crop(box).resize(SIZE, Image.Resampling.LANCZOS)
 
 
+def _pack(image: Image.Image, x_center: float = 0.74) -> Image.Image:
+    """The whole product at 94 % of the screen height, right of centre, on its own photo
+    blurred and darkened to a backdrop (the product itself is not retouched)."""
+    backdrop = ImageOps.fit(image, SIZE, Image.Resampling.LANCZOS)
+    backdrop = backdrop.filter(ImageFilter.GaussianBlur(48))
+    backdrop = ImageEnhance.Brightness(backdrop).enhance(0.32)
+    height = round(SIZE[1] * 0.94)
+    width = round(image.width * height / image.height)
+    product = image.resize((width, height), Image.Resampling.LANCZOS)
+    left = min(max(round(SIZE[0] * x_center - width / 2), 0), SIZE[0] - width)
+    # Feathered edges: the photo melts into its own blurred backdrop instead of sitting
+    # on it as a pasted rectangle.
+    ramp_x, ramp_y = round(width * 0.22), round(height * 0.10)
+    across = [min(255, round(255 * min(x, width - 1 - x) / ramp_x)) for x in range(width)]
+    down = [min(255, round(255 * min(y, height - 1 - y) / ramp_y)) for y in range(height)]
+    horizontal = Image.new("L", (width, 1))
+    horizontal.putdata(across)
+    vertical = Image.new("L", (1, height))
+    vertical.putdata(down)
+    mask = ImageChops.multiply(horizontal.resize((width, height)), vertical.resize((width, height)))
+    backdrop.paste(product, (left, (SIZE[1] - height) // 2), mask)
+    return backdrop
+
+
 def _relight(image: Image.Image, spec: Relight) -> Image.Image:
     hue, sat, val = image.convert("HSV").split()
     low, high = spec.hue_from
@@ -208,6 +249,9 @@ def _download_and_save(photo: CommonsPhoto, meta: dict, originals: dict[str, Ima
         original = ImageOps.exif_transpose(Image.open(data)).convert("RGB")
         original.thumbnail((3200, 3200))  # originals can be 8000+ px wide
         originals[photo.title] = original
+    if photo.pack:
+        _save(_pack(originals[photo.title]), photo.stem)
+        return
     framed = _frame(originals[photo.title], photo.focus, photo.zoom)
     _save(ImageOps.mirror(framed) if photo.mirror else framed, photo.stem)
 
@@ -238,7 +282,8 @@ def build_commons(credits: list[str], *, force: bool = False) -> None:
         license_name = ext.get("LicenseShortName", {}).get("value", "see source")
         credits.append(
             f"| `{photo.stem}.webp` | [{photo.title[5:]}]({meta['descriptionurl']}) "
-            f"| {artist} | {license_name} | cropped to 16:9"
+            f"| {artist} | {license_name} | "
+            + ("pack shot: whole, on its own blurred photo" if photo.pack else "cropped to 16:9")
             + (", mirrored" if photo.mirror else "")
             + " |"
         )

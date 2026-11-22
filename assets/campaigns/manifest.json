@@ -41,9 +41,10 @@
       ]
     },
     "monster": {
-      "photo": "cl-monster",
-      "video": "cl-monster",
+      "photo": "cl-monster-mega",
+      "video": "cl-monster-mega",
       "alternates": [
+        "cl-monster-lineup",
         "cl-ruta-5"
       ]
     },
@@ -56,10 +57,10 @@
       ]
     },
     "nescafe": {
-      "photo": "cl-cafe-medialuna",
-      "video": "cl-cafe-medialuna",
+      "photo": "cl-cappuccino",
+      "video": "cl-cappuccino",
       "alternates": [
-        "cl-cappuccino"
+        "cl-cafe-medialuna"
       ]
     },
     "pronto-copec": {
@@ -98,15 +99,15 @@
       "photo": "cl-completo",
       "video": "cl-completo",
       "alternates": [
-        "cl-completo-palta",
-        "cl-bebida-limon"
+        "cl-coca-cola-zero",
+        "cl-completo-palta"
       ]
     },
     "monster+pronto-copec": {
       "photo": "cl-completo",
       "video": "cl-completo",
       "alternates": [
-        "cl-completo-palta",
+        "cl-monster-mega",
         "cl-ruta-5"
       ]
     },
@@ -122,8 +123,8 @@
       "photo": "cl-completo-palta",
       "video": "cl-completo-palta",
       "alternates": [
-        "cl-completo",
-        "cl-bebida-limon"
+        "cl-bilz",
+        "cl-completo"
       ]
     },
     "category:coffee": {
@@ -172,7 +173,6 @@
       "photo": "cl-helado-playa",
       "video": "cl-helado-playa",
       "alternates": [
-        "cl-helado-bombon",
         "cl-paleta"
       ]
     },
@@ -194,6 +194,113 @@
       "photo": "cl-agua",
       "video": "cl-agua",
       "alternates": [
+        "cl-ruta-5"
+      ]
+    },
+    "colun+pronto-copec": {
+      "photo": "cl-chocolatada",
+      "video": "cl-chocolatada",
+      "alternates": [
+        "cl-desayuno"
+      ]
+    },
+    "pronto-copec+soprole": {
+      "photo": "cl-chocolatada",
+      "video": "cl-chocolatada",
+      "alternates": [
+        "cl-desayuno"
+      ]
+    },
+    "andina-del-valle+pronto-copec": {
+      "photo": "cl-desayuno",
+      "video": "cl-desayuno",
+      "alternates": [
+        "cl-nectar"
+      ]
+    },
+    "pronto-copec+watts": {
+      "photo": "cl-desayuno",
+      "video": "cl-desayuno",
+      "alternates": [
+        "cl-nectar"
+      ]
+    },
+    "cachantun+savory": {
+      "photo": "cl-helado-playa",
+      "video": "cl-helado-playa",
+      "alternates": [
+        "cl-paleta"
+      ]
+    },
+    "bresler+cachantun": {
+      "photo": "cl-helado-playa",
+      "video": "cl-helado-playa",
+      "alternates": [
+        "cl-paleta"
+      ]
+    },
+    "cachantun+marco-polo": {
+      "photo": "cl-ruta-5",
+      "video": "cl-ruta-5",
+      "alternates": [
+        "cl-papas-rusticas"
+      ]
+    },
+    "marco-polo+powerade": {
+      "photo": "cl-papas-rusticas",
+      "video": "cl-papas-rusticas",
+      "alternates": [
+        "cl-ruta-5"
+      ]
+    },
+    "gatorade+lays": {
+      "photo": "cl-papas",
+      "video": "cl-papas",
+      "alternates": [
+        "cl-agua"
+      ]
+    },
+    "lays+pepsi": {
+      "photo": "cl-papas",
+      "video": "cl-papas",
+      "alternates": [
+        "cl-pepsi-max"
+      ]
+    },
+    "ambrosoli+juan-valdez": {
+      "photo": "coffee",
+      "video": "coffee",
+      "alternates": [
+        "cl-dulces",
+        "cl-cappuccino"
+      ]
+    },
+    "coca-cola": {
+      "photo": "cl-coca-cola-zero",
+      "video": "cl-coca-cola-zero",
+      "alternates": [
+        "cl-bebida-limon"
+      ]
+    },
+    "pepsi": {
+      "photo": "cl-pepsi-max",
+      "video": "cl-pepsi-max",
+      "alternates": [
+        "cl-bebida-noche"
+      ]
+    },
+    "bilz-y-pap": {
+      "photo": "cl-bilz",
+      "video": "cl-bilz",
+      "alternates": [
+        "cl-completo-palta"
+      ]
+    },
+    "cachantun": {
+      "photo": "cl-cachantun-botella",
+      "video": "cl-cachantun-botella",
+      "alternates": [
+        "cl-agua",
         "cl-ruta-5"
       ]
     }

@@ -34,5 +34,10 @@ Chile catalog (`DEMO_CATALOG=chile`), built by `scripts/build_chile_photos.py`:
 | `cl-agua.webp` | [Bottles (4782930999).jpg](https://commons.wikimedia.org/wiki/File:Bottles_(4782930999).jpg) | Andrew Smith from Seattle, WA, USA | CC BY-SA 2.0 | cropped to 16:9 |
 | `cl-chocolate.webp` | [Opened Tupla chocolate bar.jpg](https://commons.wikimedia.org/wiki/File:Opened_Tupla_chocolate_bar.jpg) | JIP | CC BY-SA 4.0 | cropped to 16:9 |
 | `cl-dulces.webp` | [HardCandy.jpg](https://commons.wikimedia.org/wiki/File:HardCandy.jpg) | Adam Zivner | CC BY-SA 3.0 | cropped to 16:9 |
+| `cl-monster-mega.webp` | [Monster Energy Mega can.jpg](https://commons.wikimedia.org/wiki/File:Monster_Energy_Mega_can.jpg) | DYVER | CC BY-SA 4.0 | pack shot: whole, on its own blurred photo |
+| `cl-monster-lineup.webp` | [Monster Energy drinks 04.jpg](https://commons.wikimedia.org/wiki/File:Monster_Energy_drinks_04.jpg) | Oto Zapletal | CC BY-SA 4.0 | cropped to 16:9 |
+| `cl-coca-cola-zero.webp` | [Coca Cola Zero 1L Sense Sucre Cara A.jpg](https://commons.wikimedia.org/wiki/File:Coca_Cola_Zero_1L_Sense_Sucre_Cara_A.jpg) | DigitalCompas | CC BY 4.0 | pack shot: whole, on its own blurred photo |
+| `cl-pepsi-max.webp` | [Pepsi Max can.jpg](https://commons.wikimedia.org/wiki/File:Pepsi_Max_can.jpg) | Ramolito | Public domain | pack shot: whole, on its own blurred photo |
+| `cl-bilz.webp` | [Botella Bilz 2023.jpg](https://commons.wikimedia.org/wiki/File:Botella_Bilz_2023.jpg) | Anuchikibrikiivdamke | CC BY-SA 4.0 | pack shot: whole, on its own blurred photo |
+| `cl-cachantun-botella.webp` | [Botella de Cachantún, MAC Quinta Normal, Santiago 20230520.jpg](https://commons.wikimedia.org/wiki/File:Botella_de_Cachant%C3%BAn,_MAC_Quinta_Normal,_Santiago_20230520.jpg) | Carlos Figueroa Rojas | CC BY-SA 4.0 | pack shot: whole, on its own blurred photo |
 | `cl-copec-estacion.webp` | [Copec La Reina.jpg](https://commons.wikimedia.org/wiki/File:Copec_La_Reina.jpg) | User13121989 | CC BY-SA 4.0 | cropped to 16:9 |
-| `cl-helado-bombon.webp` | [Liat Portal for Foodie Disorder - Chocolate coated ice cream bar with nuts.jpg](https://commons.wikimedia.org/wiki/File:Liat_Portal_for_Foodie_Disorder_-_Chocolate_coated_ice_cream_bar_with_nuts.jpg) | HaJunkiyada | CC BY-SA 4.0 | cropped to 16:9 |

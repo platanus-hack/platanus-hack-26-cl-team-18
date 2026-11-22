@@ -55,6 +55,7 @@ BRANDS: tuple[DemoBrand, ...] = (
         rate_clp_per_as="8",
         color="#f5c400",
         stock_copy="Score · Original 473 ml, helada para el turno largo.",
+        tagline="Score. Máxima potencia.",  # its own site: "Bebida Energética con Máxima Potencia"
         voice=("directo", "chileno", "sin adornos"),
         product="energy_drink",
     ),
@@ -93,6 +94,7 @@ BRANDS: tuple[DemoBrand, ...] = (
         rate_clp_per_as="5",
         color="#c8102e",
         stock_copy="Juan Valdez · Café colombiano, hecho al momento.",
+        tagline="Juan Valdez. Compartimos lo mejor que hacemos.",  # its 2025 global platform
         voice=("cálido", "sereno"),
         product="coffee",
     ),
@@ -105,6 +107,7 @@ BRANDS: tuple[DemoBrand, ...] = (
         rate_clp_per_as="3.5",
         color="#e2231a",
         stock_copy="Nescafé · Un café rápido antes de seguir.",
+        tagline="Todo empieza con un Nescafé.",  # its worldwide line since 2014
         voice=("cotidiano", "simple"),
         product="coffee",
     ),
@@ -238,6 +241,7 @@ BRANDS: tuple[DemoBrand, ...] = (
         rate_clp_per_as="4.2",
         color="#f4c300",
         stock_copy="Bilz y Pap · Zero 600 ml, bien heladas para el completo.",
+        tagline="Bilz y Pap, el sabor de la diversión.",  # CCU's 2026 campaign
         voice=("nostálgico", "alegre"),
         broad_match=False,  # the completo + bebida combo (DemoBrand.broad_match)
         product="soft_drink",
@@ -264,6 +268,7 @@ BRANDS: tuple[DemoBrand, ...] = (
         rate_clp_per_as="4",
         color="#f26522",
         stock_copy="Gatorade · Isotónica, helada.",
+        tagline="Gatorade. ¿Está en ti?",  # its 2026 global football platform
         voice=("deportivo", "seguro"),
         product="sports_drink",
     ),
@@ -302,6 +307,7 @@ BRANDS: tuple[DemoBrand, ...] = (
         rate_clp_per_as="3",
         color="#e2001a",
         stock_copy="Watt's · Néctar frío para el desayuno.",
+        tagline="Es Watt's, es fruta.",  # its current line, ccu.cl
         voice=("familiar", "fresco"),
         product="juice",
     ),
@@ -340,6 +346,7 @@ BRANDS: tuple[DemoBrand, ...] = (
         rate_clp_per_as="3.3",
         color="#ff3b30",
         stock_copy="Bresler · Helado para el viaje.",
+        tagline="Bresler. Vuelve a sorprenderte.",  # its 2020 relaunch line
         voice=("veraniego", "cercano"),
         product="ice_cream",
     ),
