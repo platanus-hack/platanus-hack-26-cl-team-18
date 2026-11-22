@@ -85,6 +85,7 @@ def register_live_market(container: Container) -> DemoControls:
         slugs=slugs,
         media=market.campaign_media,
         clock=container.clock,
+        writer=container.copywriter,  # None when paid providers are off: stock copy only
     )
     container.loop_keys = tuple(
         sorted(

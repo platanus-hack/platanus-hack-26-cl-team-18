@@ -61,6 +61,7 @@ function generated(request: CampaignGenerate): CampaignGenerated {
         checks: ["guarded_copy"],
         compose_ms: 1.2,
         cache_hit: false,
+        ai_available: false,
         spec: {
             layout_id: "duo",
             slots: catalog.brands
@@ -95,17 +96,23 @@ let root: Root;
 let host: HTMLDivElement;
 const fetchMock = vi.fn<typeof fetch>();
 let generateResponse: (request: CampaignGenerate) => Promise<unknown>;
+let upgradeResponse: ((request: CampaignGenerate) => Promise<unknown>) | null;
 beforeEach(async () => {
     vi.useFakeTimers();
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     vi.stubGlobal("fetch", fetchMock);
     generateResponse = (request) => Promise.resolve(generated(request));
+    upgradeResponse = null;
     fetchMock.mockImplementation(async (input, options) => {
         const url =
             typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
         if (url.endsWith("/catalog")) return new Response(JSON.stringify(catalog));
         if (typeof options?.body !== "string") throw new Error("Expected JSON request body");
         const request = CampaignGenerateSchema.parse(JSON.parse(options.body) as unknown);
+        if (url.endsWith("/upgrade")) {
+            if (upgradeResponse === null) throw new Error("upgrade called with AI off");
+            return new Response(JSON.stringify(await upgradeResponse(request)));
+        }
         return new Response(JSON.stringify(await generateResponse(request)));
     });
     host = document.createElement("div");
@@ -157,6 +164,55 @@ it("renders the real shared player with both brands, product photography and opt
     expect(host.querySelector("img.creative-media")).not.toBeNull();
     await click(button("03 · Canje"));
     expect(host.textContent).toContain("El QR se emite al activar la campaña.");
+});
+
+it("shows the stock draft at once, then swaps in Claude's guarded rewrite", async () => {
+    let finish: () => void = () => undefined;
+    generateResponse = (request) => Promise.resolve({ ...generated(request), ai_available: true });
+    upgradeResponse = (request) =>
+        new Promise((resolve) => {
+            const base = generated(request);
+            finish = () => {
+                resolve({
+                    ...base,
+                    ai_available: true,
+                    spec: {
+                        ...base.spec,
+                        copy_source: "ai",
+                        stages: base.spec.stages.map((stage) =>
+                            stage.name === "close"
+                                ? { ...stage, copy_text: "Muestra el QR en caja" }
+                                : stage,
+                        ),
+                    },
+                });
+            };
+        });
+    await settle();
+    expect(host.textContent).toContain("Aquí al lado"); // stock is on screen meanwhile
+    await act(async () => {
+        finish();
+        await vi.advanceTimersByTimeAsync(10);
+    });
+    expect(host.textContent).toContain("Muestra el QR en caja");
+    expect(host.textContent).not.toContain("Aquí al lado");
+});
+
+it("keeps the stock draft when Claude's rewrite fails", async () => {
+    generateResponse = (request) => Promise.resolve({ ...generated(request), ai_available: true });
+    upgradeResponse = () => Promise.reject(new Error("provider down"));
+    await settle();
+    await act(async () => {
+        await vi.advanceTimersByTimeAsync(10);
+    });
+    expect(host.textContent).toContain("Aquí al lado");
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+});
+
+it("never calls the model when AI is off", async () => {
+    await settle();
+    const urls = fetchMock.mock.calls.map(([input]) => (typeof input === "string" ? input : ""));
+    expect(urls.some((url) => url.endsWith("/upgrade"))).toBe(false);
 });
 
 it("drops a late campaign result after a newer group size is ready", async () => {

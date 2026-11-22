@@ -328,20 +328,25 @@ source before use**. Don't put a number on a slide that nobody checked.
 
 ## 6. Likely judge questions and answers
 
+Short answers here; the full prep, with the proof for each answer and the claims not to
+make, is [`judge-qa.md`](judge-qa.md). Start the station with `--paid-providers` or no AI
+runs at all (judge-qa §0).
+
 | Question | Answer |
 |---|---|
-| "Isn't this creepy / legal?" | No identity, no face recognition, nothing stored, faces blurred before anything goes to a third party, no sensitive or emotion inference, minors only protected and never targeted, and redemptions are anonymous. Designed for Ley 21.719, the GDPR and the EU AI Act. |
-| "Would brands accept an AI pairing them with another brand?" | Only pre-approved partners. Every basket's video is generated ahead of time and approved by both brands; only the copy is live, inside each brand's guardrails. Logos are never generated. |
+| "Isn't this creepy / legal?" | No identity, no face recognition, nothing stored; the AI only sees the people and products the camera found, with every head blacked out, and the backend checks it; no sensitive or emotion inference, minors only protected and never targeted, and redemptions are anonymous. Designed for Ley 21.719, the GDPR and the EU AI Act. |
+| "Would brands accept an AI pairing them with another brand?" | Only pre-approved partners, and both brands approve the basket and its offer in advance. Only the copy is live, and a guard checks the price, competitor names and claims before it airs. Logos are never generated. |
 | "Why would brands share a screen?" | They already fund joint "buy both" offers through co-op budgets. We make those per moment and measured, and each brand pays only for the viewers relevant to it. |
-| "How do you price a basket fairly?" | VCG: each brand pays the value it displaced from others, per attention-second. Bidding your true value is optimal, and zero attention costs zero. |
+| "How do you price a basket fairly?" | Second-price style (VCG): each brand pays the value it displaced from others, per attention-second, adjusted so no losing basket would have paid more. A brand never pays above its bid, and zero attention costs zero. |
 | "Does it sell anything?" | Each basket has its own QR / promo code. Redemptions are credited to both brands; you just saw one. In a store, the code is redeemed at the checkout a few meters away. |
 | "Latency?" | YOLO on a GPU (local fallback), an in-memory auction under 30 ms, a pre-approved creative under 300 ms, AI upgrades in place. Live p50/p95 on the console. |
 | "Go-to-market?" | Convenience stores and gas-station shops first: queues give dwell, purchases are complementary impulse buys, checkout gives attribution, and one chain means hundreds of identical locations. Take rate per auction plus a per-redemption fee. |
-| "Unit economics?" | A tagging call costs a fraction of a cent. Basket videos are generated once and reused across thousands of plays. |
-| "What about generative video?" | Baskets are a small, pre-approved set, so we pre-generate one loop per pairing, and turbo models (a few seconds per clip) fill gaps in the background. |
-| "How do you recognize what I'm holding?" | Objects only: the vision model reads the product label in a face-blurred frame. It never identifies the person. |
+| "Unit economics?" | Claude tags at most one keyframe every 1.5 s, and only when the camera's detections aren't enough. Ad loops are made once and reused across every play. |
+| "What about generative video?" | Never live: it's slower than the moment and costs per clip. Ads play pre-made loops; a budgeted offline job can generate them with an open video model on fal. Logos, prices and the QR are player overlays, so a video can't misprint them. |
+| "How do you recognize what I'm holding?" | Objects only: demo props carry a small printed marker read in ~7 ms, an object detector sees cups and cans, and Claude can read a label on a crop with the head blacked out. It never identifies the person. |
 | "Why would a store want this?" | Its screens turn from a cost into revenue, they always fill (the store's own products can bid too), and it only advertises what's in stock. |
 | "You're listening to people?" | Only in opt-in speech mode, with signage and a visible indicator. Audio and transcripts are never stored, only topics with a short TTL. |
+| "Is any of the ad AI-generated?" | Claude Haiku writes the copy for each moment (stock copy first, Claude's version seconds later), and in the campaign studio. ElevenLabs reads the approved offer. Some scene photos are AI-generated; product shots and logos are real. |
 
 ## 7. Demo idea backlog (candidates, not committed)
 

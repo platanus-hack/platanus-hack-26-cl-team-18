@@ -38,3 +38,14 @@ async def generate(
         return await anyio.to_thread.run_sync(_generator(request).generate, message)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
+
+
+@router.post("/upgrade")
+async def upgrade(
+    request: Request, message: Annotated[CampaignGenerate, Body()]
+) -> CampaignGenerated:
+    """The same draft with guarded AI copy (Claude), or the stock draft if AI is off or lost."""
+    try:
+        return await _generator(request).upgrade(message)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc

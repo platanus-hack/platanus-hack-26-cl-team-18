@@ -359,6 +359,7 @@ export const CampaignGeneratedSchema = z.strictObject({
   checks: z.array(z.string()),
   compose_ms: z.number().gte(0),
   cache_hit: z.boolean(),
+  ai_available: z.boolean(),
 });
 export type CampaignGenerated = z.infer<typeof CampaignGeneratedSchema>;
 

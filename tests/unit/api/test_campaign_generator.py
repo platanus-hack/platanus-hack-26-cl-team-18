@@ -1,13 +1,19 @@
 """The campaign studio produces guarded, media-rich drafts without changing the live market."""
 
 from collections.abc import Iterator
+from dataclasses import replace
 
 import pytest
 from fastapi.testclient import TestClient
 
+from app.bootstrap.container import build_container
 from app.config.settings import AppSettings
-from app.contract.messages import CampaignCatalog, CampaignGenerated
+from app.contract.messages import CampaignCatalog, CampaignGenerated, CopySourceKind
 from app.main import create_app
+from app.modules.creative.application.ports.copywriter import TokenUsage, WrittenCopy
+from app.modules.creative.application.stock_copy import StockCopywriter
+from app.modules.creative.domain.brief import CreativeBrief
+from app.modules.creative.domain.draft import CopySource
 
 
 @pytest.fixture
@@ -183,3 +189,92 @@ def test_rayo_baskets_show_rayos_own_can(studio: TestClient) -> None:
     assert rayo.spec.video_url == "/campaign-assets/videos/rayo-coffee.mp4"
     assert voltio.spec.slots[0].hero_image_url == "/campaign-assets/photos/energy-coffee.webp"
     assert studio.get(rayo.spec.video_url).status_code == 200
+
+
+# ------------------------------------------------- AI copy in the studio (docs/judge-qa.md §2)
+
+AI_CLOSE = "Muestra el QR en caja · válido 10 min"
+
+
+class StudioWriter:
+    """Stock facts with a fresher close line (safe, on target, so it wins), or (`price`)
+    a close that misquotes the price."""
+
+    name = "fake"
+
+    def __init__(self, *, price: str | None = None) -> None:
+        self.price = price
+        self.calls = 0
+
+    async def write(self, brief: CreativeBrief) -> WrittenCopy:
+        self.calls += 1
+        draft = replace(
+            StockCopywriter().compose(brief),
+            close=AI_CLOSE if self.price is None else f"Todo por ${self.price} en caja",
+            source=CopySource.AI,
+            model_version="fake@low",
+        )
+        return WrittenCopy(draft=draft, usage=TokenUsage(input_tokens=900, output_tokens=150))
+
+
+def studio_with(tmp_path, writer: StudioWriter | None) -> TestClient:  # type: ignore[no-untyped-def]
+    settings = AppSettings(
+        _env_file=None,
+        app_env="test",
+        media_dir=tmp_path,
+        audience_ai=False,
+        creative_ai_copy=writer is not None,
+        voiceovers_enabled=False,
+    )
+    return TestClient(create_app(container=build_container(settings, copywriter=writer)))
+
+
+DRAFT = {"brands": ["voltio", "cafe-patio"], "party_size": 2, "media": "photo"}
+
+
+def close_line(campaign: CampaignGenerated) -> str:
+    return next(s.copy_text for s in campaign.spec.stages if s.name == "close")
+
+
+def test_the_studio_shows_stock_first_then_claudes_guarded_copy(tmp_path) -> None:
+    writer = StudioWriter()
+    with studio_with(tmp_path, writer) as client:
+        stock = CampaignGenerated.model_validate(
+            client.post("/api/campaigns/generate", json=DRAFT).json()
+        )
+        assert stock.ai_available and stock.spec.copy_source == CopySourceKind.STOCK
+        assert writer.calls == 0  # generate never calls the model
+
+        upgraded = CampaignGenerated.model_validate(
+            client.post("/api/campaigns/upgrade", json=DRAFT).json()
+        )
+        assert writer.calls == 1
+        assert upgraded.spec.copy_source != CopySourceKind.STOCK  # "ai" or its cached reuse
+        assert close_line(upgraded) == AI_CLOSE
+        assert upgraded.spec.offer == stock.spec.offer  # the approved price never changes
+
+        again = CampaignGenerated.model_validate(
+            client.post("/api/campaigns/generate", json=DRAFT).json()
+        )
+        assert close_line(again) == AI_CLOSE  # the AI draft is now the draft
+
+
+def test_ai_copy_that_misquotes_the_price_never_reaches_the_studio(tmp_path) -> None:
+    writer = StudioWriter(price="1")
+    with studio_with(tmp_path, writer) as client:
+        upgraded = CampaignGenerated.model_validate(
+            client.post("/api/campaigns/upgrade", json=DRAFT).json()
+        )
+    assert writer.calls == 1
+    assert upgraded.spec.copy_source == CopySourceKind.STOCK  # the guard kept stock
+    assert "Todo por $1" not in close_line(upgraded)
+
+
+def test_without_a_writer_upgrade_returns_the_stock_draft(tmp_path) -> None:
+    with studio_with(tmp_path, None) as client:
+        response = client.post("/api/campaigns/upgrade", json=DRAFT)
+        assert response.status_code == 200
+        draft = CampaignGenerated.model_validate(response.json())
+        assert not draft.ai_available and draft.spec.copy_source == CopySourceKind.STOCK
+        bad = client.post("/api/campaigns/upgrade", json={**DRAFT, "brands": ["voltio", "rayo"]})
+        assert bad.status_code == 422  # validated like generate, before any model call

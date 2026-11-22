@@ -238,9 +238,19 @@ export function CampaignsPage() {
             void readJson("generate", controller.signal, request)
                 .then((data) => {
                     if (!controller.signal.aborted) {
-                        setCampaign(CampaignGeneratedSchema.parse(data));
+                        const draft = CampaignGeneratedSchema.parse(data);
+                        setCampaign(draft);
                         setResponseFor(requestKey);
                         setBusy(false);
+                        // Stock first; Claude's guarded rewrite replaces it in place.
+                        if (!draft.ai_available || draft.spec.copy_source !== "stock") return;
+                        void readJson("upgrade", controller.signal, request)
+                            .then((upgraded) => {
+                                if (!controller.signal.aborted) {
+                                    setCampaign(CampaignGeneratedSchema.parse(upgraded));
+                                }
+                            })
+                            .catch(() => undefined); // the approved stock draft stays
                     }
                 })
                 .catch((reason: unknown) => {

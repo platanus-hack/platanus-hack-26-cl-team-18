@@ -1,10 +1,19 @@
-"""Instant campaign drafts from the live catalog: approved kits, offers and cached media."""
+"""Campaign drafts from the live catalog: approved kits, offers and cached media.
+
+`generate` is instant and uses approved stock copy. `upgrade` then asks the copy
+writer (Claude) for the same draft through the studio's warm path: the same guard
+and spend cap as a live ad, so the price, brands and claims can't change. Without a
+writer, `upgrade` returns the stock draft.
+"""
 
 from collections import OrderedDict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from decimal import Decimal
 from threading import Lock
 from time import perf_counter
+
+import anyio
 
 from app.contract.messages import (
     CampaignBrand,
@@ -23,10 +32,11 @@ from app.modules.common.application.clock import BaseClock
 from app.modules.common.application.idempotency import compute_request_hash
 from app.modules.common.domain.value_objects.percentage import Percentage
 from app.modules.creative.application.briefing import CreativeCatalog, MomentContext, assemble_brief
+from app.modules.creative.application.ports.copywriter import CopyWriter
 from app.modules.creative.application.rendering import render_spec
 from app.modules.creative.application.studio import CreativeStudio
 from app.modules.creative.domain.angle import Angle
-from app.modules.creative.domain.brief import Daypart
+from app.modules.creative.domain.brief import CreativeBrief, Daypart
 from app.modules.creative.domain.offer import OfferBook
 
 MOMENT_SEGMENTS = {
@@ -85,8 +95,13 @@ def apply_campaign_media(
     )
 
 
+# A studio draft has no live audience to pay for it: plan it as cold work, under the cap.
+COLD_VALUE = Decimal("Infinity")
+
+
 class CampaignGenerator:
-    """No provider calls or file IO: prepare cold assets once, then compose and memoize."""
+    """Prepare cold assets once, then compose and memoize. No file IO; the only provider
+    call is the optional copy writer, and only from `upgrade`."""
 
     def __init__(
         self,
@@ -97,6 +112,7 @@ class CampaignGenerator:
         slugs: Mapping[BrandId, str],
         media: Mapping[str, CampaignMedia],
         clock: BaseClock,
+        writer: CopyWriter | None = None,
     ) -> None:
         self._kits = {kit.brand_id: kit for kit in kits}
         self._bidders = {bidder.brand_id: bidder for bidder in bidders}
@@ -110,7 +126,7 @@ class CampaignGenerator:
                 SegmentId.create(segment): angle for segment, angle in MOMENT_SEGMENTS.values()
             },
         )
-        self._studio = CreativeStudio(clock=clock)
+        self._studio = CreativeStudio(clock=clock, writer=writer)
         self._memo: OrderedDict[str, CampaignGenerated] = OrderedDict()
         self._lock = Lock()
 
@@ -152,8 +168,40 @@ class CampaignGenerator:
             ],
         )
 
+    @property
+    def ai_available(self) -> bool:
+        return self._studio.ai_enabled
+
+    async def upgrade(self, request: CampaignGenerate) -> CampaignGenerated:
+        """The same draft, with Claude's copy if it passes the guard and beats stock.
+
+        Raises ValueError like `generate`. On a timeout, a rejected or weaker draft, the
+        spend cap or no writer, it returns the stock draft (`copy_source` stays "stock").
+        """
+        key, _, brief = self._brief(request)  # validates before any model call
+        if self._studio.ai_enabled:
+            draft = await self._studio.upgrade_copy(brief, value_per_s_clp=COLD_VALUE)
+            if draft is not None:
+                with self._lock:
+                    self._memo.pop(key, None)  # compose now picks the cached AI draft
+        return await anyio.to_thread.run_sync(self.generate, request)
+
     def generate(self, request: CampaignGenerate) -> CampaignGenerated:
         started = perf_counter()
+        key, slugs, brief = self._brief(request)
+        with self._lock:
+            if key in self._memo:
+                self._memo.move_to_end(key)
+                return self._memo[key].model_copy(
+                    update={
+                        "cache_hit": True,
+                        "compose_ms": (perf_counter() - started) * 1000,
+                        "ai_available": self._studio.ai_enabled,
+                    }
+                )
+            return self._compose(key, slugs, request, brief, started)
+
+    def _brief(self, request: CampaignGenerate) -> tuple[str, tuple[str, ...], CreativeBrief]:
         slugs = tuple(request.brands)  # slot order: the lead brand first
         if len(set(slugs)) != len(slugs) or any(
             slug not in self._ids or not self._ready(self._ids[slug]) for slug in slugs
@@ -180,73 +228,79 @@ class CampaignGenerator:
                     "La combinación requiere marcas complementarias y una oferta aprobada"
                 )
         key = compute_request_hash(request.model_dump(mode="json"))[:24]
-        with self._lock:
-            if key in self._memo:
-                self._memo.move_to_end(key)
-                return self._memo[key].model_copy(
-                    update={"cache_hit": True, "compose_ms": (perf_counter() - started) * 1000}
-                )
-            segment = MOMENT_SEGMENTS.get(request.moment)
-            segments = (
-                ()
-                if segment is None
-                else (
-                    SegmentEstimate.create(
-                        segment_id=SegmentId.create(segment[0]),
-                        viewer_count=request.party_size,
-                        confidence=Percentage.create(100),
-                        sources=frozenset({SegmentSource.VISION}),
-                    ),
-                )
+        segment = MOMENT_SEGMENTS.get(request.moment)
+        segments = (
+            ()
+            if segment is None
+            else (
+                SegmentEstimate.create(
+                    segment_id=SegmentId.create(segment[0]),
+                    viewer_count=request.party_size,
+                    confidence=Percentage.create(100),
+                    sources=frozenset({SegmentSource.VISION}),
+                ),
             )
-            context = MomentContext(
-                queue_length=max(2, request.party_size) if request.moment == "queue" else 0,
-                held_brand_ids=frozenset(ids[:1])
-                if request.moment == "complete_basket"
-                else frozenset(),
-                daypart=Daypart(request.daypart) if request.daypart else None,
-            )
-            brief = assemble_brief(
-                basket=tuple((brand, self._bidders[brand].category) for brand in ids),
-                layout="duo" if len(ids) == 2 else "solo",
-                segments=segments,
-                looking=request.party_size,
-                people=request.party_size,
-                minor_likely=request.minor_likely,
-                catalog=self._catalog,
-                context=context,
-            )
-            composed = self._studio.compose(brief)
-            if not composed.score.verdict.passed:
-                raise ValueError("La campaña no superó la revisión de copy")
-            found = media_for(
-                self._media,
-                tuple((slug, self._bidders[self._ids[slug]].category) for slug in slugs),
-            )
-            spec = apply_campaign_media(
-                render_spec(brief, composed.draft, self._kits),
-                found[1] if found else None,
-                video=request.media == "video",
-            )
-            result = CampaignGenerated(
-                campaign_key=key,
-                title=brief.offer.label if brief.offer else " · ".join(brief.names),
-                brands=list(slugs),
-                party_size=request.party_size,
-                moment=request.moment,
-                spec=spec,
-                quality_score=str(composed.score.total),
-                checks=[
-                    "real_brand_assets",
-                    "approved_pairing",
-                    "guarded_copy",
-                    "fixed_offer_price",
-                    "minor_safety",
-                ],
-                compose_ms=(perf_counter() - started) * 1000,
-                cache_hit=False,
-            )
-            self._memo[key] = result
-            while len(self._memo) > 128:
-                self._memo.popitem(last=False)
-            return result
+        )
+        context = MomentContext(
+            queue_length=max(2, request.party_size) if request.moment == "queue" else 0,
+            held_brand_ids=frozenset(ids[:1])
+            if request.moment == "complete_basket"
+            else frozenset(),
+            daypart=Daypart(request.daypart) if request.daypart else None,
+        )
+        brief = assemble_brief(
+            basket=tuple((brand, self._bidders[brand].category) for brand in ids),
+            layout="duo" if len(ids) == 2 else "solo",
+            segments=segments,
+            looking=request.party_size,
+            people=request.party_size,
+            minor_likely=request.minor_likely,
+            catalog=self._catalog,
+            context=context,
+        )
+        return key, slugs, brief
+
+    def _compose(
+        self,
+        key: str,
+        slugs: tuple[str, ...],
+        request: CampaignGenerate,
+        brief: CreativeBrief,
+        started: float,
+    ) -> CampaignGenerated:
+        """Under `self._lock`: compose, render and memoize one draft."""
+        composed = self._studio.compose(brief)
+        if not composed.score.verdict.passed:
+            raise ValueError("La campaña no superó la revisión de copy")
+        found = media_for(
+            self._media,
+            tuple((slug, self._bidders[self._ids[slug]].category) for slug in slugs),
+        )
+        spec = apply_campaign_media(
+            render_spec(brief, composed.draft, self._kits),
+            found[1] if found else None,
+            video=request.media == "video",
+        )
+        result = CampaignGenerated(
+            campaign_key=key,
+            title=brief.offer.label if brief.offer else " · ".join(brief.names),
+            brands=list(slugs),
+            party_size=request.party_size,
+            moment=request.moment,
+            spec=spec,
+            quality_score=str(composed.score.total),
+            checks=[
+                "real_brand_assets",
+                "approved_pairing",
+                "guarded_copy",
+                "fixed_offer_price",
+                "minor_safety",
+            ],
+            compose_ms=(perf_counter() - started) * 1000,
+            cache_hit=False,
+            ai_available=self._studio.ai_enabled,
+        )
+        self._memo[key] = result
+        while len(self._memo) > 128:
+            self._memo.popitem(last=False)
+        return result

@@ -1242,6 +1242,8 @@ class CampaignGenerated(_Message):
     checks: list[str]
     compose_ms: Annotated[float, Field(ge=0)]
     cache_hit: bool
+    # A copy writer (Claude) is configured: POST /api/campaigns/upgrade can rewrite it.
+    ai_available: bool = False
 
 
 # HTTP messages share the generated schemas without joining any socket union.
