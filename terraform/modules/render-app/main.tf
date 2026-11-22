@@ -56,7 +56,8 @@ resource "render_web_service" "app" {
       branch        = var.branch
       build_command = var.build_command
       auto_deploy   = var.auto_deploy
-      build_filter = length(var.build_filter_paths) > 0 ? {
+      # Filters only gate auto-deploys; Render drops them when auto_deploy is off.
+      build_filter = var.auto_deploy && length(var.build_filter_paths) > 0 ? {
         paths = var.build_filter_paths
       } : null
     }
