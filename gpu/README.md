@@ -27,7 +27,15 @@ GPU_MODEL=fake uv run python -m service --port 8080       # no model, for wiring
 uv sync --extra yolo                     # the real model (pulls torch)
 GPU_DEVICE=0 uv run python -m service --port 8080         # YOLO26 on GPU 0 (.pt)
 GPU_TENSORRT=1 GPU_DEVICE=0 uv run python -m service      # one-time TensorRT FP16 export
+# A GPU box on the venue LAN (reachable from the agent laptop): bind all interfaces + a token
+GPU_TOKEN="$GPU_TOKEN" GPU_DEVICE=0 uv run python -m service --host 0.0.0.0 --port 8080
 ```
+
+`python -m service` binds **127.0.0.1** by default (a local dev GPU: no token
+needed). Any other bind (`--host 0.0.0.0`, a LAN IP, the Docker image, Modal)
+**refuses to start without `GPU_TOKEN`**, because `/infer` takes raw,
+unblurred camera frames. On an isolated venue LAN only, `GPU_ALLOW_ANONYMOUS=1`
+overrides this and logs a loud warning on every start.
 
 Docker (NVIDIA Container Toolkit on the host):
 
@@ -42,14 +50,27 @@ The image bakes YOLO26-pose, YOLOE-26 and its vocabulary at **build** time
 so a container starts with no network at all (verified with `--network none`).
 Rebuild the image after editing `service/vocabulary.py`.
 
+The service runs as the unprivileged `gpu` user (uid 10001). The entrypoint
+starts as root only to `chown` the `/models` volume (volumes from older
+images were written by root), then drops privileges; `docker run --user ...`
+also works. The image binds `0.0.0.0`, so pass `-e GPU_TOKEN=...` (or
+`-e GPU_ALLOW_ANONYMOUS=1` on an isolated LAN) or it exits at start.
+
 Put TLS in front of it (the provider's HTTPS proxy, Caddy, or a tunnel) so the
-agent connects over `wss://`. Raw frames travel only over TLS (ADR 0007).
+agent connects over `wss://`. Raw frames travel only over TLS (ADR 0007). The
+agent enforces this: it accepts `ws://` only for loopback, private/link-local
+LAN addresses (RFC 1918, 169.254/16, fc00::/7, fe80::/10), `localhost` and
+`*.local` names, and otherwise ignores `--gpu-url` and runs on its local detector.
+
+Modal: the `team18-gpu` secret must carry `GPU_TOKEN` (see `modal_app.py`);
+without it the container refuses to start.
 
 ## Config (env)
 
 | Var | Default | Meaning |
 |---|---|---|
-| `GPU_TOKEN` | unset | If set, `/infer` requires `Authorization: Bearer <token>` (constant-time compare). A bad token is closed with 1008 before accept |
+| `GPU_TOKEN` | unset | `/infer` requires `Authorization: Bearer <token>` (constant-time compare). A bad token is closed with 1008 before accept. **Required** unless bound to loopback |
+| `GPU_ALLOW_ANONYMOUS` | unset | `1` lets a non-loopback bind run without `GPU_TOKEN` (isolated venue LAN only; logs a warning) |
 | `GPU_MODEL` | `yolo` | `yolo`, or `fake` (canned detections, no download) |
 | `GPU_POSE_MODEL` / `GPU_OBJECT_MODEL` | `yolo26s-pose.pt` / `yoloe-26s-seg.pt` | Weights, downloaded on first use. The object model is YOLOE-26: the shared vocabulary (`service/vocabulary.py`) is baked into `<stem>-vocab-<fingerprint>.pt` once (needs MobileCLIP, ~250 MB, kept on `/models`). An empty object model disables objects |
 | `GPU_OBJECT_CONF` | `0.25` | Object score floor (open-vocabulary scores run lower than pose) |

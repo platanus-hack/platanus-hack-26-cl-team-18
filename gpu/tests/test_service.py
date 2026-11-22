@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 from starlette.websockets import WebSocketDisconnect
 
-from service.app import create_app
+from service.app import AnonymousExposure, check_exposure, create_app
 from service.model import FakeModel, Inference, parse_objects, parse_persons
 from service.protocol import HEADER_PREFIX, MalformedFrame, pack_frame, unpack_frame
 
@@ -114,6 +114,53 @@ def test_no_token_configured_allows_anonymous() -> None:
     with client() as c, c.websocket_connect("/infer") as ws:
         ws.send_bytes(frame(1))
         assert "error" not in json.loads(ws.receive_text())
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1", "localhost", "::1", "[::1]", "127.0.0.2"])
+def test_loopback_bind_may_run_without_a_token(host: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GPU_ALLOW_ANONYMOUS", raising=False)
+    check_exposure(host, None)
+
+
+@pytest.mark.parametrize("host", ["0.0.0.0", "::", "192.168.1.50", "gpu-box", ""])
+def test_reachable_bind_without_a_token_fails_closed(
+    host: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("GPU_ALLOW_ANONYMOUS", raising=False)
+    with pytest.raises(AnonymousExposure, match="GPU_TOKEN"):
+        check_exposure(host, None)
+    check_exposure(host, "s3cret")  # a token makes it fine
+
+
+def test_anonymous_opt_out_is_explicit_and_loud(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setenv("GPU_ALLOW_ANONYMOUS", "true")  # only "1" opts out
+    with pytest.raises(AnonymousExposure):
+        check_exposure("0.0.0.0", None)
+    monkeypatch.setenv("GPU_ALLOW_ANONYMOUS", "1")
+    with caplog.at_level(logging.WARNING, logger="gpu.service"):
+        check_exposure("0.0.0.0", None)
+    assert "GPU_ALLOW_ANONYMOUS" in caplog.text
+
+
+def test_cli_refuses_to_start_on_all_interfaces_without_a_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from service import __main__ as cli
+
+    started: list[Any] = []
+    monkeypatch.delenv("GPU_TOKEN", raising=False)
+    monkeypatch.delenv("GPU_ALLOW_ANONYMOUS", raising=False)
+    monkeypatch.setattr(cli.uvicorn, "run", lambda *a, **k: started.append(k))
+    with pytest.raises(SystemExit) as exit_info:
+        cli.main(["--host", "0.0.0.0"])
+    assert exit_info.value.code == 2 and not started
+    cli.main([])  # loopback by default: a local dev GPU still starts
+    assert started[-1]["host"] == "127.0.0.1"
+    monkeypatch.setenv("GPU_TOKEN", "s3cret")
+    cli.main(["--host", "0.0.0.0"])
+    assert started[-1]["host"] == "0.0.0.0"
 
 
 # ------------------------------------------------------------------ malformed frames

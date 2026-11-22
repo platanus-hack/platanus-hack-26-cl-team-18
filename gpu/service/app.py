@@ -10,7 +10,9 @@ written to disk and no frame bytes, pixels or detections are logged.
 
 Config (env):
 
-    GPU_TOKEN            optional bearer token for /infer (constant-time compare)
+    GPU_TOKEN            bearer token for /infer (constant-time compare); required on a
+                         non-loopback bind (see `check_exposure`)
+    GPU_ALLOW_ANONYMOUS  "1" serves a non-loopback bind without a token (isolated LAN only)
     GPU_MODEL            "yolo" (default) or "fake"
     GPU_POSE_MODEL       default yolo26s-pose.pt
     GPU_OBJECT_MODEL     default yoloe-26s-seg.pt: YOLOE-26 + the shared vocabulary ("" disables objects)
@@ -26,6 +28,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 import io
+import ipaddress
 import json
 import logging
 import os
@@ -79,6 +82,43 @@ def decode_jpeg(jpeg: bytes, header: FrameHeader) -> np.ndarray:
     except (UnidentifiedImageError, OSError) as exc:
         raise MalformedFrame("JPEG can't be decoded", header.seq) from exc
     return np.ascontiguousarray(rgb[:, :, ::-1])
+
+
+class AnonymousExposure(RuntimeError):
+    """The service would accept raw frames from anyone who can reach it."""
+
+
+def _is_loopback(host: str) -> bool:
+    host = host.strip().strip("[]").lower()
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False  # "0.0.0.0", "::", a hostname or an interface name: reachable
+
+
+def check_exposure(host: str, token: str | None, *, allow_anonymous: bool | None = None) -> None:
+    """Fail closed: a non-loopback bind needs `GPU_TOKEN`, unless `GPU_ALLOW_ANONYMOUS=1`.
+
+    Loopback (local dev GPU, tests) stays open. The opt-out is for a trusted,
+    isolated venue LAN only and logs a loud warning.
+    """
+    if token or _is_loopback(host):
+        return
+    if allow_anonymous is None:
+        allow_anonymous = os.environ.get("GPU_ALLOW_ANONYMOUS", "").strip() == "1"
+    if allow_anonymous:
+        logger.warning(
+            "GPU_ALLOW_ANONYMOUS=1: /infer on %s accepts raw camera frames from ANY client "
+            "that can reach it, with no token. Only on an isolated venue LAN.",
+            host,
+        )
+        return
+    raise AnonymousExposure(
+        f"refusing to serve /infer on {host} without GPU_TOKEN: set GPU_TOKEN (and pass it "
+        "to the agent), bind --host 127.0.0.1, or set GPU_ALLOW_ANONYMOUS=1 on an isolated LAN"
+    )
 
 
 def _authorized(websocket: WebSocket, token: str | None) -> bool:

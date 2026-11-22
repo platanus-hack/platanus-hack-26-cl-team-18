@@ -54,12 +54,23 @@ ENV YOLO_AUTOINSTALL=false \
     GPU_OBJECT_MODEL=/models/yoloe-26s-seg.pt \
     GPU_DEVICE=0 \
     GPU_TENSORRT=0
+# The service runs as the unprivileged `gpu` user. /models (weights + the
+# TensorRT .engine export) and the Ultralytics settings dir are the only
+# runtime writes; everything else (/app, /opt/venv, /opt/weights) is read-only.
+RUN useradd --system --uid 10001 --user-group --create-home --home-dir /home/gpu gpu \
+    && mkdir -p /models \
+    && chown gpu:gpu /models
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod 0755 /usr/local/bin/docker-entrypoint.sh
 VOLUME ["/models"]
 EXPOSE 8080
 # Run from /models so anything Ultralytics writes (an .engine export) persists.
 WORKDIR /models
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/app \
+    YOLO_CONFIG_DIR=/home/gpu/.config/Ultralytics
 HEALTHCHECK --interval=10s --timeout=3s --start-period=120s CMD python -c "import urllib.request,sys; sys.exit(0 if b'\"ok\"' in urllib.request.urlopen('http://127.0.0.1:8080/health').read() else 1)"
-# Seed the /models volume with the baked weights without overwriting what it has
-# (a TensorRT .engine exported on an earlier start stays next to them).
-CMD ["sh", "-c", "cp --update=none /opt/weights/*.pt /models/ && exec python -m service --host 0.0.0.0 --port 8080"]
+# The entrypoint chowns /models (older volumes were written by root), drops to
+# `gpu`, and seeds the volume with the baked weights without overwriting it.
+# Binding 0.0.0.0 requires GPU_TOKEN (or GPU_ALLOW_ANONYMOUS=1 on an isolated LAN).
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["python", "-m", "service", "--host", "0.0.0.0", "--port", "8080"]

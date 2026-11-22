@@ -1,6 +1,6 @@
 """Deploy the GPU inference service on Modal (ADR 0007 candidate provider).
 
-    modal secret create team18-gpu GPU_TOKEN=$(openssl rand -hex 16)
+    modal secret create team18-gpu GPU_TOKEN=$(openssl rand -hex 16)   # required: no token, no start
     cd gpu && modal deploy modal_app.py
     uv run python -m scripts.bench.gpu --url wss://<workspace>--team18-gpu-serve.modal.run/infer
 
@@ -73,6 +73,8 @@ def serve():
         if not (Path("/models") / baked.name).exists():
             shutil.copy2(baked, "/models")
     os.chdir("/models")  # an exported .engine lands here; the volume keeps it
-    from service.app import create_app
+    from service.app import check_exposure, create_app
 
+    # A public *.modal.run URL: the `team18-gpu` secret must carry GPU_TOKEN.
+    check_exposure("0.0.0.0", os.environ.get("GPU_TOKEN") or None)
     return create_app()
