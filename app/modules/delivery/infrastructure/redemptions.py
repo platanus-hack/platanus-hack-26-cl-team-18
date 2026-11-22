@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from contextlib import closing
 from threading import Lock
+from typing import Any
 
 from psycopg2.extras import Json
 
+from app.modules.campaigns.domain.book import CampaignId
 from app.modules.common.infrastructure.postgres.write_behind import WriteBehindWriter
-from app.modules.delivery.domain.redemption import Redemption
+from app.modules.delivery.domain.redemption import Redemption, RedemptionId
 
 INSERT_REDEMPTION = """
 INSERT INTO redemption (
@@ -32,15 +36,41 @@ class InMemoryRedemptionLedger:
 
 
 class PostgresRedemptionLedger:
-    def __init__(self, writer: WriteBehindWriter) -> None:
+    def __init__(
+        self,
+        writer: WriteBehindWriter,
+        *,
+        connect: Callable[[], Any] | None = None,
+        organization_id: str | None = None,
+    ) -> None:
         self._writer = writer
         self._mirror = InMemoryRedemptionLedger()
+        self._connect = connect
+        if connect is not None:
+            with closing(connect()) as conn, conn, conn.cursor() as cur:
+                cur.execute(
+                    "SELECT r.redemption_id, r.code, r.auction_id, r.screen_id, r.campaign_ids, r.nonce_hash, r.redeemed_at "
+                    "FROM redemption r JOIN basket_offer o ON o.code = r.code "
+                    "WHERE o.organization_id IS NOT DISTINCT FROM %s ORDER BY r.redeemed_at DESC LIMIT 12000",
+                    (organization_id,),
+                )
+                for rid, code, auction, screen, campaigns, nonce, at in cur.fetchall():
+                    self._mirror.append(
+                        Redemption(
+                            redemption_id=RedemptionId.create(rid),
+                            code=code,
+                            auction_id=str(auction),
+                            screen_id=screen,
+                            campaign_ids=tuple(CampaignId.create(c) for c in campaigns),
+                            nonce_hash=nonce,
+                            redeemed_at=at,
+                        )
+                    )
 
     def redemptions(self) -> tuple[Redemption, ...]:
         return self._mirror.redemptions()
 
     def append(self, redemption: Redemption) -> None:
-        self._mirror.append(redemption)
         row = (
             str(redemption.redemption_id),
             redemption.code,
@@ -50,4 +80,9 @@ class PostgresRedemptionLedger:
             redemption.nonce_hash,
             redemption.redeemed_at,
         )
-        self._writer.submit(((INSERT_REDEMPTION, row),))
+        if self._connect is None:
+            self._writer.submit(((INSERT_REDEMPTION, row),))
+        else:
+            with closing(self._connect()) as conn, conn, conn.cursor() as cur:
+                cur.execute(INSERT_REDEMPTION, row)
+        self._mirror.append(redemption)

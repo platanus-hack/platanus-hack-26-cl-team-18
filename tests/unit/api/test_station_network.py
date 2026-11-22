@@ -2,9 +2,28 @@
 
 from __future__ import annotations
 
-from scripts.station import exit_hint, web_environment
+from scripts.station import exit_hint, public_origin, web_environment
 
 ORIGIN = "http://127.0.0.1:5188"
+
+
+def test_qr_origin_uses_the_lan_even_if_old_configuration_names_localhost() -> None:
+    assert public_origin(None, port=5188, lan_host="192.168.1.20") == "http://192.168.1.20:5188"
+    assert (
+        public_origin("http://localhost:5173", port=5188, lan_host="192.168.1.20")
+        == "http://192.168.1.20:5188"
+    )
+    assert (
+        public_origin("https://demo.example.org", port=5188, lan_host=None)
+        == "https://demo.example.org"
+    )
+
+
+def test_no_reachable_qr_origin_is_an_actionable_startup_error() -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="PUBLIC_BASE_URL"):
+        public_origin(None, port=5188, lan_host=None)
 
 
 def test_the_web_app_uses_its_own_origin_not_the_station_loopback() -> None:

@@ -1,9 +1,11 @@
 {
-  "git_sha": "6623899",
+  "calibration_note": "Recomputed from saved pre-change recordings with the same 5 Hz scorer. Legacy event-weighted recall/false flags 0.30/0.270588 are not directly comparable. Detection is unchanged; uncertainty protection has separate gates. See ADR 0009.",
+  "git_sha": "7827a23",
+  "measurement": "fixed-5hz-clip-time-v2",
   "metrics": {
-    "minor_false_flag_rate": 0.27058823529411763,
-    "minor_sample_recall": 0.3,
+    "minor_false_flag_rate": 0.23595505617977527,
+    "minor_sample_recall": 0.264,
     "minor_windows_unflagged": 3
   },
-  "updated_at": "2026-11-21T20:22:25+00:00"
+  "updated_at": "2026-11-22T03:08:33+00:00"
 }

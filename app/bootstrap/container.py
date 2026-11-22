@@ -38,6 +38,7 @@ from app.modules.creative.infrastructure.character_budget import FileCharacterBu
 from app.modules.creative.infrastructure.elevenlabs_tts import ElevenLabsVoiceSynthesizer
 from app.modules.creative.infrastructure.media_store import FileMediaStore
 from app.modules.delivery.application.ports.ledger import ChargeLedger
+from app.modules.delivery.application.ports.offers import OfferStore
 from app.modules.delivery.infrastructure.ledger import InMemoryChargeLedger, PostgresChargeLedger
 from app.realtime.freshness import FreshnessGate
 from app.realtime.hub import ConnectionHub, Sink
@@ -91,6 +92,7 @@ class Container:
     background: list[Callable[[], Awaitable[None]]] = field(default_factory=list)
     writer: WriteBehindWriter | None = None
     redemption_ledger: Any = None  # RedemptionLedger; in memory unless DATABASE_URL is set
+    offer_store: OfferStore | None = None
     # CampaignRegistry: stable campaign ids, budgets and live bids (Postgres when set).
     campaign_registry: Any = None
     # Where budgets and bids live this run: "memory", "postgres", or "memory_fallback"
@@ -135,7 +137,18 @@ def build_container(
     build_recognition_vlm(container)
     build_copywriter(container, copywriter)
     build_audience_ai(container, tagger=audience_tagger, topics=topic_extractor)
-    build_records(container)
+    import psycopg2
+
+    try:
+        build_records(container)
+    except (psycopg2.OperationalError, psycopg2.InterfaceError) as exc:
+        # A direct backend boot can keep a house ad available through an outage;
+        # the station launcher separately refuses to start a volatile presentation.
+        logger.warning("Durable records unavailable at boot (%s)", type(exc).__name__)
+        container.offer_store = None
+        container.redemption_ledger = None
+        container.campaign_registry = None
+        container.campaign_store = "memory_fallback"
     register_contexts(container)
     return container
 
@@ -246,6 +259,11 @@ def build_records(container: Container) -> None:
         transient=lambda exc: isinstance(exc, psycopg2.OperationalError | psycopg2.InterfaceError),
     )
     container.writer = writer
+
+    async def close_writer() -> None:
+        writer.close()
+
+    container.closers.append(close_writer)
     container.auction_log = PostgresAuctionLog(writer, mirror=InMemoryAuctionLog())
     # Postgres is the record here; the in-memory mirror only serves this process's reads.
     container.ledger = PostgresChargeLedger(
@@ -253,7 +271,11 @@ def build_records(container: Container) -> None:
     )
     from app.modules.delivery.infrastructure.redemptions import PostgresRedemptionLedger
 
-    container.redemption_ledger = PostgresRedemptionLedger(writer)
+    connect = lambda: psycopg2.connect(dsn, connect_timeout=5)
+    from app.modules.delivery.infrastructure.offers import PostgresOfferStore
+
+    container.offer_store = PostgresOfferStore(connect)
+    container.redemption_ledger = PostgresRedemptionLedger(writer, connect=connect)
     from app.modules.campaigns.infrastructure.registry import PostgresCampaignRegistry
     from app.modules.common.application.id_generator import IdGenerator
 
@@ -264,11 +286,6 @@ def build_records(container: Container) -> None:
         clock=container.clock,
     )
     container.campaign_store = "postgres"
-
-    async def close_writer() -> None:
-        writer.close()
-
-    container.closers.append(close_writer)
 
 
 def build_voiceovers(container: Container, synthesizer: VoiceSynthesizer | None = None) -> None:

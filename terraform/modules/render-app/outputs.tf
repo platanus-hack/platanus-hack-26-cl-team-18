@@ -9,13 +9,13 @@ output "service_url" {
 }
 
 output "postgres_id" {
-  description = "Render id of the Postgres instance (dpg-...)."
-  value       = render_postgres.db.id
+  description = "Render id of the Postgres instance (dpg-...), or null without a database."
+  value       = var.create_database ? render_postgres.db[0].id : null
 }
 
 output "database_url_external" {
-  description = "External connection string, for psql/migrations from a laptop. Sensitive."
-  value       = render_postgres.db.connection_info.external_connection_string
+  description = "External connection string, for psql/migrations from a laptop (null without a database). Sensitive."
+  value       = var.create_database ? render_postgres.db[0].connection_info.external_connection_string : null
   sensitive   = true
 }
 

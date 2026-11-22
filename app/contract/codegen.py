@@ -164,7 +164,7 @@ def _object(name: str, node: Mapping[str, Any]) -> str:
 
 def _definition(name: str, node: Mapping[str, Any]) -> str:
     doc = node.get("description")
-    comment = "".join(f"// {line}\n" for line in doc.splitlines()) if doc else ""
+    comment = "".join(f"// {line}".rstrip() + "\n" for line in doc.splitlines()) if doc else ""
     expr = _expr(node) if "enum" in node else _object(name, node)
     return (
         f"{comment}export const {name}Schema = {expr};\n"

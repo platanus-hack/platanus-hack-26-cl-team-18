@@ -236,7 +236,9 @@ def run_scenario(scenario: Scenario, *, swap_holds: bool | None = None) -> RunRe
                         )
                     )
                     continue
-                decision = _decision(scenario.name, index, step.scene.minor, session, seen)
+                decision = _decision(
+                    scenario.name, index, step.scene.minor or step.scene.uncertain, session, seen
+                )
                 record.decisions.append(decision)
                 record.checks.extend(_check(scenario.name, index, step.expect, decision))
         finally:
@@ -362,7 +364,9 @@ def run_soak(scenes: Sequence[Scene], *, steps: int, seed: int) -> RunRecord:
                         f"step {index}: swap promised, no creative ({current.name})"
                     )
                 record.decisions.append(
-                    _decision(record.source, index, current.minor, session, seen)
+                    _decision(
+                        record.source, index, current.minor or current.uncertain, session, seen
+                    )
                 )
         finally:
             session.close()
@@ -411,7 +415,13 @@ def replay_recording(path: Path, *, speed: float = 1.0) -> RunRecord:
                 if seen.auction is None and seen.creative is None:
                     continue
                 record.decisions.append(
-                    _decision(record.source, index, snapshot.minor_likely.value, session, seen)
+                    _decision(
+                        record.source,
+                        index,
+                        snapshot.minor_likely.value or snapshot.minor_likely.uncertain,
+                        session,
+                        seen,
+                    )
                 )
                 if session.last_moment is not None:
                     record.moments[index] = session.last_moment

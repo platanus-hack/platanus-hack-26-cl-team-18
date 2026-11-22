@@ -28,7 +28,6 @@ from app.contract.messages import (
     AudienceSnapshot,
     AudienceUtterance,
     BookLine,
-    ChargeLine,
     ConsoleBook,
     ConsoleDegradation,
     ConsoleLatency,
@@ -45,7 +44,6 @@ from app.contract.messages import (
     DevPlayer,
     DevSpeech,
     DistanceBand,
-    FilteredAttention,
     LatencyTrace,
     MinorLikely,
     MoneyDTO,
@@ -152,10 +150,14 @@ from app.modules.delivery.application.billing import (
     Receipt,
 )
 from app.modules.delivery.application.ports.ledger import ChargeLedger
+from app.modules.delivery.application.ports.offers import OfferStore
+from app.modules.delivery.application.ports.receipts import ReceiptHistory
+from app.modules.delivery.application.receipts import receipt_message as present_receipt
 from app.modules.delivery.application.redemptions import RedemptionDesk, RedemptionLedger
 from app.modules.delivery.domain.charge import BilledSlot
 from app.modules.delivery.domain.redemption import (
     BasketOffer as RedeemableOffer,
+    Redemption,
 )
 from app.modules.delivery.infrastructure.ledger import InMemoryChargeLedger
 from app.modules.delivery.infrastructure.qr import qr_data_url
@@ -241,6 +243,8 @@ def seed_market(
     redemption_ledger: RedemptionLedger | None = None,
     registry: CampaignRegistry | None = None,
     catalog: demo_catalog.Catalog = demo_catalog.FICTIONAL,
+    offer_store: OfferStore | None = None,
+    restored_redemptions: Sequence[Redemption] = (),
 ) -> LiveMarket:
     # The ADverse mark on the house ad. The fictional brands have fixed
     # mock marks included with their kits.
@@ -341,7 +345,12 @@ def seed_market(
         stock=StockBoard(),
         auctions=auction_log or InMemoryAuctionLog(),
         delivery=DeliveryDesk(ledger=ledger or InMemoryChargeLedger(), ids=ids, budgets=book),
-        redemptions=RedemptionDesk(ids=ids, ledger=redemption_ledger or InMemoryRedemptionLedger()),
+        redemptions=RedemptionDesk(
+            ids=ids,
+            ledger=redemption_ledger or InMemoryRedemptionLedger(),
+            offer_store=offer_store,
+            restored_redemptions=restored_redemptions,
+        ),
         lock=RLock(),
         campaign_media={
             key: media
@@ -382,6 +391,7 @@ def register_demo(
     public_base_url: str = "http://localhost:5173",
     media_dir: Path | None = None,
     dev_keyframe_preview: bool = False,
+    receipt_history: ReceiptHistory | None = None,
 ) -> DemoControls:
     screen_id = ScreenId.create(ids.new_uuid7())
     market = market or seed_market(
@@ -731,6 +741,35 @@ def register_demo(
             party_now = (
                 addressed_party(looking_samples, now=measured_at.value) if snapshot.looking else 0
             )
+            moment = AudienceMomentSnapshot.create(
+                screen_id=screen_id,
+                moment_id=MomentId.create(ids.new_uuid7()),
+                measured_at=measured_at,
+                received_at=UtcTimestamp.create(received.received_at),
+                moment_changed_at=UtcTimestamp.create(max(clock.now_utc(), received.received_at)),
+                people=snapshot.people,
+                looking=snapshot.looking,
+                segments=segments,
+                minor_likely=minor_likely,
+                held_products=held,
+            )
+            if (
+                snapshot.looking >= group_default.min_looking
+                and segments
+                and not any(segment.segment_id == coffee for segment in segments)
+            ):
+                # Use the real eligibility/reserve/stock/budget rules. A known but
+                # unbiddable prop must not suppress a watching group's safe default.
+                try:
+                    has_bid = InProcessBundleEngine().decide(opportunity_for(moment)).filled
+                except Exception:
+                    # The desk owns engine-failure/safety behavior; a fallback probe
+                    # must never prevent it from taking an unsafe creative down.
+                    has_bid = True
+                segments = group_default.apply(
+                    segments=segments, looking=snapshot.looking, has_eligible_bid=has_bid
+                )
+                moment = replace(moment, segments=segments)
             if current_moment is not None and (
                 snapshot.people,
                 snapshot.looking,
@@ -749,18 +788,6 @@ def register_demo(
                 if not reconsider:
                     latest_observed_at = observed_at
                 return
-            moment = AudienceMomentSnapshot.create(
-                screen_id=screen_id,
-                moment_id=MomentId.create(ids.new_uuid7()),
-                measured_at=measured_at,
-                received_at=UtcTimestamp.create(received.received_at),
-                moment_changed_at=UtcTimestamp.create(max(clock.now_utc(), received.received_at)),
-                people=snapshot.people,
-                looking=snapshot.looking,
-                segments=segments,
-                minor_likely=minor_likely,
-                held_products=held,
-            )
             if not reconsider:
                 latest_observed_at = observed_at
             handled_moment, handled_party = current_moment, briefed_party
@@ -798,6 +825,40 @@ def register_demo(
             ),
         )
 
+    def opportunity_for(
+        moment: AudienceMomentSnapshot,
+        out_of_budget: frozenset[CampaignId] = frozenset(),
+    ) -> AdOpportunity:
+        """One eligibility input for both group fallback and the actual clearing."""
+        bidders = book.snapshot(excluding_hold=current_creative.creative_id)
+        if out_of_budget:
+            bidders = tuple(
+                replace(b, budget_remaining=Money.zero(currency="CLP"))
+                if b.campaign_id in out_of_budget
+                else b
+                for b in bidders
+            )
+        daypart = daypart_for_hour(moment.measured_at.value.astimezone(VENUE_TZ).hour)
+        return AdOpportunity(
+            moment=moment,
+            bidders=bidders,
+            layouts=layouts,
+            reserve=reserve,
+            category_multipliers=tuple(
+                CategoryMultiplier(category=category, multiplier=multiplier)
+                for category, multiplier in market.catalog.boosts_for(daypart.value)
+            ),
+            approved_baskets=offer_book.pairings(),
+            out_of_stock=stock.out_of_stock(wire_screen_id),
+            max_play_seconds=Decimal(MAX_PLAY_SECONDS),
+            affinity=affinity,
+            held_products=tuple(
+                BidHeldProduct(brand_id=brand_by_slug[p.brand_ref], confidence=p.confidence)
+                for p in moment.held_products
+                if p.brand_ref is not None and p.brand_ref in brand_by_slug
+            ),
+        )
+
     def run_auction(
         snapshot: AudienceSnapshot,
         moment: AudienceMomentSnapshot,
@@ -829,43 +890,8 @@ def register_demo(
                 )
             )
 
-        # The on-air play's own hold doesn't count against a re-auction it is part of.
-        bidders = book.snapshot(excluding_hold=current_creative.creative_id)
-        if out_of_budget:
-            bidders = tuple(
-                replace(b, budget_remaining=Money.zero(currency="CLP"))
-                if b.campaign_id in out_of_budget
-                else b
-                for b in bidders
-            )
-        # Context-aware bids: the catalog's daypart table, at the venue's local hour
-        # (empty for the pinned fictional catalog, so its auctions are unchanged).
-        daypart = daypart_for_hour(moment.measured_at.value.astimezone(VENUE_TZ).hour)
-        boosts = tuple(
-            CategoryMultiplier(category=category, multiplier=multiplier)
-            for category, multiplier in market.catalog.boosts_for(daypart.value)
-        )
         outcome = desk.run(
-            AdOpportunity(
-                moment=moment,
-                bidders=bidders,
-                layouts=layouts,
-                reserve=reserve,
-                category_multipliers=boosts,
-                approved_baskets=offer_book.pairings(),
-                out_of_stock=stock.out_of_stock(wire_screen_id),
-                max_play_seconds=Decimal(MAX_PLAY_SECONDS),
-                affinity=affinity,
-                # Complete the basket (ADR 0008 D2): a held brand boosts its partners.
-                held_products=tuple(
-                    BidHeldProduct(
-                        brand_id=brand_by_slug[product.brand_ref],
-                        confidence=product.confidence,
-                    )
-                    for product in moment.held_products
-                    if product.brand_ref is not None and product.brand_ref in brand_by_slug
-                ),
-            ),
+            opportunity_for(moment, out_of_budget),
             trigger,
             now=clock.now_utc(),
             needs_creative_refresh=needs_creative_refresh,
@@ -1624,35 +1650,7 @@ def register_demo(
             reauction(Trigger.BUDGET_CHANGED, out_of_budget=short)
 
     def receipt_message(receipt: Receipt) -> ConsoleReceipt:
-        return ConsoleReceipt(
-            screen_id=receipt.play.screen_id,
-            creative_id=receipt.play.creative_id,
-            auction_id=receipt.play.auction_id,
-            people=receipt.play.people,
-            looking=receipt.play.looking,
-            played_s=format(receipt.played_s, "f"),
-            attention_seconds=format(receipt.attention.attention_seconds, "f"),
-            charges=[
-                ChargeLine(
-                    campaign_id=str(charge.campaign_id),
-                    brand_name=kits_by_id[charge.brand_id].name,
-                    attention_seconds=format(charge.attention_seconds, "f"),
-                    price_per_as=MoneyDTO(
-                        amount=format(charge.price_per_as.amount.normalize(), "f"),
-                        currency=str(charge.price_per_as.currency),
-                    ),
-                    amount=_money(charge.amount),
-                    reason=charge.reason.value,  # type: ignore[arg-type]
-                )
-                for charge in receipt.charges
-            ],
-            total=_money(receipt.total),
-            filtered=[
-                FilteredAttention(reason=reason.value, seconds=format(seconds, "f"))
-                for reason, seconds in receipt.attention.invalid_seconds.items()
-                if seconds > 0
-            ],
-        )
+        return present_receipt(receipt, {brand: kit.name for brand, kit in kits_by_id.items()})
 
     # ------------------------------------------------------------ speech (opt-in screens)
 
@@ -1937,6 +1935,11 @@ def register_demo(
 
     def console_connected(sink: Sink) -> None:
         with lock:
+            if (
+                receipt_history is not None
+                and (receipt := receipt_history.latest(wire_screen_id)) is not None
+            ):
+                hub.broadcast_console_threadsafe(receipt, sink=sink)
             # The latest decision first (consumers read it in order), then the book.
             if latest_console:
                 hub.broadcast_console_threadsafe(*latest_console, book_view(), sink=sink)

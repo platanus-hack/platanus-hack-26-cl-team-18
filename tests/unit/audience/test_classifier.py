@@ -108,6 +108,18 @@ def test_sound_and_vision_compound_and_unknown_labels_are_dropped() -> None:
     assert [(s.segment_id, s.sources) for s in result.segments] == [(MUSIC, {SegmentSource.SOUND})]
 
 
+def test_uncertain_camera_safety_only_blocks_and_never_changes_target_segments() -> None:
+    c, _, _ = classifier()
+    clear = snapshot(objects=[("cup", 1.0)])
+    uncertain = clear.model_copy(
+        update={"minor_likely": MinorLikely(value=False, confidence=0, uncertain=True)}
+    )
+    original = c.classify(clear, at=T0)
+    result = c.classify(uncertain, at=T0)
+    assert result.minor_likely
+    assert result.segments == original.segments
+
+
 def test_weak_cues_still_reach_the_auction_which_prices_them() -> None:
     c, _, _ = classifier()
     (weak,) = c.classify(snapshot(objects=[("dog", 0.05)]), at=T0).segments

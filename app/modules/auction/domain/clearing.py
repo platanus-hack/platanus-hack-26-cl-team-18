@@ -209,10 +209,20 @@ def _eligible(
         if reason is ExclusionReason.INVALID_BID:
             exclusions.append(Exclusion(campaign_id=bidder.campaign_id, reason=reason))
             continue
+        try:
+            display_value = MoneyRate.create(currency=currency, amount=valuation.value)
+        except ValueError:
+            if reason is None:
+                raise
+            # A physically impossible count can produce a value outside Money's
+            # storage range. Already-ineligible bids still get their true reason;
+            # they must not prevent a no-fill or the next normal snapshot.
+            exclusions.append(Exclusion(campaign_id=bidder.campaign_id, reason=reason))
+            continue
         bids.append(
             BidValue(
                 campaign_id=bidder.campaign_id,
-                value_per_s=MoneyRate.create(currency=currency, amount=valuation.value),
+                value_per_s=display_value,
                 matches=valuation.matches,
             )
         )

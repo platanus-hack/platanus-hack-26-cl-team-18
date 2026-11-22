@@ -77,7 +77,9 @@ def decisions_from_recording(path: Path) -> tuple[list[Decision], float]:
             if message.trace.ready_at is not None:
                 auction_by_creative_trace[message.trace.ready_at.isoformat()] = message
         elif isinstance(message, ConsoleMoment):
-            minor_by_moment[message.moment_id] = message.minor_likely.value
+            minor_by_moment[message.moment_id] = (
+                message.minor_likely.value or message.minor_likely.uncertain
+            )
     decisions = []
     for index, creative in enumerate(creatives):
         auction = auctions.get(creative.auction_id or "")

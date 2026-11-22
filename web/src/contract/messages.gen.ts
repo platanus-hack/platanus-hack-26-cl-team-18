@@ -95,7 +95,7 @@ export const AgentRoleSchema = z.enum(["vision", "speech"]);
 export type AgentRole = z.infer<typeof AgentRoleSchema>;
 
 // First frame on every agent connection: the screen and sensor it serves.
-// 
+//
 // The backend answers with that screen's `live.status` and pushes every change,
 // so an agent that reconnects learns the current switch position at once.
 export const AgentHelloSchema = z.strictObject({
@@ -117,7 +117,7 @@ export const RedactionBoxSchema = z.strictObject({
 export type RedactionBox = z.infer<typeof RedactionBoxSchema>;
 
 // Header for a redacted JPEG; the bytes follow as the next binary WS frame.
-// 
+//
 // A scene keyframe (no `session_id`) is `redaction="allowlist"` (docs/privacy.md
 // G1): black everywhere except the `kept` regions (detected people and objects),
 // with every `heads` region black too. The backend checks the pixels against
@@ -497,7 +497,7 @@ export const ConsoleMomentSchema = z.strictObject({
 export type ConsoleMoment = z.infer<typeof ConsoleMomentSchema>;
 
 // The creative waiting out the on-air one's minimum time (a held swap): a preview.
-// 
+//
 // Station consoles only (?live=1). The preview has no QR, code or voice yet; those
 // are made when it airs. `auction_id` None = the house ad is next.
 export const ConsoleNextSchema = z.strictObject({
@@ -810,7 +810,7 @@ export const ErrorMessageSchema = z.strictObject({
 export type ErrorMessage = z.infer<typeof ErrorMessageSchema>;
 
 // The console's "En vivo" switch (HTTP POST /api/live).
-// 
+//
 // Absolute values, so a retry is harmless and the last click wins. A field left
 // `None` keeps its value: the master `live` and the `mic` sub-switch are
 // independent axes.
@@ -824,7 +824,7 @@ export const LiveSetSchema = z.strictObject({
 export type LiveSet = z.infer<typeof LiveSetSchema>;
 
 // Where a screen's live switch stands, pushed to the console, player and agents.
-// 
+//
 // `sensing`, `listening` and `ai_generation` are derived, never set directly:
 // sensing = live; listening = live and mic and speech_opt_in (ADR 0005);
 // ai_generation = live (warm AI copy, voice-overs, VLM tags and speech topics).
@@ -958,7 +958,7 @@ export const RecognitionSnapshotSchema = z.strictObject({
 export type RecognitionSnapshot = z.infer<typeof RecognitionSnapshotSchema>;
 
 // Who is watching now (aggregate only): the player advances dwell stages on it.
-// 
+//
 // `dwell_s` is the longest current look among looking viewers; 0 when nobody looks,
 // so the player holds its stage instead of advancing on a timer (architecture §6.1).
 export const ScreenAttentionSchema = z.strictObject({

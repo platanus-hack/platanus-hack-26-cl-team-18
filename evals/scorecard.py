@@ -140,6 +140,20 @@ SPECS: dict[str, Spec] = {
         "ratchet", "lower", label="Minors: child windows never flagged"
     ),
     "minor_windows_labelled": Spec("info", label="Minors: child windows labelled"),
+    "minor_sample_protection": Spec(
+        "gate", "higher", 1, label="Minors: child samples protected (detected or uncertain)"
+    ),
+    "minor_windows_unprotected": Spec(
+        "gate", "lower", 0, label="Minors: windows with an unprotected sample"
+    ),
+    "minor_recordings_missing": Spec("gate", "lower", 0, label="Minors: missing recordings"),
+    "minor_samples_missing": Spec("gate", "lower", 0, label="Minors: stale or missing samples"),
+    "minor_windows_without_samples": Spec(
+        "gate", "lower", 0, label="Minors: empty labelled windows"
+    ),
+    "minor_uncertain_adult_share": Spec(
+        "info", label="Minors: adults conservatively blocked as uncertain"
+    ),
     "minor_false_flag_rate": Spec(
         "ratchet", "lower", tolerance=0.01, label="Minors: adult snapshots flagged"
     ),

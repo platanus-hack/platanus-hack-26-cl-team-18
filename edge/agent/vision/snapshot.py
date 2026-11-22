@@ -55,7 +55,7 @@ class SnapshotConfig:
     heartbeat: timedelta = timedelta(seconds=1)
 
 
-type FactsKey = tuple[int, int, frozenset[str], frozenset[str], bool, frozenset[str]]
+type FactsKey = tuple[int, int, frozenset[str], frozenset[str], tuple[bool, bool], frozenset[str]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,7 +75,7 @@ class Facts:
             self.looking,
             frozenset(label for label, _ in self.objects),
             frozenset(h.brand_id for h in self.held),
-            self.minor.value,
+            (self.minor.value, self.minor.uncertain),
             frozenset(s.label for s in self.sound),
         )
 
@@ -228,13 +228,15 @@ class SnapshotBuilder:
             # Only the moment's boolean and confidence leave the device (invariant 2:
             # it can only block age-restricted ads). The warm VLM path supplements it.
             minor_likely=MinorLikely(
-                value=published.minor.value, confidence=published.minor.confidence
+                value=published.minor.value,
+                confidence=published.minor.confidence,
+                uncertain=published.minor.uncertain,
             ),
         )
         self._seq += 1
         self._last_sent_at = measured_at
         self._last_sent_key = published.key
-        self._last_sent_minor = published.minor.value
+        self._last_sent_minor = published.minor.blocks_restricted
         return snapshot
 
     def _observe(self, facts: Facts, now: datetime, origin: datetime) -> None:
@@ -249,7 +251,9 @@ class SnapshotBuilder:
         # A confirmed safety vote only restricts ads: never add another 500 ms.
         # Clearing still goes through the full debounce, even during crowd voting.
         if self._published is not None:
-            if facts.minor.value and not self._published.minor.value:
+            if (facts.minor.value and not self._published.minor.value) or (
+                facts.minor.blocks_restricted and not self._published.minor.blocks_restricted
+            ):
                 self._publish(replace(self._published, minor=facts.minor), now)
             if facts.people == self._published.people and facts.looking != self._published.looking:
                 self._publish(replace(self._published, looking=facts.looking), now)
@@ -257,7 +261,9 @@ class SnapshotBuilder:
         if self._published is None:
             self._publish(facts, now)
             return
-        if facts.minor.value and not self._published.minor.value:
+        if (facts.minor.value and not self._published.minor.value) or (
+            facts.minor.blocks_restricted and not self._published.minor.blocks_restricted
+        ):
             # MinorVote already confirmed the block. Keep the rest of the scene
             # stable and discard the pre-block crowd votes.
             self._recent.clear()
@@ -273,16 +279,17 @@ class SnapshotBuilder:
         if now - self._published_at >= self._config.max_stale:
             # Re-check every max_stale: publish the vote if it disagrees, else confirm.
             vote = self._vote()
-            if self._published.minor.value:
+            if self._published.minor.blocks_restricted:
                 # A crowd vote can settle counts, but only the stable candidate
                 # branch above can clear an active safety block.
                 vote = replace(
-                    vote, minor=facts.minor if facts.minor.value else self._published.minor
+                    vote,
+                    minor=facts.minor if facts.minor.blocks_restricted else self._published.minor,
                 )
             if vote.key != self._published.key:
                 # A crowd vote must not clear the safety block before a stable
                 # negative candidate has passed the ordinary debounce.
-                if self._published.minor.value:
+                if self._published.minor.blocks_restricted:
                     vote = replace(vote, minor=self._published.minor)
                 self._publish(vote, now)
             else:

@@ -29,6 +29,7 @@ class Scene:
     objects: tuple[DetectedObject, ...] = ()
     sound: dict[str, float] = field(default_factory=dict)
     minor: bool = False
+    uncertain: bool = False
 
     def snapshot(self, *, screen_id: str, seq: int, measured_at: datetime) -> AudienceSnapshot:
         return AudienceSnapshot(
@@ -39,7 +40,7 @@ class Scene:
             looking=self.looking,
             objects=list(self.objects),
             sound_scene=[SoundScene(label=k, score=v) for k, v in sorted(self.sound.items())],
-            minor_likely=MinorLikely(value=self.minor, confidence=1),
+            minor_likely=MinorLikely(value=self.minor, confidence=1, uncertain=self.uncertain),
         )
 
 
@@ -152,6 +153,7 @@ def _scene(name: str, body: dict[str, Any]) -> Scene:
         objects=tuple(DetectedObject.model_validate(obj) for obj in objects),
         sound={str(k): float(v) for k, v in body.get("sound", {}).items()},
         minor=bool(body.get("minor", False)),
+        uncertain=bool(body.get("uncertain", False)),
     )
 
 

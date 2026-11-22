@@ -28,7 +28,8 @@ module "app" {
   env_vars           = var.env_vars
   secret_names       = var.secret_names
 
-  db_plan = var.db_plan
+  create_database = var.create_database
+  db_plan         = var.db_plan
 }
 
 # Player (/screen) and console (/console): the Vite build in web/, pointed at
@@ -59,6 +60,8 @@ resource "render_env_group" "web_origin" {
 
   env_vars = {
     CORS_ORIGINS = { value = jsonencode(concat([module.web.url], var.extra_cors_origins)) }
+    # The QR's /r/<code> redemption link opens on the deployed player origin.
+    PUBLIC_BASE_URL = { value = module.web.url }
   }
 }
 

@@ -59,6 +59,8 @@ IO_COLLABORATOR_SUFFIXES = (
 # Tables whose rows are history: corrections happen by appending a reversal,
 # never by deleting the original row.
 APPEND_ONLY_TABLES = {
+    "playback_receipt",
+    "basket_offer",
     "outbox_event",
     "auction",
     "charge",
@@ -72,6 +74,8 @@ APPEND_ONLY_TABLES = {
 # on the statement or in the lines just above it. Tables with a real lifecycle
 # (`campaign`, `screen`, `outbox_event`, ...) are deliberately absent.
 IMMUTABLE_ROW_TABLES: set[str] = {
+    "playback_receipt",
+    "basket_offer",
     "auction",
     "charge",
     "redemption",

@@ -2,7 +2,27 @@
 
 from pathlib import Path
 
-from scripts.build_bundle_loops import compose_command
+from scripts.build_bundle_loops import compose_command, source_for
+
+from app.modules.creative.application.campaigns import CampaignMedia
+
+
+def test_a_category_without_footage_uses_its_approved_photo(tmp_path) -> None:
+    from scripts.build_bundle_loops import ASSETS
+
+    media = {
+        "category:ice_cream": CampaignMedia(
+            photo_url="/campaign-assets/photos/cl-helado-playa.webp"
+        )
+    }
+    assert source_for("savory", "ice_cream", media) == ASSETS / "photos/cl-helado-playa.webp"
+
+
+def test_photo_loops_have_motion_and_no_logos_or_text() -> None:
+    cmd = compose_command("ffmpeg", [(Path("cl-nectar.webp"), "#ffffff")], Path("out.mp4"))
+    graph = cmd[cmd.index("-filter_complex") + 1]
+    assert "zoompan" in graph and "sin(" in graph
+    assert "-loop" in cmd and "drawtext" not in graph
 
 
 def test_a_bundle_is_one_graded_pane_per_member_and_plays_in_chromium() -> None:

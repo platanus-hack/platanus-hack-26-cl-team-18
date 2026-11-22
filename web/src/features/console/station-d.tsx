@@ -833,26 +833,31 @@ export function TagsPanel({ view }: { view: ScreenView }) {
                     </div>
                 ))
             )}
-            {moment && (moment.held_products.length > 0 || moment.minor_likely.value) && (
-                <div className="flex flex-wrap gap-2 border-t border-border-subtle pt-3 text-metadata">
-                    {moment.held_products.map((product) => (
-                        <span
-                            key={`${product.brand_ref ?? ""}:${product.category}`}
-                            className="rounded-full border border-(--palette-ambar) px-2.5 py-0.5 text-warning"
-                        >
-                            En mano:{" "}
-                            {(product.brand_ref && DEMO_BRANDS[product.brand_ref]) ??
-                                product.brand_ref ??
-                                product.category}
-                        </span>
-                    ))}
-                    {moment.minor_likely.value && (
-                        <span className="rounded-full border border-border-strong px-2.5 py-0.5">
-                            Posible menor: categorías restringidas bloqueadas
-                        </span>
-                    )}
-                </div>
-            )}
+            {moment &&
+                (moment.held_products.length > 0 ||
+                    moment.minor_likely.value ||
+                    moment.minor_likely.uncertain) && (
+                    <div className="flex flex-wrap gap-2 border-t border-border-subtle pt-3 text-metadata">
+                        {moment.held_products.map((product) => (
+                            <span
+                                key={`${product.brand_ref ?? ""}:${product.category}`}
+                                className="rounded-full border border-(--palette-ambar) px-2.5 py-0.5 text-warning"
+                            >
+                                En mano:{" "}
+                                {(product.brand_ref && DEMO_BRANDS[product.brand_ref]) ??
+                                    product.brand_ref ??
+                                    product.category}
+                            </span>
+                        ))}
+                        {(moment.minor_likely.value || moment.minor_likely.uncertain) && (
+                            <span className="rounded-full border border-border-strong px-2.5 py-0.5">
+                                {moment.minor_likely.uncertain
+                                    ? "Seguridad por confirmar: categorías restringidas bloqueadas"
+                                    : "Posible menor: categorías restringidas bloqueadas"}
+                            </span>
+                        )}
+                    </div>
+                )}
         </Card>
     );
 }

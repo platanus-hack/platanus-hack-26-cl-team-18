@@ -37,6 +37,30 @@ run "database_url_comes_from_the_managed_postgres" {
   }
 }
 
+run "without_a_database_the_service_runs_in_memory" {
+  command = plan
+
+  variables {
+    create_database = false
+    service_plan    = "free"
+  }
+
+  assert {
+    condition     = length(render_postgres.db) == 0
+    error_message = "create_database = false must not create Postgres."
+  }
+
+  assert {
+    condition     = !contains(keys(render_web_service.app.env_vars), "DATABASE_URL")
+    error_message = "No DATABASE_URL without a database (the backend falls back to memory)."
+  }
+
+  assert {
+    condition     = render_web_service.app.pre_deploy_command == null
+    error_message = "No migration pre-deploy step without a database."
+  }
+}
+
 run "secret_names_get_placeholder_values_only" {
   command = plan
 

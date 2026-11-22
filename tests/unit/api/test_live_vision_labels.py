@@ -46,11 +46,10 @@ def _agent_snapshot(seq: int, at: datetime, labels: dict[str, float]) -> Audienc
     ("labels", "expected"),
     [
         ({"cup": 0.81}, {"Café Patio"}),
-        # A held prop boosts its basket partners, it never sells itself
-        # (docs/demo.md beat 3, ADR 0008 D2): alone, the house ad keeps playing.
-        ({"product:cafe-patio": 1.0}, set()),
+        # With no product-interest cue, the watching group keeps its coffee default.
+        ({"product:cafe-patio": 1.0}, {"Café Patio", "Miga"}),
         ({"bottle": 0.7, "cup": 0.8}, {"Voltio", "Café Patio"}),
-        ({"laptop": 0.9}, set()),  # not an interest the seed sells: house ad
+        ({"laptop": 0.9}, {"Café Patio"}),  # no laptop bids: safe group default
     ],
 )
 def test_live_agent_labels_reach_a_paid_creative(
@@ -68,7 +67,5 @@ def test_live_agent_labels_reach_a_paid_creative(
         assert paid_brands(CreativeReady.model_validate(player.receive_json())) == ()
         now = clock.advance(timedelta(milliseconds=100))
         agent.send_text(_agent_snapshot(1, now, labels).model_dump_json())
-        if not expected:
-            return  # no paid change; the house ad keeps playing
         creative = CreativeReady.model_validate(player.receive_json())
         assert set(paid_brands(creative)) == expected

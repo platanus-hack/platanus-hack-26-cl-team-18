@@ -29,6 +29,34 @@ from app.config.settings import AppSettings
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def lan_address() -> str | None:
+    """Ask the routing table which local address reaches the venue network (no packet sent)."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+            probe.connect(("192.0.2.1", 80))
+            host = str(probe.getsockname()[0])
+        return host if not ip_address(host).is_loopback else None
+    except OSError:
+        return None
+
+
+def public_origin(configured: str | None, *, port: int, lan_host: str | None) -> str:
+    """Never print a QR that sends a phone to itself; retain an explicit tunnel origin."""
+    if configured:
+        host = urlsplit(configured).hostname or ""
+        try:
+            local = ip_address(host).is_loopback or ip_address(host).is_unspecified
+        except ValueError:
+            local = host == "localhost" or host.endswith(".localhost")
+        if not local:
+            return configured.rstrip("/")
+    if lan_host:
+        return f"http://{lan_host}:{port}"
+    raise ValueError(
+        "No phone-reachable address: connect to the venue LAN or set PUBLIC_BASE_URL to a tunnel URL"
+    )
+
+
 def provider_environment(environment: dict[str, str], *, paid: bool) -> dict[str, str]:
     """Explicit empty env values override keys in .env; removing them would reload them."""
     result = dict(environment)
@@ -145,7 +173,7 @@ def main() -> int:
     parser.add_argument("--web-port", type=int, default=5188)
     parser.add_argument(
         "--web-host",
-        default="127.0.0.1",
+        default="0.0.0.0",
         help="where the player/console listen; 0.0.0.0 lets the second laptop's console "
         "in (ADR 0008 D7). The backend always stays on 127.0.0.1 behind Vite's proxy",
     )
@@ -180,6 +208,12 @@ def main() -> int:
     ):
         parser.error("backend and web need distinct valid ports")
     os.chdir(ROOT)
+    # `station` is also used directly: it has the same durable prerequisites as `up`.
+    from scripts.up import prepare_database, prepare_env, prepare_loops
+
+    env_text = prepare_env()
+    prepare_database(env_text)
+    prepare_loops()
     settings = AppSettings()
     edge_python = ROOT / "edge/.venv/bin/python"
     if not edge_python.is_file():
@@ -208,11 +242,24 @@ def main() -> int:
         start_live=args.start_live,
     )
     env["BACKEND_URL"] = backend  # Vite's proxy target (web/vite.config.ts)
-    # The QR's origin: PUBLIC_BASE_URL (tunnel or LAN URL), else this station's player
-    # origin, which proxies /r/{code} (the settings default, :5173, is not running here).
-    public_base_url = (
-        settings.public_base_url if "public_base_url" in settings.model_fields_set else origin
-    )
+    # The QR's origin is an explicit tunnel or the routed LAN player origin.
+    # Never reuse a stale localhost URL: phones would connect to themselves.
+    try:
+        public_base_url = public_origin(
+            settings.public_base_url if "public_base_url" in settings.model_fields_set else None,
+            port=args.web_port,
+            lan_host=lan_address(),
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
+    if (
+        args.web_host == "127.0.0.1"
+        and urlsplit(public_base_url).scheme == "http"
+        and urlsplit(public_base_url).hostname == lan_address()
+    ):
+        parser.error(
+            "LAN QR access needs --web-host 0.0.0.0 (the default), or a tunnel PUBLIC_BASE_URL"
+        )
     env = web_environment(env, public_base_url=public_base_url)
     env["SPEECH_MODE_SCREENS"] = json.dumps([args.screen] if args.speech else [])
     # The console's "Lo que ve la cámara": detection boxes, plus (demo only, never in

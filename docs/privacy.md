@@ -134,3 +134,31 @@ uv run pytest tests/unit/audience/test_recognition_vlm.py \
 - **"Are you listening?"** Only on an opted-in screen, with "Micrófono activo" on the TV. Transcripts are never logged (tested) or stored; topics expire.
 - **"How would I know it's watching?"** The TV says "Cámara activa · grupos anónimos, nada se graba" whenever it senses, and "Micrófono activo" when the mic is open.
 - **What's still open:** G5–G10 above. The biggest is legal (G7): signage and a DPIA before a real venue.
+
+## Station restart and uncertain safety (2026-11-22)
+
+`MinorLikely.uncertain` records only that available pose geometry cannot support a
+clear safety reading (cropped/occluded bodies or an unsettled vote). It is separate
+from `value`: an unknown audience is **not** a detected child. Both conditions block
+age-restricted categories in `AudienceClassifier`; neither supplies a targeting
+segment or changes another bid. The snapshot publishes a new block immediately and
+requires stability to clear it. The console labels uncertainty explicitly. The
+pose detector can still miss children; the conservative block closes the unsafe
+interpretation of missing evidence. Adult-only views may also be blocked.
+
+Evidence: `edge/tests/test_minor.py`,
+`tests/unit/audience/test_classifier.py::test_uncertain_camera_safety_only_blocks_and_never_changes_target_segments`,
+`evals/scenarios/13_uncertain_safety.json`, and the labelled real-video protection
+gate in `evals/video/minors.py`. No new model, facial recognition, demographic
+attribute, or per-person stored evidence was introduced.
+
+The local station now starts and migrates Postgres. `basket_offer` stores approved
+basket/QR facts, and `playback_receipt` stores aggregate counts, attention, monetary
+charges and filtering totals. They contain no frames, audio, utterances, tracklet
+ids or embeddings. They are tenant-filtered, immutable append-only tables with
+DB triggers and architecture guardrails. Only nonce hashes remain in redemptions.
+Offer issuance commits before publishing the QR; receipt charges and receipt JSON
+commit in one transaction before the console acknowledgment. Redemptions commit
+before acknowledgment. Startup restores offers, redemption dedupe/caps, and the
+last receipt per screen. Anonymous live tracking and attention samples remain
+session-local and are never restored across a restart.

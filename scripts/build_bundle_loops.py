@@ -26,14 +26,45 @@ from app.bootstrap.demo import _slug, seed_market
 from app.bootstrap.demo_catalog import catalog_named
 from app.config.settings import AppSettings
 from app.modules.common.application.id_generator import IdGenerator
+from app.modules.creative.application.campaigns import CampaignMedia, media_for
 from app.modules.creative.application.loops import LOOP_DIR, bundle_key
+from app.modules.creative.infrastructure.campaign_assets import CAMPAIGN_ASSETS
 
-VIDEOS = Path(__file__).resolve().parents[1] / "assets" / "campaigns" / "videos"
-CLIP_BY_CATEGORY = {"sports_goods": "energy.mp4", "coffee": "coffee.mp4", "alcohol": "beer.mp4"}
+ASSETS = CAMPAIGN_ASSETS
+VIDEOS = ASSETS / "videos"
+CLIP_BY_CATEGORY = {
+    "sports_goods": "energy.mp4",
+    "energy_drink": "energy.mp4",
+    "coffee": "coffee.mp4",
+    "alcohol": "beer.mp4",
+}
 # Where the product sits across each clip (0 = left edge): panes crop around it.
 FOCUS_X = {"energy.mp4": 0.80, "coffee.mp4": 0.78, "beer.mp4": 0.86}
 WIDTH, HEIGHT, SECONDS = 1280, 720, 6
 GRADE_OPACITY = "0.28"  # enough to tell Voltio's lime from Rayo's violet; footage stays real
+
+
+def source_for(slug: str, category: str, media: dict[str, CampaignMedia]) -> Path:
+    """Only approved footage or the brand/category's approved, unbranded photography."""
+    # Category scenes are explicitly unbranded. Brand photography may be updated
+    # to show real packaging; do not bake its logo into a newly composed loop.
+    if category in CLIP_BY_CATEGORY:
+        source = VIDEOS / CLIP_BY_CATEGORY[category]
+        if source.is_file():
+            return source
+    category_media = media.get(f"category:{category}")
+    found = (category, category_media) if category_media else media_for(media, ((slug, category),))
+    if found is not None:
+        campaign = found[1]
+        url = campaign.video_url or campaign.photo_url
+        source = ASSETS / url.removeprefix("/campaign-assets/")
+        if source.is_file():
+            return source
+    if category in CLIP_BY_CATEGORY:
+        source = VIDEOS / CLIP_BY_CATEGORY[category]
+        if source.is_file():
+            return source
+    raise ValueError(f"No approved loop source for {slug} ({category})")
 
 
 def ffmpeg_exe() -> str:
@@ -53,7 +84,9 @@ def compose_command(ffmpeg: str, members: list[tuple[Path, str]], out: Path) -> 
     inputs: list[str] = []
     filters: list[str] = []
     for i, (clip, accent) in enumerate(members):
-        inputs += ["-stream_loop", "-1", "-t", str(SECONDS), "-i", str(clip)]
+        photo = clip.suffix.lower() in {".webp", ".png", ".jpg", ".jpeg"}
+        inputs += ["-loop", "1", "-framerate", "24"] if photo else ["-stream_loop", "-1"]
+        inputs += ["-t", str(SECONDS), "-i", str(clip)]
         inputs += [
             "-f",
             "lavfi",
@@ -62,21 +95,27 @@ def compose_command(ffmpeg: str, members: list[tuple[Path, str]], out: Path) -> 
             "-i",
             f"color=c=0x{accent.lstrip('#')}:s={pane_w}x{HEIGHT}:r=24",
         ]
+        motion = (
+            f"zoompan=z='1.04+0.04*sin(2*PI*on/{SECONDS * 24 - 1})':"
+            f"x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s={pane_w}x{HEIGHT}:fps=24,"
+            if photo
+            else ""
+        )
         filters.append(
             f"[{2 * i}:v]scale=-2:{HEIGHT},"
             f"crop={pane_w}:{HEIGHT}:'min(max(iw*{FOCUS_X.get(clip.name, 0.5)}-{pane_w}/2,0),iw-{pane_w})':0,"
-            f"fps=24,format=yuv420p[v{i}];"
+            f"fps=24,{motion}format=yuv420p[v{i}];"
             f"[{2 * i + 1}:v]format=yuv420p[c{i}];"
             f"[v{i}][c{i}]blend=all_mode=softlight:all_opacity={GRADE_OPACITY}[g{i}]"
         )
     panes = "".join(f"[g{i}]" for i in range(len(members)))
     stack = f"{panes}hstack=inputs={len(members)}[out]" if len(members) > 1 else "[g0]null[out]"
     return [
-        ffmpeg, "-y", "-loglevel", "error", *inputs,
+        ffmpeg, "-y", "-loglevel", "error", "-filter_complex_threads", "1", *inputs,
         "-filter_complex", ";".join(filters) + ";" + stack,
         "-map", "[out]", "-t", str(SECONDS), "-an",
         "-c:v", "libx264", "-profile:v", "high", "-pix_fmt", "yuv420p",
-        "-preset", "medium", "-crf", "23", "-movflags", "+faststart",
+        "-preset", "veryfast", "-threads", "2", "-crf", "23", "-movflags", "+faststart",
         str(out),
     ]  # fmt: skip
 
@@ -110,20 +149,29 @@ def main() -> int:
         if out.is_file() and not args.force:
             kept.append(key)
             continue
-        if any(category[b] not in CLIP_BY_CATEGORY for b in brands):
-            no_footage.append(key)  # no approved footage for this category yet
+        try:
+            members = [
+                (
+                    source_for(_slug(kits[b].name), category[b], market.campaign_media),
+                    kits[b].accent_color or "#ffffff",
+                )
+                for b in brands
+            ]
+        except ValueError:
+            no_footage.append(key)
             continue
-        members = [
-            (VIDEOS / CLIP_BY_CATEGORY[category[b]], kits[b].accent_color or "#ffffff")
-            for b in brands
-        ]
-        subprocess.run(compose_command(ffmpeg, members, out), check=True)
+        temporary = out.with_suffix(".building.mp4")
+        try:
+            subprocess.run(compose_command(ffmpeg, members, temporary), check=True)
+            temporary.replace(out)
+        finally:
+            temporary.unlink(missing_ok=True)
         built.append(key)
     print(f"built {len(built)}: {', '.join(built) or '—'}")
     print(f"kept {len(kept)} existing: {', '.join(kept) or '—'}")
     print(f"no footage {len(no_footage)}: {', '.join(no_footage) or '—'} (player uses brand media)")
     print(f"→ {out_dir}")
-    return 0
+    return 1 if no_footage else 0
 
 
 if __name__ == "__main__":

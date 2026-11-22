@@ -109,6 +109,12 @@ def main() -> int:
     )
     parser.add_argument("--server", help="Running player origin, e.g. http://127.0.0.1:5188")
     parser.add_argument("--screen", default="demo-01")
+    parser.add_argument(
+        "--web-port",
+        type=int,
+        default=5188,
+        help="Station port for offline QR-origin inspection; use --server for a running station",
+    )
     parser.add_argument("--require-inputs", action="store_true", help="Gate live camera + player")
     parser.add_argument(
         "--require-speech", action="store_true", help="Also require an opted-in speech event"
@@ -159,6 +165,21 @@ def main() -> int:
         ):
             return 1
         return 0 if ads.get("enabled") else 1
+    # The station resolves loopback/absent QR configuration to its routed LAN
+    # origin. Inspect the same effective configuration, rather than warning about
+    # a settings default the launcher never uses.
+    from scripts.station import lan_address, public_origin
+
+    try:
+        origin = public_origin(
+            settings.public_base_url if "public_base_url" in settings.model_fields_set else None,
+            port=args.web_port,
+            lan_host=lan_address(),
+        )
+    except ValueError as exc:
+        print(json.dumps({"error": str(exc)}))
+        return 1
+    settings = settings.model_copy(update={"public_base_url": origin})
     container = build_container(settings)
     try:
         report = live_readiness(container)
@@ -167,7 +188,7 @@ def main() -> int:
         )
         if container.demo is not None:
             warnings += budget_failures(container.demo.book_view().model_dump(mode="json"))
-        print(json.dumps({**report, "warnings": warnings}, indent=2))
+        print(json.dumps({**report, "public_base_url": origin, "warnings": warnings}, indent=2))
         _warn(warnings)
         if not container.settings.live_ads_enabled:
             return 1

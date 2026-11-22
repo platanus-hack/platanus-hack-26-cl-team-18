@@ -1,0 +1,12 @@
+{
+  "name": "uncertain-safety",
+  "kpis": false,
+  "beat": "Cropped or occluded people cannot clear restricted-category safety",
+  "description": "Regression for the real close-up and carried-child windows with no usable pose cues. Unknown safety blocks age-restricted campaigns without fabricating a positive child detection or changing unrestricted targeting.",
+  "steps": [
+    {"scene": {"people": 1, "looking": 1, "objects": {"tap handle fixture": 1}}, "expect": {"brands": ["Malta Sur"]}},
+    {"scene": {"people": 1, "looking": 1, "objects": {"tap handle fixture": 1}, "uncertain": true}, "expect": {"brands": [], "excluded": {"Malta Sur": "safety"}}},
+    {"scene": "co-brand", "expect": {"brands": ["Voltio", "Café Patio"]}},
+    {"scene": {"people": 2, "looking": 2, "objects": {"sports ball": 1}, "sound": {"coffee service fixture": 1}, "uncertain": true}, "expect": {"brands": ["Voltio", "Café Patio"]}}
+  ]
+}

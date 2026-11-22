@@ -32,7 +32,7 @@ variable "region" {
 # ---------------------------------------------------------------- web service
 
 variable "repo_url" {
-  description = "HTTPS URL of the GitHub repo Render builds from. Render must have GitHub access to it (a personal mirror, see docs/terraform.md)."
+  description = "HTTPS URL of the GitHub repo Render builds from. Either Render has GitHub access to it, or it is public (then auto_deploy must be false: no push webhooks)."
   type        = string
 
   validation {
@@ -122,6 +122,12 @@ variable "secret_names" {
 }
 
 # ---------------------------------------------------------------- postgres
+
+variable "create_database" {
+  description = "Create a Render Postgres and pass DATABASE_URL. False = no database; the backend runs in memory (free-plan deploys)."
+  type        = bool
+  default     = true
+}
 
 variable "db_plan" {
   description = "Render Postgres plan (free, basic_256mb, basic_1gb, pro_4gb, ...). Free databases expire, see docs/terraform.md."

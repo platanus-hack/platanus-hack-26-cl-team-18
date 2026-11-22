@@ -66,14 +66,16 @@ export function AudiencePanel({ view }: { view: ScreenView }) {
                             </Badge>
                         </li>
                     ))}
-                    {m.minor_likely.value && (
+                    {(m.minor_likely.value || m.minor_likely.uncertain) && (
                         <li>
                             <Badge
                                 tone="warning"
                                 appearance="soft"
                                 className="rounded-container whitespace-normal"
                             >
-                                Posible menor: categorías restringidas bloqueadas
+                                {m.minor_likely.uncertain
+                                    ? "Seguridad por confirmar: categorías restringidas bloqueadas"
+                                    : "Posible menor: categorías restringidas bloqueadas"}
                             </Badge>
                         </li>
                     )}

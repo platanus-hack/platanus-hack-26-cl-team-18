@@ -23,6 +23,7 @@ from app.modules.common.domain.primitives.errors import DomainError
 from app.modules.common.domain.value_objects.money import Money
 from app.modules.delivery.application.ports.budget import BudgetGate
 from app.modules.delivery.application.ports.ledger import ChargeLedger
+from app.modules.delivery.application.ports.receipts import ReceiptHistory
 from app.modules.delivery.domain.attention import (
     LookSample,
     seconds_of,
@@ -111,6 +112,7 @@ class DeliveryDesk:
         self._ledger = ledger
         self._ids = ids
         self._budgets = budgets
+        self._receipt_history: ReceiptHistory | None = None
         self._lock = Lock()
         self._plays: dict[str, PlayRecord] = {}
         self._billed: dict[str, tuple[str, Receipt]] = {}
@@ -120,6 +122,10 @@ class DeliveryDesk:
         # Per creative, the server instant it left the screen: no later second bills.
         self._off_air: dict[str, datetime] = {}
         self.attention = AttentionLog()
+
+    def bind_receipt_history(self, history: ReceiptHistory) -> None:
+        """Composition-root binding before any play: money is durable before acknowledgment."""
+        self._receipt_history = history
 
     def aired(self, play: PlayRecord) -> None:
         with self._lock:
@@ -198,6 +204,8 @@ class DeliveryDesk:
                     raise ConflictingPlaybackReport()
                 if key in self._unwritten:
                     self._ledger.append(seen[1].charges)
+                    if self._receipt_history is not None:
+                        self._receipt_history.append(seen[1])
                     self._unwritten.remove(key)
                     return seen[1]
                 return None  # a retry: already billed once
@@ -256,6 +264,8 @@ class DeliveryDesk:
             self._billed_until[creative_id] = ended_at
             self._unwritten.add(key)
             self._ledger.append(charges)
+            if self._receipt_history is not None:
+                self._receipt_history.append(receipt)
             self._unwritten.remove(key)
             while len(self._billed) > MAX_PLAYS_REMEMBERED * 4:
                 oldest = next((key for key in self._billed if key not in self._unwritten), None)

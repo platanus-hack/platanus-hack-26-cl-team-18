@@ -1,0 +1,13 @@
+{
+  "name": "group-fallback",
+  "kpis": false,
+  "beat": "A watching group keeps a safe paid offer when a prop has no eligible bids",
+  "description": "Regression for the 32 prop-sweep gaps. Keep the observed interest and add a low-confidence coffee fallback only after actual eligibility/reserve checks fail. A lone passer-by does not trigger a group fallback.",
+  "steps": [
+    {"scene": "empty", "expect": {"brands": []}},
+    {"scene": {"people": 2, "looking": 2, "objects": {"laptop": 0.9}}, "expect": {"brands": ["Café Patio"]}},
+    {"scene": {"people": 2, "looking": 2, "objects": {"bicycle": 0.9}}, "expect": {"brands": ["Café Patio"]}},
+    {"scene": {"people": 2, "looking": 2, "objects": {"dog": 0.9}, "minor": true}, "expect": {"brands": ["Café Patio"]}},
+    {"scene": {"people": 1, "looking": 1, "objects": {"laptop": 0.9}}, "expect": {"brands": []}}
+  ]
+}

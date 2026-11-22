@@ -2,7 +2,7 @@
   "name": "segment-affinity",
   "kpis": false,
   "beat": "Targeting: a bid reaches related segments at a discount, never overcharged",
-  "description": "Segment affinity on the seeded book (app/bootstrap/demo_catalog.py). A donut tags Pastry/Doughnuts: Miga bids on it exactly, and Café Patio reaches it through the catalog's Coffee ↔ Pastry pair at 0.4 (2 CLP/AS). Weak signals stay cheap and can't buy the screen alone. With a cup the exact bidders compete and the related reach only adds value. A soda next to a sandwich reaches the burger brands through the Fast Food ↔ Soft Drinks pair while Cola Sur bids exactly on both. Alcohol only ever matches exactly, a bicycle (nobody bids on the sports family) stays a house ad, and minor_likely leaves an unrestricted basket alone.",
+  "description": "Segment affinity on the seeded book (app/bootstrap/demo_catalog.py). A donut tags Pastry/Doughnuts: Miga bids on it exactly, and Café Patio reaches it through the catalog's Coffee ↔ Pastry pair at 0.4 (2 CLP/AS). Weak signals stay cheap and can't buy the screen alone. With a cup the exact bidders compete and the related reach only adds value. A soda next to a sandwich reaches the burger brands through the Fast Food ↔ Soft Drinks pair while Cola Sur bids exactly on both. Alcohol only ever matches exactly, a bicycle (nobody bids on the sports family) stays a house ad, and minor_likely leaves an unrestricted basket alone. Weak/unmatched probes use one viewer; watching groups instead exercise the safe default in group-fallback.",
   "steps": [
     {
       "scene": "empty",
@@ -18,18 +18,31 @@
           "donut": 0.95
         }
       },
-      "note": "exact and related bids on one weak cue: both below reserve, nobody pays",
+      "note": "Weak pastry evidence fails reserve alone; the watching group gets low-confidence coffee fallback, while both original exact and related pastry matches stay visible.",
       "expect": {
-        "brands": [],
+        "brands": [
+          "Miga"
+        ],
         "matches": {
-          "Café Patio": ["related:Café>Pastelería"],
-          "Miga": ["exact:Pastelería>Pastelería"]
+          "Café Patio": [
+            "related:Café>Pastelería"
+          ],
+          "Miga": [
+            "exact:Pastelería>Pastelería"
+          ]
         },
         "excluded": {
-          "Café Patio": "below_reserve",
-          "Miga": "below_reserve"
+          "Café Patio": "outbid"
         },
-        "no_bid": ["Voltio", "Rayo", "Malta Sur", "Brasa Burger"]
+        "no_bid": [
+          "Voltio",
+          "Rayo",
+          "Malta Sur",
+          "Brasa Burger"
+        ],
+        "max_price_per_as": {
+          "Miga": "4"
+        }
       }
     },
     {
@@ -43,10 +56,18 @@
       },
       "note": "each segment counts once per bid: Patio's related reach adds to its exact Coffee",
       "expect": {
-        "brands": ["Miga"],
+        "brands": [
+          "Miga"
+        ],
         "matches": {
-          "Café Patio": ["exact:Café>Café", "related:Café>Pastelería"],
-          "Miga": ["exact:Café>Café", "exact:Pastelería>Pastelería"]
+          "Café Patio": [
+            "exact:Café>Café",
+            "related:Café>Pastelería"
+          ],
+          "Miga": [
+            "exact:Café>Café",
+            "exact:Pastelería>Pastelería"
+          ]
         },
         "excluded": {
           "Café Patio": "outbid"
@@ -68,11 +89,20 @@
       },
       "note": "a soft drink reaches the burger bid through the curated combo pair, at its weight",
       "expect": {
-        "brands": ["Brasa Burger"],
+        "brands": [
+          "Brasa Burger"
+        ],
         "matches": {
-          "Brasa Burger": ["exact:Comida rápida>Comida rápida", "related:Comida rápida>Bebidas gaseosas"],
-          "Cola Sur": ["exact:Bebidas gaseosas>Bebidas gaseosas"],
-          "Pacífica": ["related:Bebidas gaseosas>Comida rápida"]
+          "Brasa Burger": [
+            "exact:Comida rápida>Comida rápida",
+            "related:Comida rápida>Bebidas gaseosas"
+          ],
+          "Cola Sur": [
+            "exact:Bebidas gaseosas>Bebidas gaseosas"
+          ],
+          "Pacífica": [
+            "related:Bebidas gaseosas>Comida rápida"
+          ]
         },
         "excluded": {
           "Toro Burger": "competitor"
@@ -94,9 +124,13 @@
       },
       "note": "alcohol reaches its own segment only; the oracle fails any widened match",
       "expect": {
-        "brands": ["Malta Sur"],
+        "brands": [
+          "Malta Sur"
+        ],
         "matches": {
-          "Malta Sur": ["exact:Bebidas alcohólicas>Bebidas alcohólicas"]
+          "Malta Sur": [
+            "exact:Bebidas alcohólicas>Bebidas alcohólicas"
+          ]
         },
         "max_price_per_as": {
           "Malta Sur": "12"
@@ -105,8 +139,8 @@
     },
     {
       "scene": {
-        "people": 2,
-        "looking": 2,
+        "people": 1,
+        "looking": 1,
         "objects": {
           "bicycle": 0.9
         }
@@ -114,13 +148,20 @@
       "note": "a segment no campaign reaches, exactly or by affinity: house ad, nobody bids",
       "expect": {
         "brands": [],
-        "no_bid": ["Voltio", "Rayo", "Agua Cumbre", "Café Patio", "Miga", "Malta Sur"]
+        "no_bid": [
+          "Voltio",
+          "Rayo",
+          "Agua Cumbre",
+          "Café Patio",
+          "Miga",
+          "Malta Sur"
+        ]
       }
     },
     {
       "scene": {
-        "people": 2,
-        "looking": 2,
+        "people": 1,
+        "looking": 1,
         "objects": {
           "cake": 0.9
         }
@@ -129,7 +170,9 @@
       "expect": {
         "brands": [],
         "matches": {
-          "Miga": ["related:Pastelería>Postres y repostería"]
+          "Miga": [
+            "related:Pastelería>Postres y repostería"
+          ]
         },
         "excluded": {
           "Miga": "below_reserve"
@@ -148,9 +191,13 @@
       },
       "note": "minor_likely blocks only restricted categories; the bakery still plays",
       "expect": {
-        "brands": ["Miga"],
+        "brands": [
+          "Miga"
+        ],
         "matches": {
-          "Café Patio": ["related:Café>Pastelería"]
+          "Café Patio": [
+            "related:Café>Pastelería"
+          ]
         }
       }
     }

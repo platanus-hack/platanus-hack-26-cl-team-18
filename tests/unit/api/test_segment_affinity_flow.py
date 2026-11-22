@@ -16,7 +16,11 @@ def test_a_related_segment_reaches_the_partner_bid_and_the_console_shows_the_mat
     loop: Loop,
 ) -> None:
     now = loop.clock.advance(timedelta(milliseconds=100))
-    loop.agent.send_text(_agent_snapshot(1, now, {"donut": 0.95}).model_dump_json())
+    snapshot = _agent_snapshot(1, now, {"donut": 0.95})
+    snapshot = snapshot.model_copy(
+        update={"people": 1, "looking": 1, "tracklets": snapshot.tracklets[:1]}
+    )
+    loop.agent.send_text(snapshot.model_dump_json())
     auction = loop.auction()
 
     patio = next(bid for bid in auction.bids if bid.brand_name == "Café Patio")

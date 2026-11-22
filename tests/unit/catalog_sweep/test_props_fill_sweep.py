@@ -126,61 +126,16 @@ def _markers(catalog: str) -> list[str]:
     return [f"product:{brand.slug}" for brand in seeded(catalog).catalog.brands]
 
 
-# Known gap: GroupDefault (app/modules/audience/domain/policies/group_default.py) only adds
-# its coffee moment when the classifier found *no* segment, not when no segment is
-# *biddable*, as its docstring promises. A prop whose segment nobody buys (Pets, Travel,
-# Cycling...) replaces a paid coffee ad with the house ad. (Chile's food props, hot dog,
-# pizza and sandwich, fill since 6133232 made the completo basket win: kept as cases.)
-_GROUP_DEFAULT_GAP = (
-    "GroupDefault applies only when no segment was found, so this prop's unbiddable or "
-    "below-reserve segment turns the group's paid default moment into the house ad"
-)
-NO_FILL_GAPS = {
-    "fictional": {
-        "bicycle",
-        "dog",
-        "donut",
-        "laptop",
-        "pastry",
-        "skateboard",
-        "soda can",
-        "suitcase",
-    },
-    "chile": {
-        "beer bottle",
-        "bicycle",
-        "dog",
-        "laptop",
-        "skateboard",
-        "suitcase",
-        "wine glass",
-    },
-}
-# Minor-likely groups: the age-restricted segment blocks its only bidders, and the
-# group default still does not apply (same gap).
-MINOR_NO_FILL_GAPS = {
-    "fictional": NO_FILL_GAPS["fictional"] | {"beer bottle", "wine glass"},
-    "chile": NO_FILL_GAPS["chile"],
-}
-
-
 def _fill_cases() -> list[object]:
     cases: list[object] = []
     for catalog in CATALOGS:
         for minor in (False, True):
-            gaps = (MINOR_NO_FILL_GAPS if minor else NO_FILL_GAPS)[catalog]
             for label in (*LABELS, *_markers(catalog)):
-                marks = (
-                    [pytest.mark.xfail(strict=True, reason=_GROUP_DEFAULT_GAP)]
-                    if label in gaps
-                    else []
-                )
                 cases.append(
                     pytest.param(
                         catalog,
                         label,
                         minor,
-                        marks=marks,
                         id=f"{catalog}-{label}-{'minor' if minor else 'adults'}",
                     )
                 )

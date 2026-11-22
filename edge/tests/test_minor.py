@@ -130,6 +130,40 @@ def test_empty_scene_says_nothing() -> None:
     assert (reading.value, reading.confidence) == (False, 0.0)
 
 
+def test_cropped_or_occluded_people_never_count_as_a_confirmed_adult_audience() -> None:
+    vote = MinorVote()
+    cropped = body(200, top=0, bottom=H, keypoints=False)
+    for _ in range(30):
+        reading = vote.update([cropped], H)
+        assert reading.uncertain and reading.blocks_restricted
+        assert not reading.value  # uncertainty is not a claim that a child was detected
+
+
+def test_one_unassessable_person_blocks_even_with_confident_adult_peers() -> None:
+    vote = MinorVote()
+    occluded = body(500, top=0, bottom=H, keypoints=False)
+    for _ in range(30):
+        reading = vote.update([ADULT, ADULT_2, occluded], H)
+    assert reading.uncertain and reading.blocks_restricted
+
+
+def test_unknown_cannot_clear_safety_and_empty_room_resets_the_vote() -> None:
+    vote = MinorVote()
+    for _ in range(12):
+        vote.update([ADULT, CHILD], H)
+    for _ in range(20):
+        assert vote.update([body(200, top=0, keypoints=False)], H).blocks_restricted
+    assert not vote.update([], H).blocks_restricted
+
+
+def test_clear_adult_readings_need_a_full_stable_vote_before_restricted_ads() -> None:
+    vote = MinorVote()
+    assert vote.update([ADULT, ADULT_2], H).uncertain
+    for _ in range(30):
+        reading = vote.update([ADULT, ADULT_2], H)
+    assert not reading.uncertain and not reading.blocks_restricted
+
+
 @pytest.mark.parametrize(
     "kwargs",
     [

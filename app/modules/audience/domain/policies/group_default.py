@@ -32,11 +32,18 @@ class GroupDefault:
     min_looking: int = 2
 
     def apply(
-        self, *, segments: tuple[SegmentEstimate, ...], looking: int
+        self,
+        *,
+        segments: tuple[SegmentEstimate, ...],
+        looking: int,
+        has_eligible_bid: bool | None = None,
     ) -> tuple[SegmentEstimate, ...]:
-        if segments or looking < self.min_looking:
+        if looking < self.min_looking or (segments and has_eligible_bid is not False):
+            return segments
+        if any(segment.segment_id == self.segment_id for segment in segments):
             return segments
         return (
+            *segments,
             SegmentEstimate.create(
                 segment_id=self.segment_id,
                 viewer_count=looking,

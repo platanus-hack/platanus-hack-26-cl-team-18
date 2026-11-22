@@ -199,7 +199,7 @@ class AudienceClassifier:
                 marker_products=markers,
                 keyframe=screen.keyframe,
                 looking=snapshot.looking,
-                minor_likely=snapshot.minor_likely.value,
+                minor_likely=snapshot.minor_likely.value or snapshot.minor_likely.uncertain,
                 minor_likely_confidence=_percent(snapshot.minor_likely.confidence),
                 now=now,
                 previously_biddable=screen.biddable,

@@ -85,6 +85,11 @@ class MinorReading:
 
     value: bool
     confidence: float
+    uncertain: bool = False
+
+    @property
+    def blocks_restricted(self) -> bool:
+        return self.value or self.uncertain
 
 
 NO_READING = MinorReading(value=False, confidence=0.0)
@@ -166,15 +171,17 @@ class MinorVote:
     def __init__(self, config: MinorConfig | None = None) -> None:
         self._config = config or MinorConfig()
         self._frames: deque[_FrameVote] = deque(maxlen=self._config.window)
+        self._uncertain = False
 
     def update(self, persons: Sequence[PersonDetection], frame_height: int) -> MinorReading:
         """Feed the tracked (near) people of one frame; returns the voted reading."""
         config = self._config
-        evidence = [
-            e
-            for person in persons
-            if (e := child_evidence(person, persons, frame_height, config)) is not None
-        ]
+        if not persons:
+            self.reset()
+            return NO_READING
+        cues = [child_evidence(person, persons, frame_height, config) for person in persons]
+        self._uncertain = any(e is None for e in cues)
+        evidence = [e for e in cues if e is not None]
         hits = [e for e in evidence if e >= config.person_threshold]
         self._frames.append(
             _FrameVote(evaluated=bool(evidence), hit=bool(hits), strength=max(hits, default=0.0))
@@ -189,10 +196,15 @@ class MinorVote:
             share = len(hit_frames) / config.window
             return MinorReading(True, round(config.max_confidence * share * mean_strength, 2))
         clean = sum(1 for f in self._frames if f.evaluated and not f.hit)
-        return MinorReading(False, round(config.max_confidence * clean / config.window, 2))
+        return MinorReading(
+            False,
+            round(config.max_confidence * clean / config.window, 2),
+            uncertain=self._uncertain or clean < config.min_hits,
+        )
 
     def reset(self) -> None:
         self._frames.clear()
+        self._uncertain = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -255,4 +267,5 @@ def strongest(*readings: MinorReading) -> MinorReading:
     positive = [r for r in readings if r.value]
     if positive:
         return max(positive, key=lambda r: r.confidence)
-    return max(readings, key=lambda r: r.confidence, default=NO_READING)
+    clear = max(readings, key=lambda r: r.confidence, default=NO_READING)
+    return MinorReading(clear.value, clear.confidence, uncertain=any(r.uncertain for r in readings))

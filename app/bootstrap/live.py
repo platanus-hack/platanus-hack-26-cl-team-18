@@ -67,6 +67,10 @@ def register_live_market(container: Container) -> DemoControls:
             redemption_ledger=container.redemption_ledger,
             registry=registry,
             catalog=catalog_named(settings.demo_catalog),
+            offer_store=container.offer_store,
+            restored_redemptions=container.redemption_ledger.redemptions()
+            if container.offer_store is not None
+            else (),
         )
 
     try:
@@ -78,6 +82,18 @@ def register_live_market(container: Container) -> DemoControls:
         market = market_with(None)
         container.campaign_store = "memory_fallback"  # /health and the preflight show it
     slugs = {kit.brand_id: _slug(kit.name) for kit in market.kits}
+    receipt_history = None
+    if container.offer_store is not None and settings.database_url is not None:
+        import psycopg2
+
+        from app.modules.delivery.infrastructure.receipts import PostgresReceiptHistory
+
+        records_dsn = settings.database_url.get_secret_value()
+        receipt_history = PostgresReceiptHistory(
+            lambda: psycopg2.connect(records_dsn, connect_timeout=5),
+            {kit.brand_id: kit.name for kit in market.kits},
+        )
+        market.delivery.bind_receipt_history(receipt_history)
     container.campaign_generator = CampaignGenerator(
         kits=market.kits,
         bidders=market.bidders,
@@ -122,6 +138,7 @@ def register_live_market(container: Container) -> DemoControls:
                     public_base_url=settings.public_base_url,
                     media_dir=settings.media_dir,
                     dev_keyframe_preview=settings.dev_keyframe_preview_enabled,
+                    receipt_history=receipt_history,
                     copywriter=container.copywriter,
                     copy_timeout_s=settings.creative_copy_timeout_s,
                     hourly_budget_usd=settings.creative_hourly_budget_usd,

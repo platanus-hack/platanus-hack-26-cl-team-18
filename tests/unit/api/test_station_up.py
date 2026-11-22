@@ -5,13 +5,21 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from scripts.up import database_target, ensure_demo_key, env_from_example, env_value, needs_npm_ci
+import pytest
+from scripts.up import (
+    database_target,
+    ensure_database_url,
+    ensure_demo_key,
+    env_from_example,
+    env_value,
+    needs_npm_ci,
+)
 
 
-def test_a_fresh_env_keeps_records_in_memory() -> None:
+def test_a_fresh_env_keeps_persistent_records() -> None:
     example = "APP_ENV=local\nDATABASE_URL=postgresql://u:p@localhost:5432/db\nDEMO_KEY=\n"
     env = env_from_example(example)
-    assert env_value(env, "DATABASE_URL") == ""
+    assert env_value(env, "DATABASE_URL") == "postgresql://u:p@localhost:5432/db"
     assert env_value(env, "APP_ENV") == "local"
 
 
@@ -47,19 +55,28 @@ def test_npm_ci_runs_only_when_the_lock_changed(tmp_path: Path) -> None:
     assert needs_npm_ci(tmp_path)
 
 
-def test_a_database_that_is_down_never_stops_the_station(monkeypatch, capsys) -> None:
-    # The backend falls back to in-memory campaigns; `make up` must still start it.
+def test_a_database_that_is_down_stops_a_new_station_instead_of_losing_money(
+    monkeypatch, capsys
+) -> None:
     import scripts.up as up
 
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.setattr(up, "_reachable", lambda host, port: False)
-    up.prepare_database("DATABASE_URL=postgresql://u:p@db.example.org:5432/x\n")
-    assert "in memory" in capsys.readouterr().out
+    with pytest.raises(SystemExit, match="persistent records"):
+        up.prepare_database("DATABASE_URL=postgresql://u:p@db.example.org:5432/x\n")
 
     def failing_run(command, **_kwargs):
         raise SystemExit(f"failed: {' '.join(command)}")
 
     monkeypatch.setattr(up, "_run", failing_run)
     monkeypatch.setattr(up.shutil, "which", lambda tool: "/usr/bin/docker")
-    up.prepare_database("DATABASE_URL=postgresql://u:p@localhost:5432/x\n")
-    assert "in memory" in capsys.readouterr().out
+    with pytest.raises(SystemExit, match="persistent records"):
+        up.prepare_database("DATABASE_URL=postgresql://u:p@localhost:5432/x\n")
+
+
+def test_old_memory_only_install_is_upgraded_without_overwriting_an_existing_database():
+    assert env_value(ensure_database_url("DATABASE_URL=\n"), "DATABASE_URL").startswith(
+        "postgresql://"
+    )
+    configured = "DATABASE_URL=postgresql://u:p@db.example.org/db\n"
+    assert ensure_database_url(configured) == configured

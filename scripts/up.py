@@ -4,16 +4,16 @@ Prepares whatever is missing, then hands over to `scripts/station.py` with ARGS.
 Every step is idempotent and takes well under a second when already done, so
 `make up` is also the everyday way to start:
 
-1. `.env`: created from `.env.example` if missing (records in memory, no
-   Postgres needed); a `DEMO_KEY` is generated if there is none.
+1. `.env`: created from `.env.example` if missing, with persistent local Postgres;
+   missing demo/device tokens are generated without printing them.
 2. Dependencies: backend venv, the perception agent with its camera and audio
    extras (`uv sync` is exact, so they are always requested together), and web
    packages when `package-lock.json` changed.
 3. The YOLOE object vocabulary, baked once into `edge/`.
-4. Postgres, only when `DATABASE_URL` is set: started with Docker if it is local
-   and down, then migrated. If it won't come up, the station still starts, with
-   records in memory (loud warning; the preflight repeats it).
-5. The provider preflight (informational), then the station.
+4. Postgres: configured local installs are started with Docker if down, then
+   migrated. A configured remote database is preserved. Failure stops startup.
+5. Missing approved bundle loops are composed locally; existing loops are kept.
+6. The provider preflight (informational), then the station.
 
 Secrets are never printed: the demo key stays in `.env`.
 """
@@ -36,14 +36,25 @@ EDGE = ROOT / "edge"
 WEB = ROOT / "web"
 EDGE_EXTRAS = ("dev", "vision", "audio")
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
+LOCAL_DATABASE_URL = "postgresql://team18:team18@localhost:5432/team18"
 
 
 # ------------------------------------------------------------------ pure helpers
 
 
 def env_from_example(example: str) -> str:
-    """A fresh `.env`: records stay in memory until someone opts into Postgres."""
-    return re.sub(r"(?m)^DATABASE_URL=.*$", "DATABASE_URL=", example)
+    """Keep the template's local Postgres: demo records must survive station restarts."""
+    return example
+
+
+def ensure_database_url(env_text: str) -> str:
+    """Upgrade older memory-only local installs without changing a configured database."""
+    if env_value(env_text, "DATABASE_URL"):
+        return env_text
+    line = f"DATABASE_URL={LOCAL_DATABASE_URL}"
+    if re.search(r"(?m)^DATABASE_URL=.*$", env_text):
+        return re.sub(r"(?m)^DATABASE_URL=.*$", line, env_text)
+    return env_text.rstrip("\n") + "\n" + line + "\n"
 
 
 def ensure_demo_key(env_text: str, token: str) -> tuple[str, bool]:
@@ -116,13 +127,29 @@ def require_tools() -> None:
 def prepare_env() -> str:
     env_file = ROOT / ".env"
     if not env_file.exists():
-        _step("creating .env from .env.example (records in memory; no keys yet)")
+        _step("creating .env from .env.example (local Postgres; no keys yet)")
         env_file.write_text(env_from_example((ROOT / ".env.example").read_text()))
     text = env_file.read_text()
+    durable = ensure_database_url(text)
+    if durable != text:
+        env_file.write_text(durable)
+        _step("enabled persistent local station records")
+    text = durable
     text, added = ensure_demo_key(text, secrets.token_urlsafe(16))
     if added:
         env_file.write_text(text)
         _step("generated DEMO_KEY in .env (the demo hub is /demo/<DEMO_KEY>)")
+    # The player origin now listens on the venue LAN. Protect sensor uploads and
+    # billable playback before opening that listener; the launcher supplies these
+    # to the local camera and kiosk without ever printing their values.
+    for name in ("AGENT_TOKEN", "SCREEN_TOKEN"):
+        if not env_value(text, name):
+            value = secrets.token_urlsafe(32)
+            if re.search(rf"(?m)^{name}=.*$", text):
+                text = re.sub(rf"(?m)^{name}=.*$", f"{name}={value}", text)
+            else:
+                text = text.rstrip("\n") + f"\n{name}={value}\n"
+            env_file.write_text(text)
     return text
 
 
@@ -164,28 +191,33 @@ def prepare_database(env_text: str) -> None:
     url = os.environ.get("DATABASE_URL", env_value(env_text, "DATABASE_URL"))
     target = database_target(url)
     if target is None:
-        return  # in memory: nothing to start
+        raise SystemExit(
+            "Station records need DATABASE_URL; use the local Postgres from .env.example"
+        )
     host, port = target
-    # The screen is never blank: a database that won't come up costs the record of
-    # this run (the backend falls back to in-memory campaigns), never the station.
-    fallback = (
-        "  ⚠ records stay in memory this run (budgets from before are not restored, "
-        "charges are not kept). Fix Postgres and restart, or blank DATABASE_URL in .env."
-    )
+    # Refuse a new presentation with volatile money. A running backend can still
+    # keep the last good creative up through a database outage.
     try:
         if not _reachable(host, port):
             if host not in LOCAL_HOSTS or shutil.which("docker") is None:
                 print(f"⚠ DATABASE_URL points at {host}:{port}, which is down.", flush=True)
-                print(fallback, flush=True)
-                return
+                raise SystemExit("Postgres is unreachable; start it before presenting")
             _step("starting local Postgres (docker compose)")
             _run(["docker", "compose", "up", "-d", "--wait", "postgres"])
         _step("database migrations")
         # migrate.py reads DATABASE_URL from the environment only (Render's pre-deploy).
         _run(["uv", "run", "python", "scripts/migrate.py"], extra_env={"DATABASE_URL": url})
     except SystemExit as exc:
-        print(f"⚠ {exc}", flush=True)
-        print(fallback, flush=True)
+        raise SystemExit("Station startup stopped: persistent records are unavailable") from exc
+
+
+def prepare_loops() -> None:
+    """Cold preparation only; no paid API, and existing paid loops are preserved."""
+    _step("approved bundle loops (build missing files only)")
+    _run(
+        ["uv", "run", "--with", "imageio-ffmpeg", "python", "-m", "scripts.build_bundle_loops"],
+        quiet=False,
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -195,6 +227,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     sync_dependencies()
     bake_vocabulary()
     prepare_database(env_text)
+    prepare_loops()
     _step("provider preflight")
     subprocess.run([sys.executable, "-m", "scripts.live_preflight"], cwd=ROOT, check=False)
     _step("starting the station (Ctrl-C stops everything)")

@@ -9,6 +9,7 @@ from typing import Protocol
 
 from app.modules.campaigns.domain.book import CampaignId
 from app.modules.common.application.id_generator import IdGenerator
+from app.modules.delivery.application.ports.offers import OfferStore
 from app.modules.delivery.domain.redemption import (
     MAX_REDEMPTIONS_PER_CODE,
     REDEMPTION_TTL,
@@ -45,6 +46,8 @@ class RedemptionDesk:
         ids: IdGenerator,
         ledger: RedemptionLedger,
         max_per_code: int = MAX_REDEMPTIONS_PER_CODE,
+        offer_store: OfferStore | None = None,
+        restored_redemptions: Sequence[Redemption] = (),
     ) -> None:
         self._ids = ids
         self._ledger = ledger
@@ -55,6 +58,13 @@ class RedemptionDesk:
         self._pending: dict[tuple[str, str], Redemption] = {}
         # Per code, the nonce hashes redeemed (or pending) for it: the per-code cap.
         self._devices: dict[str, set[str]] = {}
+        self._offer_store = offer_store
+        if offer_store is not None:
+            self._offers.update((offer.code, offer) for offer in offer_store.offers())
+        for redemption in restored_redemptions:
+            if redemption.code in self._offers:
+                self._redeemed[(redemption.code, redemption.nonce_hash)] = redemption
+                self._devices.setdefault(redemption.code, set()).add(redemption.nonce_hash)
 
     def issue(
         self,
@@ -79,6 +89,8 @@ class RedemptionDesk:
             expires_at=at + REDEMPTION_TTL,
         )
         with self._lock:
+            if self._offer_store is not None:
+                self._offer_store.append(offer)
             self._offers[offer.code] = offer
             while len(self._offers) > MAX_OFFERS_REMEMBERED:
                 self._forget(next(iter(self._offers)))

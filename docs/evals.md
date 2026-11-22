@@ -578,3 +578,23 @@ actual hardware: short single words, long pauses, nearby speech, TV overlap,
 clipping/noise, and reconnects. Measure WER, request meaning, wrong-ad rate,
 request-to-visible-ad latency and provider usage separately. Passing protocol
 fixtures alone does not establish acoustic accuracy or camera-to-TV latency.
+
+### Minor-safety scoring update (2026-11-22)
+
+The minor scorer now uses a fixed 5 Hz clip-time grid, holding the latest published
+sensor facts. Counting change-triggered snapshot messages gave different weights
+when uncertainty transitions were added. Saved pre-change and fresh recordings
+score identically for confirmed detection: recall **0.264**, adult false flags
+**0.235955**, and **three child windows without a positive pose detection**.
+This is the reason for recalibrating the former export-weighted 0.30/0.270588
+baseline; the detector threshold was not relaxed.
+
+The new, separate safety gates require every scored child sample to be protected
+(a detected minor, explicit uncertainty blocking restricted ads, or no reported
+audience and hence no paid ad), with zero unprotected windows. Missing recordings
+and empty windows fail. On the same six child windows, protection improved from
+**34% to 100%**, while about **66% of adult time is conservatively blocked by
+uncertainty**. These results establish safety behavior on these clips, not perfect
+child recognition or a venue-wide guarantee. The two metrics must remain separate.
+The live-loop regressions are `12_group_fallback.json` and
+`13_uncertain_safety.json`. The prop sweep has no expected-failure exemptions.

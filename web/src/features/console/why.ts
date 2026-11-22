@@ -81,9 +81,11 @@ export function explain(
         ],
         leftOut: [
             leftOut.length ? `Quedó fuera ${leftOut.join("; ")}.` : "",
-            moment.minor_likely.value
-                ? "Posible menor: se bloquearon las categorías restringidas."
-                : "Nadie parece menor, así que no se bloqueó ninguna categoría.",
+            moment.minor_likely.uncertain
+                ? "Seguridad por confirmar: se bloquearon las categorías restringidas."
+                : moment.minor_likely.value
+                  ? "Posible menor: se bloquearon las categorías restringidas."
+                  : "Nadie parece menor, así que no se bloqueó ninguna categoría.",
         ]
             .filter(Boolean)
             .join(" "),
