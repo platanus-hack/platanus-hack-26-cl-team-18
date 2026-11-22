@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from app.api import campaigns, demo_controls, dev, health, live, recognition, redeem, ws
 from app.bootstrap.container import Container, build_container
 from app.bootstrap.readiness import exposure_warnings
-from app.config.logging_setup import configure_logging
+from app.config.logging_setup import configure_logging, install_url_redaction
 from app.config.settings import AppSettings
 from app.modules.creative.infrastructure.campaign_assets import CAMPAIGN_ASSETS
 
@@ -29,6 +29,8 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        # uvicorn configured its loggers before importing the app; keys never reach them.
+        install_url_redaction()
         if settings.app_env != "test":
             configure_logging(settings.log_level)
             for problem in settings.misconfigurations() + exposure_warnings(settings):
