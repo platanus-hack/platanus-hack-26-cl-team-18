@@ -27,6 +27,22 @@ class Daypart(StrEnum):
     NIGHT = "night"
 
 
+class WeatherHook(StrEnum):
+    """The weather a hook may speak to ("Con este calor…"); mild weather has no hook."""
+
+    HOT = "hot"
+    COLD = "cold"
+    RAIN = "rain"
+
+
+def weather_hook(tags: frozenset[str]) -> WeatherHook | None:
+    """Venue weather tags (auction conditions) → the one the copy may mention. Rain wins."""
+    for hook in (WeatherHook.RAIN, WeatherHook.HOT, WeatherHook.COLD):
+        if hook.value in tags:
+            return hook
+    return None
+
+
 def daypart_for_hour(hour: int) -> Daypart:
     """The venue's local hour → the daypart the hook speaks to (pure; the caller converts)."""
     if not 0 <= hour <= 23:
@@ -75,6 +91,7 @@ class CreativeBrief:
     minor_likely: bool = False
     held_brand: str | None = None  # name of a held basket product (complete the basket)
     daypart: Daypart | None = None
+    weather: WeatherHook | None = None
     language: str = "es-CL"
     limits: StageLimits = field(default_factory=StageLimits)
 
@@ -139,6 +156,7 @@ class CreativeBrief:
                 self.held_brand or "-",
                 "minor" if self.minor_likely else "-",
                 self.daypart.value if self.daypart else "-",
+                self.weather.value if self.weather else "-",
                 self.language,
             )
         )

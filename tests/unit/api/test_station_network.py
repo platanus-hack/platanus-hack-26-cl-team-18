@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from scripts.station import exit_hint, public_origin, web_environment
+from scripts.station import agent_geometry_args, exit_hint, public_origin, web_environment
 
 ORIGIN = "http://127.0.0.1:5188"
 
@@ -53,3 +53,10 @@ def test_a_crashed_component_shows_its_last_log_line(tmp_path) -> None:
     log.write_bytes(b"starting\nRuntimeError: camera 0 could not be opened\n\n")
     assert exit_hint(log) == "RuntimeError: camera 0 could not be opened"
     assert exit_hint(tmp_path / "missing.log") == ""
+
+
+def test_the_station_tells_the_agent_its_lens_so_distance_bands_are_metres() -> None:
+    # A wider venue webcam shows a 2 m judge smaller; without its FOV the agent would call
+    # them "far" and bill their looks $0 (`make station ARGS="--camera-hfov 110"`).
+    assert agent_geometry_args(camera_hfov=90.0) == ["--camera-hfov", "90"]
+    assert agent_geometry_args(camera_hfov=110.5) == ["--camera-hfov", "110.5"]

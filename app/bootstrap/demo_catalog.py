@@ -17,6 +17,8 @@ import html
 from dataclasses import dataclass
 from decimal import Decimal
 
+from app.modules.auction.domain.conditions import ContextRule, ContextTable, WeatherTag
+
 # Real IAB Audience Taxonomy 1.1 ids (app/modules/audience/infrastructure/catalog).
 FITNESS = "408"  # Interest | Healthy Living | Fitness and Exercise
 COFFEE = "977"  # Purchase Intent | CPG | Edible | Beverages | Coffee
@@ -401,6 +403,11 @@ class Catalog:
     # auction applies them per category (AdOpportunity.category_multipliers): coffee at
     # dawn, cold drinks in the afternoon. Empty = every category bids flat all day.
     daypart_boosts: tuple[tuple[str, str, str], ...] = ()
+    # Weather-aware bids: (weather tag, brand category, multiplier), tags from
+    # auction.domain.conditions.WeatherTag (cold, mild, warm, hot, rain). They stack
+    # with the daypart multiplicatively (clamped to [0.2, 5]): a hot afternoon sells
+    # ice cream harder than either alone. Empty = weather never changes a bid.
+    weather_boosts: tuple[tuple[str, str, str], ...] = ()
     # Whether brands without photos of their own may air the manifest's unbranded
     # category scenes ("category:ice_cream"). Off for the pinned fictional seed.
     category_scenes: bool = False
@@ -426,9 +433,38 @@ class Catalog:
             if part == daypart
         )
 
+    def context_table(self) -> ContextTable:
+        """Daypart and weather rows as the auction's pure context table."""
+        return ContextTable(
+            rules=tuple(
+                ContextRule(daypart=part, category=category, multiplier=Decimal(multiplier))
+                for part, category, multiplier in self.daypart_boosts
+            )
+            + tuple(
+                ContextRule(
+                    weather=WeatherTag(tag), category=category, multiplier=Decimal(multiplier)
+                )
+                for tag, category, multiplier in self.weather_boosts
+            )
+        )
+
 
 # The pinned fictional catalog: tests, evals and the public URL.
-FICTIONAL = Catalog(name="fictional", brands=BRANDS, baskets=BASKETS)
+FICTIONAL = Catalog(
+    name="fictional",
+    brands=BRANDS,
+    baskets=BASKETS,
+    # Weather only (no daypart rows, so evals at a fixed clock stay flat); tests and
+    # evals run with no weather reading, so these apply only on a live station.
+    weather_boosts=(
+        ("hot", "water", "1.3"),
+        ("hot", "cola", "1.15"),
+        ("hot", "coffee", "0.85"),
+        ("cold", "coffee", "1.3"),
+        ("cold", "pastry", "1.15"),
+        ("rain", "coffee", "1.15"),
+    ),
+)
 
 
 def catalog_named(name: str) -> Catalog:

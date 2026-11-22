@@ -64,6 +64,12 @@ class AppSettings(BaseSettings):
     # brands at a Pronto Copec) everywhere: the station, the simulator and the public URL.
     # "fictional" is the frozen fixture that unit tests and evals pin explicitly.
     demo_catalog: Literal["fictional", "chile"] = "chile"
+    # Venue weather as auction context (auction/domain/conditions.py): Open-Meteo, no key,
+    # refreshed off the hot path. Only these coordinates leave the process. Off in tests.
+    weather_enabled: bool = True
+    venue_latitude: float = Field(default=-33.4489, ge=-90, le=90)  # Santiago
+    venue_longitude: float = Field(default=-70.6693, ge=-180, le=180)
+    weather_refresh_s: float = Field(default=600, ge=60)
     # Where phones reach the backend through the tunnel (QR → {public_base_url}/r/{code}).
     # Unset on Render: the service's own URL (RENDER_EXTERNAL_URL), which serves /r/{code}.
     public_base_url: str = Field(

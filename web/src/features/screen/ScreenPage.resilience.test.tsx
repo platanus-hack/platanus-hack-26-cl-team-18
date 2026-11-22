@@ -19,6 +19,15 @@ const harness = vi.hoisted(() => ({
     playerBroken: false,
 }));
 // A render-time bug in the player shell itself (outside any one creative).
+// The page's own sensor (camera/mic, ADR 0010) is covered in sensor/*.test.ts.
+vi.mock("./sensor/link", () => ({
+    sensingEnabled: () => false,
+    ScreenSensor: class {
+        start(): void {}
+        stop(): void {}
+    },
+}));
+
 vi.mock("./player-machine", async (original) => {
     const real = await original<typeof PlayerMachineModule>();
     return {

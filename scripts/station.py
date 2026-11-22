@@ -112,6 +112,12 @@ def exit_hint(log_path: Path) -> str:
     return next((line.strip()[:200] for line in reversed(lines) if line.strip()), "")
 
 
+def agent_geometry_args(*, camera_hfov: float) -> list[str]:
+    """The webcam's horizontal FOV, so the agent's near/far bands are metres on this lens
+    (far = 3 m+ bills nothing). docs/stack.md specifies a >= 90 degree webcam."""
+    return ["--camera-hfov", f"{camera_hfov:g}"]
+
+
 def agent_live_args(*, start_live: bool) -> list[str]:
     """Agents in a standby station wait for the switch before opening the camera loop or mic."""
     return [] if start_live else ["--await-live"]
@@ -179,6 +185,12 @@ def main() -> int:
     )
     parser.add_argument("--screen", default="demo-01")
     parser.add_argument("--camera", type=int, default=0)
+    parser.add_argument(
+        "--camera-hfov",
+        type=float,
+        default=90.0,
+        help="the webcam's horizontal field of view in degrees (near/far viewer bands)",
+    )
     parser.add_argument(
         "--paid-providers",
         action="store_true",
@@ -324,6 +336,7 @@ def main() -> int:
                 else "props/markers.json",
                 "--device",
                 "cpu",
+                *agent_geometry_args(camera_hfov=args.camera_hfov),
                 *agent_live_args(start_live=args.start_live),
             ],
             ROOT / "edge",
@@ -365,7 +378,7 @@ def main() -> int:
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
     print(
-        f"Player: {origin}/screen?id={args.screen}\nConsole: {origin}/console?screen={args.screen}",
+        f"Player: {origin}/screen?id={args.screen}&sense=0\nConsole: {origin}/console?screen={args.screen}",
         flush=True,
     )
     if args.web_host != "127.0.0.1":
@@ -382,7 +395,7 @@ def main() -> int:
         print(f"Demo tools (private): {origin}/demo/<DEMO_KEY from .env>", flush=True)
     # The player remembers the screen token after its first load (web/src/lib/device.ts);
     # it is only ever put in the URL the station opens, never printed.
-    player_url = f"{origin}/screen?id={args.screen}"
+    player_url = f"{origin}/screen?id={args.screen}&sense=0"  # the edge agent senses here
     if settings.screen_token and settings.screen_token.get_secret_value():
         player_url += f"&token={quote(settings.screen_token.get_secret_value())}"
         print("Player gets SCREEN_TOKEN from .env (opened for you)", flush=True)

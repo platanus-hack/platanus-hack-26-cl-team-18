@@ -107,6 +107,24 @@ export const AgentHelloSchema = z.strictObject({
 });
 export type AgentHello = z.infer<typeof AgentHelloSchema>;
 
+// One category's context multiplier and the rules behind it ("afternoon×1.5").
+export const ContextFactorSchema = z.strictObject({
+  category: z.string().max(64),
+  multiplier: z.string().max(16).regex(/^\d+(\.\d+)?$/),
+  reasons: z.array(z.string().max(40)).max(4),
+});
+export type ContextFactor = z.infer<typeof ContextFactorSchema>;
+
+// The venue context the auction cleared against: local daypart and weather.
+export const AuctionConditionsSchema = z.strictObject({
+  daypart: z.enum(["morning", "midday", "afternoon", "evening", "night"]).nullable(),
+  temperature_c: z.number().gte(-60).lte(60).nullable(),
+  weather: z.array(z.enum(["cold", "mild", "warm", "hot", "rain"])).max(2),
+  weather_source: z.enum(["live", "override", "none"]),
+  factors: z.array(ContextFactorSchema).max(32),
+});
+export type AuctionConditions = z.infer<typeof AuctionConditionsSchema>;
+
 // Normalized [0, 1] corners in the keyframe image.
 export const RedactionBoxSchema = z.strictObject({
   x1: z.number().gte(0.0).lte(1.0),
@@ -235,6 +253,7 @@ export const BidLineSchema = z.strictObject({
   value_per_s: MoneyDTOSchema.nullable(),
   multiplier: z.string().max(16).regex(/^\d+(\.\d+)?$/).nullable(),
   matches: z.array(BidMatchSchema).max(32),
+  context_multiplier: z.string().max(16).regex(/^\d+(\.\d+)?$/).nullable(),
 });
 export type BidLine = z.infer<typeof BidLineSchema>;
 
@@ -376,6 +395,18 @@ export const ChargeLineSchema = z.strictObject({
 });
 export type ChargeLine = z.infer<typeof ChargeLineSchema>;
 
+// Pin the venue weather for the demo ("ola de calor"), or `live` to use the real one.
+//
+// A change re-auctions the moment on screen (Trigger.CONDITIONS_CHANGED).
+export const ConditionsSetSchema = z.strictObject({
+  v: z.literal(1),
+  type: z.literal("conditions.set"),
+  live: z.boolean(),
+  temperature_c: z.number().gte(-30).lte(50),
+  raining: z.boolean(),
+});
+export type ConditionsSet = z.infer<typeof ConditionsSetSchema>;
+
 export const ExclusionReasonSchema = z.enum(["competitor", "safety", "budget", "below_reserve", "no_layout", "not_partner", "out_of_stock", "inactive", "no_basket_offer", "outbid", "invalid_bid"]);
 export type ExclusionReason = z.infer<typeof ExclusionReasonSchema>;
 
@@ -431,6 +462,7 @@ export const ConsoleAuctionSchema = z.strictObject({
   trigger: z.string().max(32).nullable(),
   swap: z.string().max(32).nullable(),
   alternatives: z.array(BundleAlternativeSchema).max(6),
+  conditions: AuctionConditionsSchema.nullable(),
 });
 export type ConsoleAuction = z.infer<typeof ConsoleAuctionSchema>;
 
@@ -1001,6 +1033,6 @@ export type ConsoleOutbound = z.infer<typeof ConsoleOutboundSchema>;
 export const DevOutboundSchema = z.discriminatedUnion("type", [ConsoleMomentSchema, ConsoleAuctionSchema, ConsoleLatencySchema, ConsoleDegradationSchema, CreativeReadySchema, CreativeUpgradedSchema, ErrorMessageSchema, ConsoleBookSchema, ConsoleReceiptSchema, ConsoleRedemptionSchema, LiveStatusSchema, ConsoleNextSchema, DevPerceptionSchema, DevVlmSchema, DevSpeechSchema, DevJobSchema, DevCreativeSchema, DevPlayerSchema, DevKeyframeSchema]);
 export type DevOutbound = z.infer<typeof DevOutboundSchema>;
 
-export const MESSAGE_TYPES = ["audience.snapshot", "audience.keyframe", "audience.utterance", "creative.ready", "creative.upgraded", "playback.report", "console.moment", "console.auction", "console.latency", "console.degradation", "system.error", "advertiser.bid_multiplier", "stock.set", "console.book", "console.receipt", "recognition.snapshot", "player.displayed", "player.voice", "screen.attention", "console.redemption", "agent.hello", "live.set", "live.status", "advertiser.autobid", "dev.perception", "dev.vlm", "dev.speech", "dev.job", "dev.creative", "dev.player", "dev.keyframe", "campaign.catalog", "campaign.generate", "campaign.generated", "console.next", "advertiser.profiles", "advertiser.budget_top_up"] as const;
+export const MESSAGE_TYPES = ["audience.snapshot", "audience.keyframe", "audience.utterance", "creative.ready", "creative.upgraded", "playback.report", "console.moment", "console.auction", "console.latency", "console.degradation", "system.error", "advertiser.bid_multiplier", "stock.set", "console.book", "console.receipt", "recognition.snapshot", "player.displayed", "player.voice", "screen.attention", "console.redemption", "agent.hello", "live.set", "live.status", "advertiser.autobid", "dev.perception", "dev.vlm", "dev.speech", "dev.job", "dev.creative", "dev.player", "dev.keyframe", "campaign.catalog", "campaign.generate", "campaign.generated", "console.next", "advertiser.profiles", "advertiser.budget_top_up", "conditions.set"] as const;
 
 export type MessageType = (typeof MESSAGE_TYPES)[number];

@@ -21,6 +21,7 @@ from app.contract.messages import (
     AdvertiserBidMultiplier,
     AdvertiserBudgetTopUp,
     AdvertiserProfiles,
+    ConditionsSet,
     ConsoleBook,
     StockSet,
 )
@@ -139,3 +140,15 @@ async def hooks(request: Request) -> list[dict[str, object]]:
         }
         for result in results
     ]
+
+
+@router.post("/conditions")
+async def conditions(
+    request: Request, message: Annotated[ConditionsSet, Body()]
+) -> dict[str, bool]:
+    """Pin the venue weather for the demo (or `live: true` to release it)."""
+    controls = _controls(request)
+    if controls.set_conditions is None:
+        raise HTTPException(status_code=404, detail="conditions are not controllable here")
+    changed = await anyio.to_thread.run_sync(controls.set_conditions, message)
+    return {"changed": changed}

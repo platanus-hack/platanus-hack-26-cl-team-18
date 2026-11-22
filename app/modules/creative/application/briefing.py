@@ -15,7 +15,13 @@ from app.modules.audience import AudienceMomentSnapshot
 from app.modules.audience.domain.value_objects.segment import SegmentEstimate, SegmentId
 from app.modules.campaigns.domain.book import BrandId, BrandKit
 from app.modules.creative.domain.angle import Angle, choose_angle
-from app.modules.creative.domain.brief import BrandBrief, CreativeBrief, Daypart, StageLimits
+from app.modules.creative.domain.brief import (
+    BrandBrief,
+    CreativeBrief,
+    Daypart,
+    StageLimits,
+    WeatherHook,
+)
 from app.modules.creative.domain.offer import OfferBook
 
 
@@ -36,6 +42,7 @@ class MomentContext:
     held_brand_ids: frozenset[BrandId] = frozenset()
     queue_length: int = 0
     daypart: Daypart | None = None
+    weather: WeatherHook | None = None
     # The group the offer addresses (creative.domain.party): steadier than this
     # instant's looking count. None = the moment's own looking count.
     party: int | None = None
@@ -117,5 +124,6 @@ def assemble_brief(
         minor_likely=minor_likely,
         held_brand=held,
         daypart=context.daypart,
+        weather=context.weather,
         limits=catalog.limits,
     )

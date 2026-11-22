@@ -27,6 +27,9 @@ env_vars = {
   # TTS is ever bought, whatever ELEVENLABS_* secrets the dashboard holds. To bring
   # them back, drop this and set ELEVENLABS_NARRATOR_VOICE_ID (scripts.elevenlabs_voices).
   VOICEOVERS_ENABLED = "false"
+  # The /screen page is the sensor (ADR 0010): its mic streams to Scribe only for
+  # screens listed here (ADR 0005 opt-in); the chip on the glass discloses it.
+  SPEECH_MODE_SCREENS = "[\"demo-01\"]"
 }
 
 # Values are set in the Render dashboard (<name>-secrets env group). Names

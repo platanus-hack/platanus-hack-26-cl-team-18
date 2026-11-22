@@ -938,6 +938,29 @@ CHILE = Catalog(
         ("night", "dairy", "0.7"),
         ("night", "ice_cream", "0.6"),
     ),
+    weather_boosts=(
+        # Santiago summer (30 °C+): cold drinks and ice cream at every hour; a hot
+        # coffee loses its pull. Winter or rain: coffee, la once and something warm.
+        ("hot", "ice_cream", "1.6"),
+        ("hot", "water", "1.4"),
+        ("hot", "sports_drink", "1.35"),
+        ("hot", "cola", "1.2"),
+        ("hot", "beer_zero", "1.2"),
+        ("hot", "juice", "1.15"),
+        ("hot", "coffee", "0.8"),
+        ("warm", "ice_cream", "1.25"),
+        ("warm", "water", "1.15"),
+        ("warm", "sports_drink", "1.1"),
+        ("cold", "coffee", "1.35"),
+        ("cold", "pastry", "1.2"),
+        ("cold", "dairy", "1.1"),
+        ("cold", "ice_cream", "0.6"),
+        ("cold", "water", "0.85"),
+        ("rain", "coffee", "1.2"),
+        ("rain", "pastry", "1.15"),
+        ("rain", "snacks", "1.1"),
+        ("rain", "ice_cream", "0.8"),
+    ),
 )
 
 # An uneven market, like a real one (docs/demo.md): who spends big, who is a lean

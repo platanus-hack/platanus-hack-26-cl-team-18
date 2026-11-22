@@ -24,16 +24,19 @@ from app.contract.messages import (
     AdvertiserPartner,
     AdvertiserProfile,
     AdvertiserProfiles,
+    AuctionConditions,
     AudienceKeyframe,
     AudienceSnapshot,
     AudienceUtterance,
     BookLine,
+    ConditionsSet,
     ConsoleBook,
     ConsoleDegradation,
     ConsoleLatency,
     ConsoleNext,
     ConsoleReceipt,
     ConsoleRedemption,
+    ContextFactor,
     CopySourceKind,
     CreativeReady,
     CreativeSpec,
@@ -56,12 +59,13 @@ from app.contract.messages import (
     UpgradeKind,
 )
 from app.contract.speech_matching import DEFAULT_KEYTERMS
+from app.modules.auction.application.conditions import ConditionsBoard, CurrentWeather
 from app.modules.auction.application.desk import AuctionDesk
 from app.modules.auction.application.ports.auction_log import AuctionLog, AuctionRecord
 from app.modules.auction.domain.affinity import RelatedSegments, SegmentAffinity
+from app.modules.auction.domain.conditions import Weather
 from app.modules.auction.domain.opportunity import (
     AdOpportunity,
-    CategoryMultiplier,
     HeldProduct as BidHeldProduct,
     Layout,
 )
@@ -134,7 +138,7 @@ from app.modules.creative.application.studio import Composed, CreativeStudio, St
 from app.modules.creative.application.template import compose_template
 from app.modules.creative.application.voiceover import InvalidSpokenLine, VoiceoverService
 from app.modules.creative.domain.angle import Angle
-from app.modules.creative.domain.brief import CreativeBrief, daypart_for_hour
+from app.modules.creative.domain.brief import CreativeBrief, daypart_for_hour, weather_hook
 from app.modules.creative.domain.cost import GenerationBudget, GenerationKind, UsdCost
 from app.modules.creative.domain.draft import CopyDraft, CopySource
 from app.modules.creative.domain.offer import BasketOffer, OfferBook
@@ -209,6 +213,8 @@ class DemoControls:
     forget_speech: Callable[[], None] = lambda: None
     # Hook testing (HookLab): every approved hook option with its plays, attention, scans.
     hook_results: Callable[[], list[HookResult]] = lambda: []
+    # Demo weather override (ConditionsSet): market-wide, re-auctions every screen.
+    set_conditions: Callable[[ConditionsSet], bool] | None = None
 
 
 def _clp_per_as(amount: str) -> MoneyRate:
@@ -235,6 +241,8 @@ class LiveMarket:
     autobid_lock: Lock = field(default_factory=Lock)
     # Which brand catalog this market runs (DEMO_CATALOG): fictional or chile.
     catalog: demo_catalog.Catalog = demo_catalog.FICTIONAL
+    # The venue's weather (live reading or operator override), read by every screen.
+    conditions: ConditionsBoard = field(default_factory=ConditionsBoard)
 
 
 def seed_market(
@@ -415,6 +423,7 @@ def register_demo(
     layouts = (Layout.solo(), Layout.duo())
     reserve = _clp_per_as("1.5")
     desk = AuctionDesk(InProcessBundleEngine(), holds_enabled=swap_holds)
+    context_table = market.catalog.context_table()
     book, stock, auctions = market.book, market.stock, market.auctions
     # Rule-based auto-bidding (opt-in per campaign from /advertiser).
     autobidder = market.autobidder
@@ -856,6 +865,7 @@ def register_demo(
             context=MomentContext(
                 held_brand_ids=held,
                 daypart=daypart_for_hour(local_hour),
+                weather=weather_hook(frozenset(market.conditions.current(clock.now_utc()).tags)),
                 party=addressed_party(looking_samples, now=moment.measured_at.value),
             ),
         )
@@ -879,9 +889,9 @@ def register_demo(
             bidders=bidders,
             layouts=layouts,
             reserve=reserve,
-            category_multipliers=tuple(
-                CategoryMultiplier(category=category, multiplier=multiplier)
-                for category, multiplier in market.catalog.boosts_for(daypart.value)
+            # Time of day × venue weather (auction/domain/conditions.py), from memory.
+            category_multipliers=context_table.multipliers(
+                daypart=daypart.value, weather=market.conditions.current(clock.now_utc()).weather
             ),
             approved_baskets=offer_book.pairings(),
             out_of_stock=stock.out_of_stock(wire_screen_id),
@@ -892,6 +902,27 @@ def register_demo(
                 for p in moment.held_products
                 if p.brand_ref is not None and p.brand_ref in brand_by_slug
             ),
+        )
+
+    def conditions_view(
+        moment: AudienceMomentSnapshot, opportunity: AdOpportunity
+    ) -> AuctionConditions:
+        """What the console shows as "Contexto": daypart, weather and each factor's why."""
+        current: CurrentWeather = market.conditions.current(clock.now_utc())
+        weather = current.weather
+        return AuctionConditions(
+            daypart=daypart_for_hour(moment.measured_at.value.astimezone(VENUE_TZ).hour).value,
+            temperature_c=None if weather is None else float(weather.temperature_c),
+            weather=[] if weather is None else sorted(tag.value for tag in weather.tags),
+            weather_source=current.origin.value,
+            factors=[
+                ContextFactor(
+                    category=item.category,
+                    multiplier=format(item.multiplier.normalize(), "f"),
+                    reasons=list(item.reasons),
+                )
+                for item in opportunity.category_multipliers
+            ],
         )
 
     def run_auction(
@@ -925,8 +956,10 @@ def register_demo(
                 )
             )
 
+        opportunity = opportunity_for(moment, out_of_budget)
+        conditions = conditions_view(moment, opportunity)
         outcome = desk.run(
-            opportunity_for(moment, out_of_budget),
+            opportunity,
             trigger,
             now=clock.now_utc(),
             needs_creative_refresh=needs_creative_refresh,
@@ -968,6 +1001,7 @@ def register_demo(
             auction_id=auction_id,
             trace=trace,
             trigger=trigger,
+            conditions=conditions,
         )
         if outcome.swap_now:
             return publish(decision, swap="swap")
@@ -1018,6 +1052,7 @@ def register_demo(
             creative_id=creative_id,
             trigger=decision.trigger.value,
             swap=swap,
+            conditions=decision.conditions,
             offer=current_creative.spec.offer
             if creative_id is not None or swap == "unchanged"
             else None,
@@ -1115,6 +1150,7 @@ def register_demo(
                 auction_id=decision.auction_id,
                 trace=trace,
                 trigger=decision.trigger,
+                conditions=decision.conditions,
             ),
             creative_id=current_creative.creative_id,
             swap=swap,
@@ -2057,7 +2093,25 @@ def register_demo(
     router.on_console_connected(console_connected)
     router.on(PlayerDisplayed, receive_displayed)
     router.on(PlayerVoice, receive_voice)
+
+    def set_conditions(message: ConditionsSet) -> bool:
+        """Pin (or release) the venue weather; the board's listener re-auctions."""
+        if message.live:
+            return market.conditions.override(None)
+        return market.conditions.override(
+            Weather(
+                temperature_c=Decimal(str(message.temperature_c)),
+                precipitation_mm=Decimal(2) if message.raining else Decimal(0),
+                observed_at=clock.now_utc(),
+            )
+        )
+
+    # Weather changed (a live reading crossed a band, or the operator pinned one):
+    # re-clear the audience on screen, like a stock-out does.
+    market.conditions.on_change(lambda: reauction(Trigger.CONDITIONS_CHANGED))
+
     return DemoControls(
+        set_conditions=set_conditions,
         book_view=book_view,
         set_multiplier=set_multiplier,
         set_stock=set_stock,
@@ -2170,3 +2224,4 @@ class _Decision:
     auction_id: str
     trace: LatencyTrace
     trigger: Trigger
+    conditions: AuctionConditions | None = None

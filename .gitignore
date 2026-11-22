@@ -119,3 +119,6 @@ Thumbs.db
 evals/results/
 evals/perception/videos/
 evals/perception/recordings/
+
+# The in-browser pose model (/screen senses; ADR 0010) ships with the web build.
+!web/public/models/*.onnx

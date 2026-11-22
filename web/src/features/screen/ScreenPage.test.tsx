@@ -13,6 +13,15 @@ const harness = vi.hoisted(() => ({
     stop: vi.fn(),
     send: vi.fn(),
 }));
+// The page's own sensor (camera/mic, ADR 0010) is covered in sensor/*.test.ts.
+vi.mock("./sensor/link", () => ({
+    sensingEnabled: () => false,
+    ScreenSensor: class {
+        start(): void {}
+        stop(): void {}
+    },
+}));
+
 vi.mock("@/lib/ws/typed-socket", () => ({
     TypedSocket: class {
         constructor(options: { onMessage: (message: PlayerOutbound) => void }) {

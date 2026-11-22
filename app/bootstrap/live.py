@@ -54,6 +54,23 @@ class ScreenRuntime:
     controls: DemoControls
 
 
+def start_weather(container: Container, market: LiveMarket) -> None:
+    """Warm loop: venue weather into the market's board (auction context). Off in tests."""
+    settings = container.settings
+    if not settings.weather_enabled or settings.app_env == "test":
+        return
+    from app.modules.auction.application.conditions import refresh_weather
+    from app.modules.auction.infrastructure.open_meteo import OpenMeteoWeather
+
+    source = OpenMeteoWeather(latitude=settings.venue_latitude, longitude=settings.venue_longitude)
+    container.closers.append(source.aclose)
+
+    async def refresh() -> None:
+        await refresh_weather(market.conditions, source, every_s=settings.weather_refresh_s)
+
+    container.background.append(refresh)
+
+
 def register_live_market(container: Container) -> DemoControls:
     """Use the approved seed catalog in every environment; simulator controls stay separate."""
     # Imported here to avoid a composition-root cycle.
@@ -87,6 +104,7 @@ def register_live_market(container: Container) -> DemoControls:
         logger.exception("Campaign registry unavailable: campaigns start in memory")
         market = market_with(None)
         container.campaign_store = "memory_fallback"  # /health and the preflight show it
+    start_weather(container, market)
     slugs = {kit.brand_id: _slug(kit.name) for kit in market.kits}
     receipt_history = None
     if container.offer_store is not None and settings.database_url is not None:
@@ -271,6 +289,8 @@ def register_live_market(container: Container) -> DemoControls:
         book_for=book_for,
         profiles=default.controls.profiles,
         top_up=top_up,
+        # Market-wide weather: every screen's runtime listens on the shared board.
+        set_conditions=default.controls.set_conditions,
         # Each screen learns its own hooks (its room, its light); the API shows them all.
         hook_results=lambda: [
             result for runtime in runtimes() for result in runtime.controls.hook_results()

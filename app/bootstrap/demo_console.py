@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from decimal import Decimal
 
 from app.contract.messages import (
+    AuctionConditions,
     AudienceSnapshot,
     BidLine,
     BidMatch,
@@ -54,9 +55,13 @@ def decision_messages(
     trigger: str,
     swap: str,
     offer: CreativeOffer | None = None,
+    conditions: AuctionConditions | None = None,
 ) -> tuple[ConsoleMoment, ConsoleAuction] | tuple[ConsoleMoment, ConsoleAuction, ConsoleLatency]:
     screen_id = snapshot.screen_id
     by_campaign = {bidder.campaign_id: bidder for bidder in bidders}
+    context_factor = (
+        {factor.category: factor.multiplier for factor in conditions.factors} if conditions else {}
+    )
     segments = {segment.segment_id: segment for segment in moment.segments}
 
     def name(campaign_id: CampaignId) -> str:
@@ -131,6 +136,7 @@ def decision_messages(
                     multiplier=format(
                         by_campaign[bid.campaign_id].live_multiplier.value.normalize(), "f"
                     ),
+                    context_multiplier=context_factor.get(by_campaign[bid.campaign_id].category),
                     matches=[
                         BidMatch(
                             segment_id=match.moment_segment.value,
@@ -184,6 +190,7 @@ def decision_messages(
                 for option in result.alternatives
                 if all(campaign_id in by_campaign for campaign_id in option.campaign_ids)
             ],
+            conditions=conditions,
         ),
     )
     if creative_id is None:

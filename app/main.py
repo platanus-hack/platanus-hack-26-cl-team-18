@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.api import campaigns, demo_controls, dev, health, live, recognition, redeem, ws
+from app.api import campaigns, demo_controls, dev, health, live, recognition, redeem, speech, ws
 from app.bootstrap.container import Container, build_container
 from app.bootstrap.readiness import exposure_warnings
 from app.config.logging_setup import configure_logging, install_url_redaction
@@ -85,6 +85,7 @@ def create_app(
     app.include_router(demo_controls.router)
     app.include_router(live.router)
     app.include_router(redeem.router)
+    app.include_router(speech.router)
     app.include_router(campaigns.router)
     if settings.app_env != "prod":
         app.include_router(dev.router)

@@ -33,6 +33,8 @@ uv run pytest tests/unit/audience/test_recognition_vlm.py \
 | Boxes, pose-derived flags (looking, distance band, `minor_likely`) | Yes | Backend (audience moment) | Only as per-auction aggregates |
 | Mic audio (speech mode only) | Yes | ElevenLabs Scribe (STT) | No |
 | Utterance text (speech mode only) | Yes | Backend → keyterm matcher, Claude `TopicExtractor` | No: only IAB topics with a TTL |
+| Browser sensor (`/screen`, ADR 0010): camera frames | **No**: YOLO26-pose runs in the tab, frames are dropped after inference ([`sensor/vision.ts`](../web/src/features/screen/sensor/vision.ts)) | n/a | No |
+| Browser sensor: mic audio (speech mode only) | Yes | ElevenLabs Scribe, with a single-use token ([`app/api/speech.py`](../app/api/speech.py)); the API key stays on the backend | No |
 | QR redemption | n/a | Backend | Code + **hash** of a device nonce |
 | Venue weather lookup (auction context) | Yes, the backend | Open-Meteo: **only the venue's configured lat/lon**, no screen id or audience data ([`open_meteo.py`](../app/modules/auction/infrastructure/open_meteo.py); `tests/unit/auction/test_conditions.py::test_open_meteo_sends_only_the_venue_coordinates`) | Latest reading in memory |
 
