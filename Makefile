@@ -43,7 +43,7 @@ edge-probe-objects: ## Live webcam -> YOLOE scores per prop, at the counter (ARG
 	cd edge && env -u VIRTUAL_ENV uv run python -m agent.vision.probe $(ARGS)
 
 test-sandbox: ## Real processes (backend + edge agent) against a local fake ElevenLabs; no credentials
-	uv run pytest -m sandbox -o addopts="" -v tests/integration/test_sandbox_e2e.py
+	uv run pytest -m sandbox -o addopts="" -p tests._hermetic_env -v tests/integration/test_sandbox_e2e.py
 
 test-live: ## LIVE ElevenLabs tests (spend credits; needs ELEVENLABS_API_KEY)
 	PYTEST_USE_DOTENV=1 uv run pytest -m live -s tests/integration
