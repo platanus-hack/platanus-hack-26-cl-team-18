@@ -57,8 +57,10 @@ check_untyped_defs = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]  # lets `-p tests._hermetic_env` import before collection
 timeout = 40
-addopts = '-q -m "not live and not sandbox"'  # live tests spend real credits: `-m live` to run
+# `-p tests._hermetic_env`: ignore the developer's .env (PYTEST_USE_DOTENV=1 or -m live to read it).
+addopts = '-q -p tests._hermetic_env -m "not live and not sandbox"'  # live tests spend real credits: `-m live` to run
 markers = [
     "unit: Fast, in-memory unit tests (no DB, no network)",
     "integration: Tests that require a real database connection",

@@ -11,6 +11,9 @@ import { assetUrl } from "@/lib/config";
  */
 
 const MAX_BUFFERS = 16;
+// "Played once" memory: a kiosk runs for days, so only the latest keys are kept. Far
+// more than the creatives that can still be on air, so a live ad never repeats.
+const MAX_PLAYED = 256;
 const OUTPUT_GAIN = 0.85;
 
 type AudioContextFactory = () => AudioContext;
@@ -134,6 +137,10 @@ export class VoicePlayer {
             });
         else start();
         this.played.add(key);
+        if (this.played.size > MAX_PLAYED) {
+            const oldest = this.played.values().next().value;
+            if (oldest !== undefined) this.played.delete(oldest);
+        }
         return true;
     }
 

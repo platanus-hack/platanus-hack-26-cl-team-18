@@ -19,6 +19,8 @@ jobs:
       - run: uv run ruff format --check app tests evals
       - run: uv run mypy app evals
       - run: uv run pytest -m "not integration and not live"
+      # web/src/contract/messages.gen.ts must match app/contract/messages.py (make contract).
+      - run: uv run python scripts/gen_contract.py --check
       # Product evals on a live backend: gates + baseline ratchet (docs/evals.md).
       # The scorecard goes to the job summary and is kept as an artifact.
       - run: uv run python -m evals --soak 300
@@ -67,6 +69,61 @@ jobs:
       - run: uv run mypy agent
       # live tests spend ElevenLabs credits and are deselected by default
       - run: uv run pytest
+
+  gpu:
+    # The remote YOLO inference service (ADR 0007). Tests use FakeModel: no GPU, no weights.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: gpu
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: gpu/uv.lock
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      # gpu/ has no mypy in its dev group; pinned to the root lock's version.
+      - run: uv run --with mypy==2.4.1 mypy service
+      - run: uv run pytest
+
+  # Terraform (fmt, validate with init -backend=false, mocked-provider tests) runs in
+  # terraform.yml on changes under terraform/ (make tf-check), pinned to 1.8.5.
+
+  integration:
+    # Postgres repositories against a real database, migrated by the same runner as
+    # Render's pre-deploy (scripts/migrate.py).
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: team18
+          POSTGRES_USER: team18
+          POSTGRES_PASSWORD: team18
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U team18 -d team18"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+    env:
+      DATABASE_URL: postgresql://team18:team18@localhost:5432/team18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.14"
+          enable-cache: true
+      - run: uv sync --extra dev --locked
+      - run: uv run python scripts/migrate.py
+      # Re-running is a no-op: the ledger refuses to re-apply or silently skip a changed file.
+      - run: uv run python scripts/migrate.py status
+      - run: uv run pytest -m integration tests/integration
 
   sandbox:
     # Real processes (backend + edge agent) against a local fake ElevenLabs: no secrets needed.

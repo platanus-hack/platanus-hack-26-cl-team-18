@@ -74,6 +74,9 @@ captures/
 recordings/
 *.wav
 *.pcm
+*.raw
+# Committed synthetic speech fixtures (edge/tests): generated lines, not captures.
+!edge/tests/fixtures/*.raw
 
 # Local media cache (app/config/settings.py media_dir)
 var/

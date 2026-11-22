@@ -22,6 +22,7 @@ env_vars = {
 secret_names = [
   "ANTHROPIC_API_KEY",
   "ELEVENLABS_API_KEY",
+  "FAL_KEY", # fal media generation (ImageGenerator / VideoGenerator); unset = no hosted media
   # Device tokens (app/api/device_auth.py), 24+ chars each (openssl rand -hex 16).
   # Unset in prod means closed: no agent connects, no player bills.
   "AGENT_TOKEN",  # the edge agent's bearer token on /ws/agent

@@ -6,7 +6,7 @@ TF  := scripts/tf.sh $(ENV)
 TF_ROOTS := terraform/modules/render-app terraform/modules/render-static-site terraform/envs/prod
 LOCAL_DATABASE_URL := postgresql://team18:team18@localhost:5432/team18
 
-.PHONY: help help-all up station demo-live install edge-install edge-check eval-speech-robustness edge-yoloe edge-probe-objects test-live test-sandbox dev web-install web-dev web-check contract contract-check lint format typecheck test check migrate migrate-status campaign-budgets db-up db-down db-reset \
+.PHONY: help help-all up station demo-live install edge-install edge-check eval-speech-robustness edge-yoloe edge-probe-objects test-live test-sandbox dev web-install web-dev web-check contract contract-check lint format format-check typecheck test check migrate migrate-status campaign-budgets db-up db-down db-reset \
         live-preflight bundle-loops bundle-loops-local \
         eval eval-baseline eval-creative eval-creative-baseline eval-campaigns eval-replay eval-perception eval-record eval-rehearsal eval-beats eval-video-fetch eval-video eval-pipeline eval-demo-video demo-warmup eval-browser \
         tf-init tf-fmt tf-fmt-check tf-validate tf-test tf-check tf-plan tf-apply tf-output tf-lock
@@ -46,7 +46,7 @@ test-sandbox: ## Real processes (backend + edge agent) against a local fake Elev
 	uv run pytest -m sandbox -o addopts="" -v tests/integration/test_sandbox_e2e.py
 
 test-live: ## LIVE ElevenLabs tests (spend credits; needs ELEVENLABS_API_KEY)
-	uv run pytest -m live -s tests/integration
+	PYTEST_USE_DOTENV=1 uv run pytest -m live -s tests/integration
 	cd edge && env -u VIRTUAL_ENV uv run pytest -m live -s
 
 web-install: ## Install web/ dependencies (npm ci)
@@ -90,8 +90,14 @@ bundle-loops-local: ## Free: compose a loop per approved bundle/brand from campa
 bundle-loops: ## Generate cold H.264 loops (requires ARGS="--budget-usd N --cost-per-clip-usd N")
 	uv run python -m scripts.generate_loops $(ARGS)
 
-lint: ## Ruff lint
-	uv run ruff check .
+# Same paths as CI's backend job (.github/workflows/ci.yml); edge/ and gpu/ lint themselves.
+PY_PATHS := app tests evals
+
+lint: ## Ruff lint (the paths CI checks)
+	uv run ruff check $(PY_PATHS)
+
+format-check: ## Fail if ruff format would change a file (what CI runs)
+	uv run ruff format --check $(PY_PATHS)
 
 format: ## Ruff format (writes files)
 	uv run ruff format .
@@ -102,7 +108,7 @@ typecheck: ## mypy over app/ and evals/
 test: ## Unit tests (no DB, no network)
 	uv run pytest -q
 
-check: lint typecheck test tf-check ## Everything CI runs, locally
+check: lint format-check typecheck test contract-check tf-check ## CI's static gates + unit tests, locally (not evals, web, edge, gpu, integration)
 
 # ------------------------------------------------------------------ evals (docs/evals.md)
 # The product feedback loop: run the real loop, score it, ratchet the baseline.
@@ -203,7 +209,7 @@ tf-test: ## terraform test every root against a mocked provider (no credentials)
 	  terraform -chdir=$$d test -no-color; \
 	done
 
-tf-check: tf-fmt-check tf-validate tf-test ## Offline Terraform gate (what CI runs)
+tf-check: tf-fmt-check tf-validate tf-test ## Offline Terraform gate (what .github/workflows/terraform.yml runs)
 
 tf-plan: ## Plan ENV and save it to tfplan for review
 	$(TF) plan

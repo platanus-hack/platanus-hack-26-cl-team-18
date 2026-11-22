@@ -146,3 +146,15 @@ it("announces actual playback and interruption without repeating the same voice"
     expect(voice.play("creative", "/voice.mp3")).toBe(false);
     expect(playback).toHaveBeenCalledTimes(2);
 });
+
+it("keeps a bounded played-once memory on a kiosk that runs for days", async () => {
+    const { context } = fakeContext();
+    const voice = new VoicePlayer(
+        () => context,
+        vi.fn(() => ok()),
+    );
+    await voice.prepare("/a.mp3", new AbortController().signal);
+    for (let i = 0; i < 1000; i++) expect(voice.play(`cr-${i}`, "/a.mp3")).toBe(true);
+    expect(voice.play("cr-999", "/a.mp3")).toBe(false); // recent: still never repeats
+    expect(voice.play("cr-0", "/a.mp3")).toBe(true); // long gone: forgotten
+});

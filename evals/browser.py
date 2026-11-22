@@ -30,11 +30,15 @@ Camera -> snapshot (perception + debounce) comes from the video eval.
 
 from __future__ import annotations
 
+import atexit
+import functools
 import json
 import os
 import shutil
+import signal
 import socket
 import subprocess
+import tempfile
 import time
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
@@ -165,50 +169,104 @@ def build_web(*, reuse: bool) -> None:
     )
 
 
+def _kill_group(proc: subprocess.Popen[bytes]) -> None:
+    """Stop `npx` *and* the node server it spawned: the whole process group.
+
+    Terminating only `npx` orphaned `vite preview` (dozens piled up on a dev box).
+    """
+    if proc.poll() is not None and not _group_alive(proc.pid):
+        return
+    for sig, wait_s in ((signal.SIGTERM, 5.0), (signal.SIGKILL, 2.0)):
+        try:
+            os.killpg(proc.pid, sig)
+        except ProcessLookupError:
+            return
+        deadline = time.monotonic() + wait_s
+        while time.monotonic() < deadline:
+            proc.poll()  # reap npx so its pid stops counting as alive
+            if not _group_alive(proc.pid):
+                return
+            time.sleep(0.05)
+
+
+def _group_alive(pgid: int) -> bool:
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+@contextmanager
+def _exit_on_sigterm() -> Iterator[None]:
+    """SIGTERM (CI cancel, `kill`) unwinds like Ctrl-C, so `finally` blocks still run."""
+
+    def _raise(signum: int, _frame: object) -> None:
+        raise SystemExit(128 + signum)
+
+    try:
+        previous = signal.signal(signal.SIGTERM, _raise)
+    except ValueError:  # not the main thread: leave signal handling alone
+        yield
+        return
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+
+
 @contextmanager
 def preview(backend_http: str) -> Iterator[str]:
     """`vite preview` of the bundle, proxying /ws, /media, /api to the eval backend."""
     port = _free_port()
     env = {**os.environ, "BACKEND_URL": backend_http}
-    proc = subprocess.Popen(
-        [
-            "npx",
-            "vite",
-            "preview",
-            "--outDir",
-            str(DIST),
-            "--port",
-            str(port),
-            "--strictPort",
-            "--host",
-            "127.0.0.1",
-        ],
-        cwd=WEB,
-        env=env,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-    )
-    url = f"http://127.0.0.1:{port}"
-    try:
-        deadline = time.monotonic() + 30
-        while True:
-            try:
-                if httpx.get(url, timeout=1).status_code == 200:
-                    break
-            except httpx.HTTPError:
-                pass
-            if proc.poll() is not None or time.monotonic() > deadline:
-                raise RuntimeError(
-                    f"vite preview failed: {proc.stderr.read().decode() if proc.stderr else ''}"
-                )
-            time.sleep(0.2)
-        yield url
-    finally:
-        proc.terminate()
+    # stderr to a file, not a pipe nobody drains: a chatty server can't block on it.
+    log = tempfile.TemporaryFile()  # noqa: SIM115 - closed in the finally below
+    with _exit_on_sigterm():
+        proc = subprocess.Popen(
+            [
+                "npx",
+                "vite",
+                "preview",
+                "--outDir",
+                str(DIST),
+                "--port",
+                str(port),
+                "--strictPort",
+                "--host",
+                "127.0.0.1",
+            ],
+            cwd=WEB,
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=log,
+            start_new_session=True,  # own process group: killpg reaches node too
+        )
+        # Backstop for exits that skip `finally` (e.g. sys.exit from a signal elsewhere).
+        cleanup = functools.partial(_kill_group, proc)
+        atexit.register(cleanup)
+        url = f"http://127.0.0.1:{port}"
         try:
-            proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            proc.kill()
+            deadline = time.monotonic() + 30
+            while True:
+                try:
+                    if httpx.get(url, timeout=1).status_code == 200:
+                        break
+                except httpx.HTTPError:
+                    pass
+                if proc.poll() is not None or time.monotonic() > deadline:
+                    log.seek(0)
+                    raise RuntimeError(
+                        f"vite preview failed: {log.read().decode(errors='replace')}"
+                    )
+                time.sleep(0.2)
+            yield url
+        finally:
+            _kill_group(proc)
+            atexit.unregister(cleanup)
+            log.close()
 
 
 def _epoch_ms(value: str | None) -> float | None:

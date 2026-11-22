@@ -6,6 +6,9 @@ import { defineConfig } from "vitest/config";
 // The backend (make dev) serves HTTP + WS on :8000. In dev, Vite proxies to it
 // so the browser talks to one origin; set VITE_BACKEND_URL to bypass.
 const backend = process.env["BACKEND_URL"] ?? "http://localhost:8000";
+// Builds ship no sourcemaps: the public static site would serve the full source.
+// The dev server always has them; BUILD_SOURCEMAP=1 opts a local build back in.
+const buildSourcemap = process.env["BUILD_SOURCEMAP"] === "1";
 
 export default defineConfig({
     plugins: [react(), tailwindcss()],
@@ -27,7 +30,7 @@ export default defineConfig({
     },
     build: {
         target: "es2023",
-        sourcemap: true,
+        sourcemap: buildSourcemap,
     },
     test: {
         environment: "jsdom",
