@@ -1,2 +1,3 @@
 export { CreativeView } from "./CreativeView";
-export { ScreenPage } from "./ScreenPage";
+// `/screen` = the player plus the fullscreen shortcut (F or double-click).
+export { FullscreenScreenPage as ScreenPage } from "./fullscreen";
