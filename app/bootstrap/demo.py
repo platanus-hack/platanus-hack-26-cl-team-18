@@ -79,6 +79,7 @@ from app.modules.audience.application.classifier import (
     DegradedSignal,
     TagReport,
 )
+from app.modules.audience.application.partial_gate import PartialGate
 from app.modules.audience.application.playback_echo import PlaybackEcho
 from app.modules.audience.application.ports import AudienceTagger
 from app.modules.audience.application.ports.tagger import WarmScheduler
@@ -599,6 +600,8 @@ def register_demo(
     speech_request_id: str | None = None
     speech_request_base = SpeechEvidence()
     playback_echo = PlaybackEcho()
+    # Raw /screen partials need agreeing reads; alcohol waits for a final (ADR 0005).
+    partial_gate = PartialGate()
     voice_creative_id: str | None = None
     last_snapshot: tuple[AudienceSnapshot, Received] | None = None
     voice_degraded = False
@@ -1760,6 +1763,7 @@ def register_demo(
         nonlocal speech, speech_revision, speech_request_id, speech_request_base
         if utterance.screen_id != wire_screen_id or wire_screen_id not in speech_screens:
             return  # speech mode is off for this screen: drop it, unread
+        meaning = DEFAULT_KEYTERMS.understand(utterance.text)
         with lock:
             if playback_echo.matches(utterance.text, received.received_at):
                 if hub.dev_count():
@@ -1772,6 +1776,14 @@ def register_demo(
                         )
                     )
                 return
+            if not partial_gate.admit(
+                utterance_id=utterance.utterance_id,
+                is_final=utterance.is_final,
+                stabilized=utterance.partials_stabilized,
+                wanted=meaning.wanted,
+                rejected=meaning.rejected,
+            ):
+                return  # an unstable, repeated or age-restricted partial: wait for more
             speech_revision += 1
             revision = speech_revision
             correcting = (
@@ -1784,7 +1796,6 @@ def register_demo(
             else:
                 speech_request_id = utterance.utterance_id
                 speech_request_base = speech
-        meaning = DEFAULT_KEYTERMS.understand(utterance.text)
         # Canonical hits support old devices and replay. Explicit rejection in the
         # ephemeral text always overrides a stale or incorrect edge hit.
         wanted = tuple(dict.fromkeys((*utterance.keyterms_hit, *meaning.wanted)))

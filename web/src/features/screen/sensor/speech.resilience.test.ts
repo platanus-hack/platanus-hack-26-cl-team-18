@@ -198,14 +198,21 @@ describe("BrowserSpeech on a demo day", () => {
         scribe.say({ message_type: "partial_transcript", text: "un ca" });
         scribe.say({ message_type: "partial_transcript", text: "un café" });
         scribe.say({ message_type: "committed_transcript", text: " un café por favor " });
+        scribe.say({
+            message_type: "committed_transcript_with_timestamps",
+            text: "un café por favor",
+            words: [{ text: "un", type: "word", logprob: -0.4 }],
+        });
         scribe.say({ message_type: "partial_transcript", text: "y un red bull" });
+        const session = heard[0]!.utterance_id!.split(":")[0];
         expect(heard.map((u) => [u.utterance_id, u.is_final, u.text])).toEqual([
-            ["w0", false, "un ca"],
-            ["w0", false, "un café"],
-            ["w0", true, "un café por favor"],
-            ["w1", false, "y un red bull"],
+            [`${session}:0`, false, "un ca"],
+            [`${session}:0`, false, "un café"],
+            [`${session}:0`, true, "un café por favor"],
+            [`${session}:1`, false, "y un red bull"],
         ]);
         expect(heard.every((u) => u.language === "es")).toBe(true);
+        expect(heard.some((u) => u.partials_stabilized)).toBe(false);
         speech.stop();
     });
 
@@ -262,11 +269,12 @@ describe("BrowserSpeech on a demo day", () => {
         micBlocks(200); // ~0.5 s of speech before the socket opens
         expect(scribe.sent).toHaveLength(0);
         scribe.readyState = FakeScribe.OPEN;
-        // Each 128-sample block at 48 kHz → 42 samples at 16 kHz; 49 blocks first cross 2048.
-        micBlocks(49);
+        // Each 128-sample block at 48 kHz → 42.67 samples at 16 kHz (the fraction carries
+        // over, nothing is dropped); 48 blocks are exactly 2048.
+        micBlocks(48);
         expect(scribe.sent).toHaveLength(1);
         const bytes = atob(scribe.sent[0]!.audio_base_64).length;
-        expect(bytes).toBe(2 * 49 * 42); // only post-open audio, nothing from before
+        expect(bytes).toBe(2 * 2048); // only post-open audio, nothing from before
         speech.stop();
     });
 

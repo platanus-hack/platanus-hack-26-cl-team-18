@@ -7,15 +7,23 @@
  * not transcribed) to ElevenLabs Scribe Realtime with a single-use token the
  * backend mints; the API key never reaches the browser. Transcripts are
  * forwarded as ephemeral `audience.utterance` frames and never kept here.
+ *
+ * Accuracy and latency (measured live from Santiago, scribe_v3_live): the server
+ * VAD commits after VAD_SILENCE_S of silence instead of its 1.5 s default (0.3 s
+ * split "Uf, qué hambre. ¿Vamos por…" into two finals at the same latency);
+ * `include_timestamps` feeds SpeechTurn's babble filter; capture runs at 16 kHz
+ * so Chromium's resampler low-passes before decimating.
  */
 import type { AudienceUtterance } from "@/contract";
 import { backendHttpUrl } from "@/lib/config";
+import { SpeechTurn } from "./turn";
 
 const SCRIBE_URL = "wss://api.elevenlabs.io/v1/speech-to-text/realtime";
 const SAMPLE_RATE = 16_000;
 /** ~128 ms of 16 kHz mono PCM16 per chunk (Scribe accepts 0.1–1 s). */
 const CHUNK_SAMPLES = 2_048;
 const RETRY_MS = 10_000;
+const VAD_SILENCE_S = "0.5";
 
 /** Posts each 128-frame mic block to the main thread (copied; the worklet reuses it). */
 const CAPTURE_WORKLET = `
@@ -38,20 +46,74 @@ interface ScribeSession {
     keyterms: string[];
 }
 
-/** Float32 at any rate → 16 kHz PCM16 (linear interpolation; speech-band is enough). */
-export function toPcm16(input: Float32Array, fromRate: number): Int16Array {
-    const ratio = fromRate / SAMPLE_RATE;
-    const length = Math.floor(input.length / ratio);
-    const out = new Int16Array(length);
-    for (let i = 0; i < length; i++) {
-        const pos = i * ratio;
-        const j = Math.floor(pos);
-        const a = input[j] ?? 0;
-        const b = input[j + 1] ?? a;
-        const sample = Math.max(-1, Math.min(1, a + (b - a) * (pos - j)));
-        out[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+/**
+ * Float32 at any rate → 16 kHz PCM16, across consecutive mic blocks. Each output
+ * sample averages the input it covers (a box low-pass, so 48 kHz hiss doesn't
+ * alias into the speech band), and the fractional read position carries over:
+ * a 128-frame block at 48 kHz is 42.67 output samples, and dropping the 0.67
+ * every block would cut 1.6% of the audio as clicks. Only used when the browser
+ * can't open a 16 kHz AudioContext itself.
+ */
+export class Resampler {
+    private readonly ratio: number;
+    private tail = new Float32Array(0);
+    private pos = 0;
+
+    constructor(fromRate: number) {
+        this.ratio = fromRate / SAMPLE_RATE;
     }
-    return out;
+
+    push(input: Float32Array): Int16Array {
+        const buf = new Float32Array(this.tail.length + input.length);
+        buf.set(this.tail);
+        buf.set(input, this.tail.length);
+        const count = Math.max(0, Math.floor((buf.length - this.pos) / this.ratio));
+        const out = new Int16Array(count);
+        for (let k = 0; k < count; k++) {
+            const start = this.pos + k * this.ratio;
+            const from = Math.floor(start);
+            const to = Math.max(from + 1, Math.min(buf.length, Math.floor(start + this.ratio)));
+            let sum = 0;
+            for (let j = from; j < to; j++) sum += buf[j] ?? 0;
+            const mean = sum / (to - from);
+            const sample = Number.isFinite(mean) ? Math.max(-1, Math.min(1, mean)) : 0;
+            out[k] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+        }
+        const next = this.pos + count * this.ratio;
+        const keep = Math.min(Math.floor(next), buf.length);
+        this.tail = buf.slice(keep);
+        this.pos = next - keep;
+        return out;
+    }
+}
+
+/** One block, no carry-over (tests and one-shot conversions). */
+export function toPcm16(input: Float32Array, fromRate: number): Int16Array {
+    return new Resampler(fromRate).push(input);
+}
+
+/** A 16 kHz context, or the device rate where the browser refuses one (old Firefox). */
+function captureContext(stream: MediaStream): {
+    context: AudioContext;
+    source: MediaStreamAudioSourceNode;
+} {
+    try {
+        const context = new AudioContext({ sampleRate: SAMPLE_RATE });
+        try {
+            return { context, source: context.createMediaStreamSource(stream) };
+        } catch (error) {
+            void context.close().catch(() => {});
+            throw error;
+        }
+    } catch {
+        const context = new AudioContext();
+        return { context, source: context.createMediaStreamSource(stream) };
+    }
+}
+
+/** Anonymous and page-local: tells this page's utterances apart from a reload's. */
+function sessionTag(): string {
+    return Math.random().toString(36).slice(2, 10) || "w";
 }
 
 function base64(bytes: Uint8Array): string {
@@ -75,7 +137,9 @@ export class BrowserSpeech {
     private socket: WebSocket | null = null;
     private pending: Int16Array[] = [];
     private pendingSamples = 0;
-    private utterance = 0;
+    /** Settled-turn commit asked for by SpeechTurn: rides on the next chunk. */
+    private commitNext = false;
+    private readonly turn: SpeechTurn;
     /** Bumped by every start() and stop(): an older start that wakes up is stale. */
     private generation = 0;
     private language = "es";
@@ -84,7 +148,11 @@ export class BrowserSpeech {
         private readonly screenId: string,
         private readonly screenToken: string | null,
         private readonly onUtterance: (facts: UtteranceFacts) => void,
-    ) {}
+    ) {
+        this.turn = new SpeechTurn(sessionTag(), ({ text, isFinal, utteranceId }) => {
+            this.emit(text, isFinal, utteranceId);
+        });
+    }
 
     async start(): Promise<void> {
         if (this.running || Date.now() < this.retryAfterMs) return;
@@ -168,6 +236,8 @@ export class BrowserSpeech {
             audio_format: `pcm_${SAMPLE_RATE}`,
             language_code: session.language_code,
             commit_strategy: "vad",
+            vad_silence_threshold_secs: VAD_SILENCE_S,
+            include_timestamps: "true",
         });
         for (const term of session.keyterms.slice(0, 50)) params.append("keyterms", term);
         const socket = new WebSocket(`${SCRIBE_URL}?${params.toString()}`);
@@ -189,7 +259,7 @@ export class BrowserSpeech {
     }
 
     private async openMic(stream: MediaStream, run: number): Promise<void> {
-        const context = new AudioContext();
+        const { context, source } = captureContext(stream);
         this.context = context;
         const url = URL.createObjectURL(new Blob([CAPTURE_WORKLET], { type: "text/javascript" }));
         try {
@@ -201,10 +271,10 @@ export class BrowserSpeech {
             void context.close().catch(() => {}); // stop() ran meanwhile
             return;
         }
-        const source = context.createMediaStreamSource(stream);
         const node = new AudioWorkletNode(context, "team18-capture");
+        const resampler = new Resampler(context.sampleRate);
         node.port.onmessage = (event: MessageEvent<Float32Array>) => {
-            this.push(toPcm16(event.data, context.sampleRate));
+            this.push(resampler.push(event.data));
         };
         source.connect(node); // not connected to the speakers: capture only
     }
@@ -214,6 +284,7 @@ export class BrowserSpeech {
         if (socket === null || socket.readyState !== WebSocket.OPEN) return; // drop, never queue
         this.pending.push(pcm);
         this.pendingSamples += pcm.length;
+        if (this.turn.tick(Date.now())) this.commitNext = true;
         if (this.pendingSamples < CHUNK_SAMPLES) return;
         const merged = new Int16Array(this.pendingSamples);
         let at = 0;
@@ -223,11 +294,13 @@ export class BrowserSpeech {
         }
         this.pending = [];
         this.pendingSamples = 0;
+        const commit = this.commitNext;
+        this.commitNext = false;
         socket.send(
             JSON.stringify({
                 message_type: "input_audio_chunk",
                 audio_base_64: base64(new Uint8Array(merged.buffer)),
-                commit: false,
+                commit,
                 sample_rate: SAMPLE_RATE,
             }),
         );
@@ -241,32 +314,37 @@ export class BrowserSpeech {
             return;
         }
         if (typeof parsed !== "object" || parsed === null) return; // `null`, a bare number
-        const data = parsed as { message_type?: unknown; text?: unknown };
+        const data = parsed as { message_type?: unknown; text?: unknown; words?: unknown };
         const kind = typeof data.message_type === "string" ? data.message_type : undefined;
         const text = (typeof data.text === "string" ? data.text : "").trim().slice(0, 1000);
+        const now = Date.now();
         if (kind === "partial_transcript") {
             if (text === "") return;
-            this.emit(text, false);
+            this.turn.partial(text, now);
         } else if (kind === "committed_transcript") {
-            if (text !== "") this.emit(text, true);
-            this.utterance++;
+            this.turn.committed(text, now);
+        } else if (kind === "committed_transcript_with_timestamps") {
+            this.turn.committedWithWords(text, data.words, now);
         } else if (kind !== undefined && kind !== "session_started" && kind.includes("error")) {
             console.warn(`[sensor] scribe: ${kind}`);
         }
     }
 
-    private emit(text: string, isFinal: boolean): void {
+    private emit(text: string, isFinal: boolean, utteranceId: string): void {
         this.onUtterance({
             measured_at: new Date().toISOString(),
             text,
             language: this.language,
             keyterms_hit: [], // the backend matches keyterms itself (DEFAULT_KEYTERMS)
             is_final: isFinal,
-            utterance_id: `w${this.utterance}`,
+            utterance_id: utteranceId,
+            partials_stabilized: false, // raw Scribe partials: the backend's PartialGate decides
         });
     }
 
     private release(): void {
+        this.turn.reset(Date.now()); // settle a final in flight, retract a half-heard one
+        this.commitNext = false;
         const socket = this.socket;
         this.socket = null;
         if (socket !== null && socket.readyState <= WebSocket.OPEN) socket.close();

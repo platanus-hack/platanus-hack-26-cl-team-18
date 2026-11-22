@@ -327,3 +327,35 @@ PATH and LD_LIBRARY_PATH were needed for this machine's PortAudio discovery.
 outcome, including old edge hits containing both topics. Unit tests cover the
 partial → correction → final lifecycle; the new live test caches only authored
 synthetic audio, never microphone audio.
+
+## Amendment (2026-11-22): the /screen sensor reaches edge parity
+
+ADR 0010 moved speech onto the `/screen` page, which opened Scribe with only
+`commit_strategy=vad`: the server's default 1.5 s silence wait, no confidence,
+and none of the noisy-venue defences the edge pipeline measured (docs/evals.md).
+`scribe_v3_live` stays: it is still the newest realtime model.
+
+Measured live (bench line, `scribe_v3_live`, server VAD):
+
+| `vad_silence_threshold_secs` | Finals | Speech end → final |
+|---|---|---|
+| 0.3 | 2 ("Uf, qué hambre." / "¿Vamos por…?") | ~0.5 s |
+| **0.5** | **1, the whole request** | **~0.5 s** |
+| 1.5 (default) | 1 | ~1.5 s |
+
+Also verified: a client `commit: true` is honoured under `commit_strategy=vad`
+(committed ~230 ms later), and `include_timestamps` sends the plain commit
+followed ~20 ms later by its timestamped twin with per-word `logprob`.
+
+**Decisions**
+- Browser: `vad_silence_threshold_secs=0.5`, `include_timestamps=true`, capture
+  in a 16 kHz `AudioContext` (Chromium low-passes; the fallback resampler
+  box-filters and carries the fractional sample instead of dropping 1.6%).
+- `web/src/features/screen/sensor/turn.ts` ports the edge defences: finals with
+  mean logprob < -1.3 become empty (retracting their partials), a settled turn
+  (partial unchanged 1.2 s, ≥ 2 words, no dangling word) forces a commit, and a
+  commit ending on "no"/"sin"/"quiero"… is held and joined to the next without
+  the boundary punctuation ("No." + "Quiero cerveza." read as wanting beer).
+- Contract: `AudienceUtterance.partials_stabilized` (default `true`, the edge).
+  The browser sends `false`; the backend's `PartialGate` then requires two
+  agreeing partials, acts once per meaning, and keeps alcohol final-only.

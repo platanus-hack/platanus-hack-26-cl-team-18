@@ -421,3 +421,30 @@ def test_shared_voice_result_reaches_each_screen_without_blocking_another_offer(
             assert not any(m["type"] == "creative.upgraded" for m in observed)
         assert len(synth.requests) == 2
         client.portal.call(app.state.container.hub.remove_player, "two", observer)
+
+
+def test_raw_screen_partials_flip_the_ad_once_two_agree(speech_app) -> None:  # type: ignore[no-untyped-def]
+    """/screen sends raw Scribe partials (partials_stabilized=False): the backend stabilizes them."""
+    client, clock = speech_app
+    with (
+        client.websocket_connect("/ws/screen/demo-01") as player,
+        client.websocket_connect("/ws/agent") as agent,
+    ):
+        creative(player)
+        agent.send_text(snapshot_for("fitness", 1, clock.now_utc()).model_dump_json())
+        assert paid_brands(creative(player)) == ("Voltio",)
+        clock.advance(timedelta(milliseconds=500))
+        for seq in (1, 2):
+            agent.send_text(
+                AudienceUtterance(
+                    screen_id="demo-01",
+                    seq=seq,
+                    measured_at=T0,
+                    text="un café",
+                    language="es",
+                    is_final=False,
+                    utterance_id="w0",
+                    partials_stabilized=False,
+                ).model_dump_json()
+            )
+        assert set(paid_brands(creative(player))) == {"Voltio", "Café Patio"}

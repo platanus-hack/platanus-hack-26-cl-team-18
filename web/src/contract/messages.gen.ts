@@ -227,6 +227,7 @@ export const AudienceUtteranceSchema = z.strictObject({
   keyterms_hit: z.array(z.string()).max(32),
   is_final: z.boolean(),
   utterance_id: z.string().min(1).max(64).nullable(),
+  partials_stabilized: z.boolean(),
 });
 export type AudienceUtterance = z.infer<typeof AudienceUtteranceSchema>;
 

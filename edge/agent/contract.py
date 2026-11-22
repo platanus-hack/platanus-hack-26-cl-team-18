@@ -357,6 +357,9 @@ class AudienceUtterance(_Message):
     keyterms_hit: list[str] = Field(default_factory=list, max_length=32)
     is_final: bool = True  # partial corrections may retract earlier keyword hits
     utterance_id: Annotated[str, Field(min_length=1, max_length=64)] | None = None
+    # False: a raw recognizer partial (the /screen sensor); the backend waits for
+    # agreeing partials before acting. True: the sender already stabilized it (edge).
+    partials_stabilized: bool = True
 
 
 # ---------------------------------------------------------------- backend -> player
