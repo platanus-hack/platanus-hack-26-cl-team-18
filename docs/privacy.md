@@ -76,6 +76,7 @@ uv run pytest tests/unit/audience/test_recognition_vlm.py \
 | Concern | Enforced by | Test |
 |---|---|---|
 | Speech is off unless the screen opted in | `--speech-mode` flag; without it the process exits ([`edge/agent/speech/__main__.py`](../edge/agent/speech/__main__.py)). The launcher refuses speech without paid providers opted in | `tests/unit/api/test_demo_provider_isolation.py::test_speech_without_paid_opt_in_exits_before_starting_processes` |
+| A visible indicator while the mic is open | "Micrófono activo · solo temas, nada se graba" on the TV ([`ScreenPage.tsx`](../web/src/features/screen/ScreenPage.tsx)) | `web/src/features/screen/ScreenPage.test.tsx` |
 | Transcripts are never logged | The pipeline logs counts only | `edge/tests/test_speech_pipeline.py::test_utterance_text_never_reaches_the_logs` |
 | Transcripts are never stored | `AudienceUtterance.text` is "ephemeral: never persisted or logged" ([`messages.py`](../app/contract/messages.py)); no migration has a column for it | Schema review: `db/migrations/` has `auction`, `charge`, `campaign`, `redemption`, `outbox_event`, `basket_offer` (approved offer facts, "never sensor input") and `playback_receipt`, nothing else |
 | Spoken topics expire | TTL on topics | `tests/unit/api/test_speech_and_voice_flow.py::test_speech_expires_and_the_screen_reverts` |
@@ -118,7 +119,6 @@ uv run pytest tests/unit/audience/test_recognition_vlm.py \
 | G8 | Frames leave the store for our GPU service | "Never stored" is a promise plus one test, not an attestation | A venue LAN GPU box (an ADR 0007 option) keeps frames on site |
 | G9 | Residual of the G1 fix: a person the hot path missed stands **inside** a kept region (behind a detected person, or holding a detected object). A second, high-recall pose pass (`HighRecallPeople`) runs on every keyframe and blacks out the heads it finds, so the residual is a face *both* passes missed inside a kept region | Low: needs two misses *and* an overlap | Only a face model could close it fully, and the stack rules one out; the kept regions stay tight (object padding 10 %) |
 | G10 | The console's camera preview (demo only, first party) is the whole frame with detected heads blacked out, so a missed face shows there | First party, in memory, never stored; never sent to a third party | Leave the preview off (`EDGE_CAMERA_PREVIEW` unset) outside the demo |
-| G11 | **No on-screen mic indicator.** The "Micrófono activo" chip was removed from the TV on 2026-11-22 | Breaks product invariant 3 (speech mode shows a visible indicator); people near an opted-in screen aren't told it listens | Physical signage at the screen, or restore the chip |
 
 **Fixed on 2026-11-22:**
 
@@ -133,8 +133,8 @@ uv run pytest tests/unit/audience/test_recognition_vlm.py \
 - **"Is this facial recognition?"** No. There is no face model and no embeddings, and track ids are a per-session counter. The AI only ever sees what the detector vouched for (people and products), with every head blacked out; everything else, including someone the detector missed, is black. The backend checks that redaction and refuses any frame that fails it.
 - **"Can the AI guess my race, age or mood?"** The model's output schema has no field for any of it: segment ids are a closed list of interests. There's a test for that.
 - **"Do you record?"** No. The GPU service has a test that patches every file write and asserts none happen. The database holds per-moment counts, prices and hashed redemptions, nothing else.
-- **"Are you listening?"** Only on an opted-in screen. Transcripts are never logged (tested) or stored; topics expire.
-- **What's still open:** G5–G11 above. The biggest is legal (G7): signage and a DPIA before a real venue.
+- **"Are you listening?"** Only on an opted-in screen, with "Micrófono activo" on the TV. Transcripts are never logged (tested) or stored; topics expire.
+- **What's still open:** G5–G10 above. The biggest is legal (G7): signage and a DPIA before a real venue.
 
 ## Station restart and uncertain safety (2026-11-22)
 
