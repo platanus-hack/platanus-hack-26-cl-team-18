@@ -49,11 +49,11 @@
       ]
     },
     "juan-valdez": {
-      "photo": "coffee",
-      "video": "coffee",
+      "photo": "cl-cappuccino",
+      "video": "cl-cappuccino",
       "alternates": [
-        "cl-cappuccino",
-        "cl-medialunas"
+        "cl-medialunas",
+        "coffee"
       ]
     },
     "nescafe": {
@@ -110,11 +110,10 @@
       ]
     },
     "juan-valdez+super-8": {
-      "photo": "coffee",
-      "video": "coffee",
+      "photo": "cl-chocolate",
+      "video": "cl-chocolate",
       "alternates": [
-        "cl-cappuccino",
-        "cl-chocolate"
+        "cl-cappuccino"
       ]
     },
     "bilz-y-pap+pronto-copec": {
@@ -253,10 +252,9 @@
       ]
     },
     "ambrosoli+juan-valdez": {
-      "photo": "coffee",
-      "video": "coffee",
+      "photo": "cl-dulces",
+      "video": "cl-dulces",
       "alternates": [
-        "cl-dulces",
         "cl-cappuccino"
       ]
     },
@@ -287,6 +285,13 @@
       "alternates": [
         "cl-agua",
         "cl-ruta-5"
+      ]
+    },
+    "super-8": {
+      "photo": "cl-chocolate",
+      "video": "cl-chocolate",
+      "alternates": [
+        "cl-dulces"
       ]
     }
   }

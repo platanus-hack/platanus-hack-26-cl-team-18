@@ -156,11 +156,19 @@ NO_FILL_GAPS = {
         "wine glass",
     },
 }
+# The Chile store-shelf labels: the fictional catalog sells none of these (its five brands
+# are energy, coffee, pastry, water and beer), so they are unbiddable there.
+_SHELF_ONLY_CHILE = {"ice cream", "juice"}
+NO_FILL_GAPS["fictional"] |= _SHELF_ONLY_CHILE
 # Minor-likely groups: the age-restricted segment blocks its only bidders, and the
-# group default still does not apply (same gap).
+# group default still does not apply (same gap). In Chile every "ALTO EN" aisle (Ley
+# 20.606: snacks, juice, ice cream) is blocked for a group with a child.
 MINOR_NO_FILL_GAPS = {
     "fictional": NO_FILL_GAPS["fictional"] | {"beer bottle", "wine glass"},
-    "chile": NO_FILL_GAPS["chile"],
+    "chile": NO_FILL_GAPS["chile"]
+    | {"chips", *_SHELF_ONLY_CHILE}
+    # ALTO EN brands whose marker stands in for a label (Catalog.marker_cues).
+    | {"product:super-8", "product:ambrosoli", "product:colun", "product:soprole"},
 }
 
 

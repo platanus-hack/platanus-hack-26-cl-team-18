@@ -169,7 +169,9 @@ class AudienceClassifier:
         perception = (
             *self._cue_evidence(
                 SegmentSource.VISION,
-                ((item.label, item.score) for item in cues),
+                # Held markers too: a market may map one to a segment (a marker cue);
+                # without a rule a marker adds no evidence, only a held product.
+                ((item.label, item.score) for item in snapshot.objects),
                 now=now,
                 expires=expires,
                 count_per_hit=True,
