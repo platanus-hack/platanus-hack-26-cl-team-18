@@ -55,7 +55,7 @@ def test_markers_report_the_actual_source_on_the_frame_that_triggers_failover():
 @pytest.mark.parametrize("limit", [0, -1, 3, 10])
 def test_remote_in_flight_limit_cannot_exceed_two(limit):
     with pytest.raises(ValueError, match="max_in_flight"):
-        RemoteGpuDetector("ws://unused", max_in_flight=limit, encoder=lambda _: (b"", 1, 1))
+        RemoteGpuDetector("ws://localhost", max_in_flight=limit, encoder=lambda _: (b"", 1, 1))
 
 
 @pytest.mark.parametrize(

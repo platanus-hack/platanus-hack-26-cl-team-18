@@ -24,6 +24,7 @@ holds `round_trip_ms`, `server_ms`, `model_ms`, `encode_ms` and `jpeg_kb`.
 from __future__ import annotations
 
 import inspect
+import ipaddress
 import json
 import logging
 import math
@@ -33,6 +34,7 @@ import time
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from typing import Any
+from urllib.parse import urlparse
 
 from websockets.exceptions import ConnectionClosed, InvalidHandshake, InvalidStatus
 from websockets.sync.client import ClientConnection, connect
@@ -48,6 +50,57 @@ HEADER_PREFIX = struct.Struct(">I")  # 4-byte big-endian header length (gpu/serv
 _CONNECT_OPTS: dict[str, Any] = (
     {"legacy": True} if "legacy" in inspect.signature(connect).parameters else {}
 )
+
+# Raw, unblurred frames may use plain `ws://` only to a host that never leaves
+# the venue: loopback, RFC1918, link-local, IPv6 ULA (ADR 0007's venue LAN box).
+_LOCAL_NETWORKS = tuple(
+    ipaddress.ip_network(n)
+    for n in (
+        "127.0.0.0/8",
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "169.254.0.0/16",
+        "::1/128",
+        "fc00::/7",
+        "fe80::/10",
+    )
+)
+
+
+def _is_local_host(host: str) -> bool:
+    host = host.lower().rstrip(".")
+    if host == "localhost" or host.endswith((".localhost", ".local")):
+        return True
+    try:
+        address = ipaddress.ip_address(host.split("%", 1)[0])  # drop an IPv6 zone id
+    except ValueError:
+        return False  # a DNS name may resolve anywhere: it needs TLS
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
+        address = address.ipv4_mapped
+    return any(address in network for network in _LOCAL_NETWORKS)
+
+
+def check_gpu_url(url: str) -> str:
+    """Raise `ValueError` unless `url` keeps raw frames on TLS or on the venue LAN.
+
+    `wss://` anywhere; `ws://` only to loopback, a private/link-local address,
+    `localhost` or a `*.local` (mDNS) name. Invariant 3 / ADR 0007.
+    """
+    parsed = urlparse(url)
+    try:
+        host = parsed.hostname
+    except ValueError:
+        host = None
+    if parsed.scheme not in {"ws", "wss"} or not host:
+        raise ValueError("GPU URL must be a WebSocket URL (wss://host/infer)")
+    if parsed.scheme == "ws" and not _is_local_host(host):
+        raise ValueError(
+            "GPU URL must use wss:// (raw frames never cross the internet in plaintext); "
+            "ws:// is allowed only for loopback, private LAN or *.local hosts"
+        )
+    return url
+
 
 # frame -> (jpeg bytes, sent width, sent height)
 type Encoder = Callable[[Frame], tuple[bytes, int, int]]
@@ -100,7 +153,7 @@ class RemoteGpuDetector:
                 raise ValueError(f"{label} must be positive and finite")
         if stale_after_s is not None and (not math.isfinite(stale_after_s) or stale_after_s <= 0):
             raise ValueError("stale_after_s must be positive and finite")
-        self._url = url
+        self._url = check_gpu_url(url)
         self._token = token
         self._timeout_s = timeout_s
         self._connect_timeout_s = connect_timeout_s

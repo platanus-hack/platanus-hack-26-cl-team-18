@@ -165,6 +165,7 @@ class _FakeCapture:
 
     def __init__(self, script: _Script) -> None:
         self._script = script
+        self._grabbed: Any = None
         script.opened += 1
 
     def set(self, *_args: object) -> bool:
@@ -176,8 +177,19 @@ class _FakeCapture:
     def read(self) -> tuple[bool, Any]:
         return self._script.next()
 
+    def grab(self) -> bool:
+        ok, self._grabbed = self._script.next()
+        return ok
+
+    def retrieve(self) -> tuple[bool, Any]:
+        frame = self._grabbed
+        if frame is not None:
+            frame.decode_started = datetime.now(UTC)
+        time.sleep(self._script.decode_s)
+        return True, frame
+
     def release(self) -> None:
-        pass
+        self._script.released_on.append(threading.current_thread().name)
 
 
 class _Script:
@@ -185,9 +197,12 @@ class _Script:
         self.mode = "ok"
         self.opened = 0
         self.lock = threading.Lock()
+        self.released_on: list[str] = []
+        self.read_s = 0.002
+        self.decode_s = 0.0
 
     def next(self) -> tuple[bool, Any]:
-        time.sleep(0.002)
+        time.sleep(self.read_s)
         with self.lock:
             mode = self.mode
         if mode == "raise":
@@ -206,6 +221,7 @@ class _Script:
 class _Frame:
     def __init__(self, size: int) -> None:
         self.size = size
+        self.decode_started: datetime | None = None
 
 
 @pytest.fixture
@@ -247,6 +263,43 @@ def test_camera_reopens_after_being_unplugged(fake_cv2: _Script) -> None:
         serial = item[2]
         assert _wait_for(lambda: camera.latest(serial) is not None), "never reopened"
         assert fake_cv2.opened >= 2
+    finally:
+        camera.close()
+
+
+def test_camera_is_released_by_its_own_thread_after_the_last_read(fake_cv2: _Script) -> None:
+    from agent.vision.capture import LatestFrameCamera
+
+    camera = LatestFrameCamera(0)
+    assert _wait_for(lambda: camera.latest(0) is not None)
+    camera.close()
+    assert fake_cv2.released_on == ["camera"]  # never from close() under a live read
+
+
+def test_camera_close_never_releases_under_a_wedged_read(fake_cv2: _Script) -> None:
+    from agent.vision.capture import LatestFrameCamera
+
+    camera = LatestFrameCamera(0)
+    assert _wait_for(lambda: camera.latest(0) is not None)
+    fake_cv2.read_s = 0.5  # the next read wedges past close()'s join
+    time.sleep(0.05)
+    camera.close(timeout=0.05)
+    assert fake_cv2.released_on == []
+    assert _wait_for(lambda: fake_cv2.released_on == ["camera"]), "released once the read returned"
+
+
+def test_camera_stamps_measured_at_at_grab_not_after_decode(fake_cv2: _Script) -> None:
+    from agent.vision.capture import LatestFrameCamera
+
+    fake_cv2.decode_s = 0.05
+    camera = LatestFrameCamera(0)
+    try:
+        assert _wait_for(lambda: camera.latest(0) is not None)
+        item = camera.latest(0)
+        assert item is not None
+        frame, measured_at, _ = item
+        assert frame.decode_started is not None
+        assert measured_at <= frame.decode_started  # the decode isn't in measured_at
     finally:
         camera.close()
 
