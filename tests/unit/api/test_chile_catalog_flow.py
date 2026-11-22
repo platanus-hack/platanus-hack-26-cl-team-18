@@ -91,7 +91,12 @@ def test_the_main_aisles_have_a_rival_so_vcg_prices_are_real() -> None:
 def test_alto_en_products_are_never_shown_to_a_group_with_a_child() -> None:
     # Ley 20.606: no advertising of "ALTO EN" foods to children under 14; Ley 21.363
     # treats an alcohol brand's 0.0 line as alcohol advertising (Guinness 0.0).
+    # Sugared energy drinks carry "ALTO EN AZÚCARES" too (Score's own ad shows the seal).
     assert {slug for slug, b in BRANDS.items() if b.age_restricted} == {
+        "score",
+        "red-bull",
+        "monster",
+        "monster-energy",
         "guinness-0-0",
         "lays",
         "marco-polo",
@@ -399,3 +404,29 @@ def test_the_bidding_war_swaps_a_seat_in_the_basket_before_it_buys_the_screen(
     tmp_path, objects: list[str], hour: int, boost: dict[str, str], aired: list[str]
 ) -> None:
     assert sorted(_aired_with_boost(tmp_path, objects, hour, boost)) == sorted(aired)
+
+
+def test_with_a_child_in_the_group_the_hero_gives_way_to_the_coffee(tmp_path) -> None:
+    clock = FixedClock(datetime(2026, 11, 21, 5, tzinfo=UTC))  # 2 a.m.: the hero's hour
+    settings = AppSettings(
+        app_env="test", demo_simulator=True, media_dir=tmp_path, demo_catalog="chile"
+    )
+    container = build_container(settings, clock=clock)
+    objects = [
+        DetectedObject(label="energy drink can", score=1),
+        DetectedObject(label="cup", score=1),
+    ]
+    with (
+        TestClient(create_app(container=container)) as client,
+        client.websocket_connect("/ws/screen/demo-01") as player,
+        client.websocket_connect("/ws/agent") as agent,
+    ):
+        player.receive_json()
+        child = _snapshot(1, clock.now_utc(), objects).model_copy(
+            update={"minor_likely": MinorLikely(value=True, confidence=1)}
+        )
+        agent.send_text(child.model_dump_json())
+        aired = {slot.brand_name for slot in _creative(player).spec.slots}
+    energy = {b.name for b in CHILE.brands if b.category in {"energy_drink", "energy_pack"}}
+    assert aired and not aired & energy
+    assert "Juan Valdez" in aired

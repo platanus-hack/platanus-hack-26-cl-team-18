@@ -15,7 +15,7 @@ Team-supplied campaign references (WhatsApp, 2026-11-22), framed by the same hel
 (16:9 crop or pack shot) and shown only for their own brand: real product photography
 with the brand's own packaging, never edited or redrawn (CLAUDE.md invariant 4).
 `cl-domino-completos` (Dominó), `cl-starbucks-frappuccino` (Starbucks),
-`cl-guinness-pint` (Guinness 0.0), `cl-monster-hielo` (Monster) and `cl-vital-picnic`
+`cl-guinness-pint` (Guinness 0.0), `cl-monster-hielo` (Monster), `cl-score-guarana` (Score's own ad, ALTO EN seal kept) and `cl-vital-picnic`
 (Vital). Trademarks of their owners, used for a hackathon demo without affiliation.
 
 | File | Source | Author | License | Changes |

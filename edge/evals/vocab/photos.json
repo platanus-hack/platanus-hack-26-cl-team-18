@@ -260,6 +260,11 @@
    "id": "cl-red-bull-lineup",
    "repo": "assets/campaigns/photos/cl-red-bull-lineup.webp",
    "label": "energy drink can"
+  },
+  {
+   "id": "cl-score-guarana",
+   "repo": "assets/campaigns/photos/cl-score-guarana.webp",
+   "label": "energy drink can"
   }
  ]
 }

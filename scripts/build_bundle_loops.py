@@ -32,6 +32,8 @@ from app.modules.creative.infrastructure.campaign_assets import CAMPAIGN_ASSETS
 
 ASSETS = CAMPAIGN_ASSETS
 VIDEOS = ASSETS / "videos"
+# Real, credited campaign photography (assets/campaigns/photos/SOURCES.md).
+REAL_PHOTO_PREFIX = "cl-"
 CLIP_BY_CATEGORY = {
     "sports_goods": "energy.mp4",
     "energy_drink": "energy.mp4",
@@ -45,9 +47,19 @@ GRADE_OPACITY = "0.28"  # enough to tell Voltio's lime from Rayo's violet; foota
 
 
 def source_for(slug: str, category: str, media: dict[str, CampaignMedia]) -> Path:
-    """Only approved footage or the brand/category's approved, unbranded photography."""
-    # Category scenes are explicitly unbranded. Brand photography may be updated
-    # to show real packaging; do not bake its logo into a newly composed loop.
+    """Only approved footage or the brand/category's approved photography."""
+    # A brand with its own real campaign photo (the credited `cl-` shots: real cans,
+    # real food, real Chilean roads; never AI) loops that photo. The category clips below
+    # are the fictional catalog's AI scenery: a Chilean energy drink or coffee looping
+    # them read as fake on the TV ("AI vibecoded"). The logo stays a player overlay.
+    own = media_for(media, ((slug, category),))
+    if own is not None and own[1].photo_url:
+        photo = own[1].photo_url
+        if photo.rsplit("/", 1)[-1].startswith(REAL_PHOTO_PREFIX):
+            source = ASSETS / photo.removeprefix("/campaign-assets/")
+            if source.is_file():
+                return source
+    # Category scenes are explicitly unbranded.
     if category in CLIP_BY_CATEGORY:
         source = VIDEOS / CLIP_BY_CATEGORY[category]
         if source.is_file():
