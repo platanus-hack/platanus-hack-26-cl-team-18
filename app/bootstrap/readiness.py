@@ -6,6 +6,8 @@ import shutil
 from typing import TYPE_CHECKING, TypedDict
 from urllib.parse import urlsplit
 
+from pydantic import SecretStr
+
 from app.config.settings import AppSettings, _is_loopback
 from app.modules.creative.infrastructure.campaign_assets import missing_campaign_photos
 
@@ -19,32 +21,67 @@ class ProviderStatus(TypedDict):
     missing: list[str]
 
 
-def exposure_warnings(settings: AppSettings, public_base_url: str | None = None) -> list[str]:
-    """Open device sockets on a station reachable from outside (a tunnel or the LAN).
+def _set(secret: SecretStr | None) -> bool:
+    return bool(secret and secret.get_secret_value())
+
+
+def _listens_beyond_loopback(web_host: str | None) -> bool:
+    if web_host is None:
+        return False
+    return web_host in {"0.0.0.0", "::"} or not _is_loopback(web_host)
+
+
+def exposure_warnings(
+    settings: AppSettings, public_base_url: str | None = None, *, web_host: str | None = None
+) -> list[str]:
+    """Open sockets and switches on a station reachable from outside (a tunnel or the LAN).
 
     Outside prod an unset AGENT_TOKEN/SCREEN_TOKEN leaves its socket open (device_auth.py),
-    which is fine on localhost but lets anyone on the tunnel feed the loop or bill. A
-    warning only, never a failure: the demo must still start. Names only, never values.
+    which is fine on localhost but lets anyone on the tunnel feed the loop or bill. An
+    unset CONSOLE_TOKEN leaves `/ws/console` (every bid, charge and budget) open, and
+    without DEMO_KEY the "En vivo" switch (`POST /api/live`, app/api/live.py) answers
+    anyone who reaches the station. Prod refuses unset device tokens on its own, but its
+    console stays open without CONSOLE_TOKEN. Warnings only, never a failure: the demo
+    must still start. Names only, never values. `web_host`: where the player/console
+    listen (0.0.0.0 is the second laptop's LAN setup), when the caller knows it.
     """
     if settings.app_env == "prod":
-        return []  # prod refuses unset tokens on its own
+        if _set(settings.console_token):
+            return []
+        return [
+            "CONSOLE_TOKEN unset in prod: /ws/console streams every bid, charge and budget "
+            "to anyone with the URL; set it in the Render dashboard (openssl rand -hex 16)"
+        ]
     host = urlsplit(public_base_url or settings.public_base_url).hostname or ""
-    if not host or _is_loopback(host):
+    public = bool(host) and not _is_loopback(host)
+    if not public and not _listens_beyond_loopback(web_host):
         return []
+    where = f"PUBLIC_BASE_URL is {host}" if public else f"the web host is {web_host}"
+    warnings = []
     unset = [
         name
         for name, secret in (
             ("AGENT_TOKEN", settings.agent_token),
             ("SCREEN_TOKEN", settings.screen_token),
         )
-        if not (secret and secret.get_secret_value())
+        if not _set(secret)
     ]
-    if not unset:
-        return []
-    return [
-        f"{' and '.join(unset)} unset while PUBLIC_BASE_URL is {host}: anyone who reaches "
-        "it can feed the camera loop or bill plays; set them in .env (openssl rand -hex 16)"
-    ]
+    if unset:
+        warnings.append(
+            f"{' and '.join(unset)} unset while {where}: anyone who reaches "
+            "it can feed the camera loop or bill plays; set them in .env (openssl rand -hex 16)"
+        )
+    if not _set(settings.console_token):
+        warnings.append(
+            f"CONSOLE_TOKEN unset while {where}: anyone who reaches it can read the console "
+            "stream (bids, charges, budgets); set it in .env to close /ws/console"
+        )
+    if not _set(settings.demo_key):
+        warnings.append(
+            f"DEMO_KEY unset while {where}: anyone who reaches it can flip the console's "
+            "live switch (POST /api/live); with DEMO_KEY set only this machine or the key can"
+        )
+    return warnings
 
 
 def records_status(container: Container) -> dict[str, object]:
