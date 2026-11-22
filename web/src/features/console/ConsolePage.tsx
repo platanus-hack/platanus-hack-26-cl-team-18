@@ -53,6 +53,8 @@ export function ConsolePage() {
     const requested = new URLSearchParams(window.location.search).get("screen");
     const screen = requested && SCREEN_ID.test(requested) ? requested : "demo-01";
     const view = screens[screen] ?? emptyScreen;
+    // Missing image tags only lose an upgrade; the hot path still decides, so the console stays quiet about it.
+    const shownDegradation = view.degradation.filter((flag) => flag !== "vlm_unavailable");
 
     return (
         <AppShell>
@@ -63,14 +65,14 @@ export function ConsolePage() {
                     connection={connection}
                 />
             </ErrorBoundary>
-            {(lastError || view.degradation.length > 0) && (
+            {(lastError || shownDegradation.length > 0) && (
                 <div className="flex flex-wrap gap-2">
                     {lastError && (
                         <Badge tone="danger" appearance="soft" title={lastError}>
                             Error del servidor
                         </Badge>
                     )}
-                    {view.degradation.map((flag) => (
+                    {shownDegradation.map((flag) => (
                         <Badge key={flag} tone="warning" appearance="soft">
                             {DEGRADATION[flag]}
                         </Badge>
