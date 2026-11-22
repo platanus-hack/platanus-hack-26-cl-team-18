@@ -88,7 +88,8 @@ def _other_sense(surface: str, before: list[str], after: list[str]) -> bool:
 
 def normalize(text: str) -> str:
     """Lowercase, strip accents (keeping ñ), collapse punctuation to single spaces."""
-    lowered = text.lower().replace("ñ", "\0")
+    # NFC first: a decomposed "n + ◌̃" would otherwise lose its tilde ("sueño" → "sueno").
+    lowered = unicodedata.normalize("NFC", text).lower().replace("ñ", "\0")
     folded = "".join(
         ch for ch in unicodedata.normalize("NFKD", lowered) if not unicodedata.combining(ch)
     )

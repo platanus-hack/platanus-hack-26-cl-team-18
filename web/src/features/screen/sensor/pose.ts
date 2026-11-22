@@ -60,7 +60,7 @@ export function decodePeople(output: Float32Array, lb: Letterbox, minScore = 0.4
     const fy = (y: number) => (y - lb.padY) / lb.scale;
     for (let offset = 0; offset + ROW <= output.length; offset += ROW) {
         const score = output[offset + 4] ?? 0;
-        if (score < minScore) continue;
+        if (!(score >= minScore)) continue; // also drops NaN from a corrupted run
         if ((output[offset + 5] ?? 0) !== 0) continue; // class 0: person
         const keypoints: Point[] = [];
         for (let k = 0; k < 17; k++) {

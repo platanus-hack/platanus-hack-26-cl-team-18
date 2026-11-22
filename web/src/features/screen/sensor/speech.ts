@@ -191,14 +191,16 @@ export class BrowserSpeech {
     }
 
     private onScribe(raw: string): void {
-        let data: { message_type?: string; text?: string };
+        let parsed: unknown;
         try {
-            data = JSON.parse(raw) as typeof data;
+            parsed = JSON.parse(raw);
         } catch {
             return;
         }
-        const kind = data.message_type;
-        const text = (data.text ?? "").trim().slice(0, 1000);
+        if (typeof parsed !== "object" || parsed === null) return; // `null`, a bare number
+        const data = parsed as { message_type?: unknown; text?: unknown };
+        const kind = typeof data.message_type === "string" ? data.message_type : undefined;
+        const text = (typeof data.text === "string" ? data.text : "").trim().slice(0, 1000);
         if (kind === "partial_transcript") {
             if (text === "") return;
             this.emit(text, false);
