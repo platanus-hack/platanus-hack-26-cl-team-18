@@ -10,6 +10,7 @@ import { CreativeView } from "./CreativeView";
 import { HOUSE_AD } from "./house-ad";
 import { frontCreative, initialPlayerState, playerReducer, type Playable } from "./player-machine";
 import { preloadCreative } from "./preload";
+import { ScreenSensor, sensingEnabled } from "./sensor/link";
 import { latestAttention, toAttentionSample } from "./stages";
 import { VoicePlayer } from "./voice";
 import { holdScreenAwake } from "./wake-lock";
@@ -135,6 +136,16 @@ function ScreenPlayer() {
             socket.stop();
         };
     }, [socket]);
+
+    // The page is its own sensor (ADR 0010): camera and mic, gated by live.status.
+    useEffect(() => {
+        if (!sensingEnabled()) return;
+        const sensor = new ScreenSensor(screenId, screenToken());
+        sensor.start();
+        return () => {
+            sensor.stop();
+        };
+    }, [screenId]);
 
     // The TV must not sleep through a house ad or a photo creative (no video to hold it).
     useEffect(() => holdScreenAwake(), []);

@@ -6,7 +6,8 @@ token. Watching a screen does not: a player without the screen token still gets
 every creative (view-only), but its reports are refused, so it can never bill.
 
 - Agent: `Authorization: Bearer <AGENT_TOKEN>` (a header, so it never lands in
-  an access log).
+  an access log). The browser sensor in `/screen` (ADR 0010) offers the SCREEN_TOKEN
+  in the subprotocol list instead, like the player.
 - Player: browsers can't set WebSocket headers, so the token rides in the one
   they can, the subprotocol list: `["team18", "team18.token.<SCREEN_TOKEN>"]`.
   The server answers with `team18` and never echoes the token.
@@ -68,7 +69,12 @@ def accepted_subprotocol(ws: WebSocket) -> str | None:
 
 
 def agent_allowed(settings: AppSettings, ws: WebSocket) -> bool:
-    return token_allowed(settings, settings.agent_token, bearer_token(ws))
+    """The edge agent's bearer AGENT_TOKEN, or the browser sensor in `/screen` (ADR 0010):
+    a browser can't set headers, so it offers the SCREEN_TOKEN as a subprotocol."""
+    if token_allowed(settings, settings.agent_token, bearer_token(ws)):
+        return True
+    presented = subprotocol_token(ws)
+    return presented is not None and token_allowed(settings, settings.screen_token, presented)
 
 
 def screen_can_report(settings: AppSettings, ws: WebSocket) -> bool:

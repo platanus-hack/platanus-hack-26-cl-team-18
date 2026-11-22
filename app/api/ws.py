@@ -162,7 +162,7 @@ async def agent_socket(ws: WebSocket) -> None:
         # Refused at the handshake (HTTP 403): a stranger never reaches the loop.
         await ws.close(code=_POLICY_VIOLATION)
         return
-    await ws.accept()
+    await ws.accept(subprotocol=accepted_subprotocol(ws))
     gate = SeqGate()
     mailbox: ConflatingMailbox[tuple[Inbound, Received]] = ConflatingMailbox(
         max_items=c.settings.ws_agent_mailbox_size

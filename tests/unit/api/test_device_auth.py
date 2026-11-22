@@ -139,3 +139,33 @@ def test_prod_with_no_screen_token_lets_nobody_bill(tmp_path: Path) -> None:
     with client:
         watch_one_play(client, container, subprotocols=["team18", "team18.token.guess"])
     assert container.ledger.charges() == ()  # type: ignore[attr-defined]
+
+
+def test_the_screen_page_senses_with_the_screen_token_as_a_subprotocol(tmp_path: Path) -> None:
+    """ADR 0010: a browser can't set headers; /screen offers SCREEN_TOKEN like the player."""
+    client, _ = app(tmp_path, agent_token=AGENT, screen_token=SCREEN)
+    with client:
+        with client.websocket_connect(
+            "/ws/agent", subprotocols=["team18", f"team18.token.{SCREEN}"]
+        ) as agent:
+            assert agent.accepted_subprotocol == "team18"
+        with pytest.raises(WebSocketDisconnect) as refused:
+            with client.websocket_connect(
+                "/ws/agent", subprotocols=["team18", "team18.token.wrong-0123456789abcdef01234"]
+            ):
+                pass
+        assert refused.value.code == 1008
+
+
+def test_a_scribe_token_needs_the_screen_token_and_speech_mode(tmp_path: Path) -> None:
+    client, _ = app(
+        tmp_path,
+        screen_token=SCREEN,
+        speech_mode_screens=["demo-01"],
+        elevenlabs_api_key=None,
+    )
+    with client:
+        assert client.post("/api/speech/token/demo-01").status_code == 403
+        assert client.post("/api/speech/token/other", headers=bearer(SCREEN)).status_code == 409
+        # Authorized and opted in, but no provider key: never a token from nowhere.
+        assert client.post("/api/speech/token/demo-01", headers=bearer(SCREEN)).status_code == 503

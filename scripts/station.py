@@ -378,7 +378,7 @@ def main() -> int:
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
     print(
-        f"Player: {origin}/screen?id={args.screen}\nConsole: {origin}/console?screen={args.screen}",
+        f"Player: {origin}/screen?id={args.screen}&sense=0\nConsole: {origin}/console?screen={args.screen}",
         flush=True,
     )
     if args.web_host != "127.0.0.1":
@@ -395,7 +395,7 @@ def main() -> int:
         print(f"Demo tools (private): {origin}/demo/<DEMO_KEY from .env>", flush=True)
     # The player remembers the screen token after its first load (web/src/lib/device.ts);
     # it is only ever put in the URL the station opens, never printed.
-    player_url = f"{origin}/screen?id={args.screen}"
+    player_url = f"{origin}/screen?id={args.screen}&sense=0"  # the edge agent senses here
     if settings.screen_token and settings.screen_token.get_secret_value():
         player_url += f"&token={quote(settings.screen_token.get_secret_value())}"
         print("Player gets SCREEN_TOKEN from .env (opened for you)", flush=True)
