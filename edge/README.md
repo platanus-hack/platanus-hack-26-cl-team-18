@@ -209,6 +209,12 @@ blur, 15° tilt, occlusion) showed. Known limits, with the venue mitigation:
   showing two faces added ~2 lookers: 2.2 → 4.3). Keep them out of the frame,
   or mask them with `--ignore-region X1,Y1,X2,Y2` (frame fractions, repeatable;
   masked people are still blurred in keyframes).
+- **Distance bands are metres on the declared lens.** near ≤ 1.2 m, far ≥ 3 m
+  (far looks bill nothing: too far to read the ad), from shoulder width with a
+  pinhole model of a `--camera-hfov 90` webcam (docs/stack.md). Measured on the
+  stock clips: looking holds at 95-98 % out to ~4.5 m; a judge at 2-2.4 m is
+  "mid" (it was "far" at 2 m before the bands were derived from the lens). Pass
+  the venue webcam's real horizontal FOV, or a wider lens bills its 2 m viewers $0.
 
 Tests: `tests/test_vision.py` uses synthetic detections and needs neither
 OpenCV nor a camera (runs in CI). `tests/test_vision_opencv.py` exercises real

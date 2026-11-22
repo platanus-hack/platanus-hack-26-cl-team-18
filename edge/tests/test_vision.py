@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import itertools
 import json
+import math
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -20,7 +21,7 @@ from agent.vision.detector import (
     FailoverConfig,
     FailoverDetector,
 )
-from agent.vision.geometry import distance_band, head_box, is_looking
+from agent.vision.geometry import GeometryConfig, distance_band, head_box, is_looking
 from agent.vision.held import HELD_LABEL_PREFIX, HeldProductTracker, MarkerCatalog
 from agent.vision.minor import MinorVote
 from agent.vision.pipeline import JsonlRecorder, VisionPipeline, keyframe_regions
@@ -112,7 +113,40 @@ def test_low_confidence_eyes_mean_not_looking() -> None:
 def test_distance_band_from_shoulder_width() -> None:
     assert distance_band(person(shoulders=320), W, H) is DistanceBand.NEAR
     assert distance_band(person(shoulders=180), W, H) is DistanceBand.MID
-    assert distance_band(person(shoulders=100), W, H) is DistanceBand.FAR
+    assert distance_band(person(shoulders=60), W, H) is DistanceBand.FAR
+
+
+def _shoulders_px_at(metres: float, hfov_deg: float = 90.0) -> float:
+    """0.40 m shoulders seen by a pinhole camera `metres` away, in px of a 1280-wide frame."""
+    return W * 0.40 / (2 * metres * math.tan(math.radians(hfov_deg) / 2))
+
+
+@pytest.mark.parametrize(
+    ("metres", "band"),
+    [
+        (1.0, DistanceBand.NEAR),
+        # A judge standing an ordinary 2-2.5 m from the TV reads the ad: not "far" (that
+        # bills $0). On the stack's 90° camera the old 0.10 cutoff made this far at ~2 m,
+        # though its own comment said ≳ 3 m (measured on stock clips: 48% far at 2.0 m).
+        (2.0, DistanceBand.MID),
+        (2.4, DistanceBand.MID),
+        (3.5, DistanceBand.FAR),
+    ],
+)
+def test_distance_bands_follow_metres_on_the_stack_camera(
+    metres: float, band: DistanceBand
+) -> None:
+    assert distance_band(person(shoulders=_shoulders_px_at(metres)), W, H) is band
+
+
+def test_a_wider_camera_moves_the_cutoffs_with_its_field_of_view() -> None:
+    wide = GeometryConfig(camera_hfov_deg=120.0)
+    # The same 2.4 m judge looks smaller on a 120° lens: still mid once the lens is declared.
+    shoulders = _shoulders_px_at(2.4, hfov_deg=120.0)
+    assert distance_band(person(shoulders=shoulders), W, H, wide) is DistanceBand.MID
+    assert distance_band(person(shoulders=_shoulders_px_at(3.5, 120.0)), W, H, wide) is (
+        DistanceBand.FAR
+    )
 
 
 def test_distance_band_falls_back_to_box_height() -> None:

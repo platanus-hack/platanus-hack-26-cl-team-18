@@ -79,6 +79,7 @@ class _TimedDetector:
 async def run(args: argparse.Namespace) -> int:
     from agent.vision.association import ByteTrackAssociator
     from agent.vision.capture import ClipSource, LatestFrameCamera, VideoFileSource
+    from agent.vision.geometry import GeometryConfig
     from agent.vision.tracking import PersonTracker, TrackerConfig
 
     source: LatestFrameCamera | VideoFileSource | ClipSource
@@ -195,6 +196,7 @@ async def run(args: argparse.Namespace) -> int:
         link=link,
         tracker=PersonTracker(
             TrackerConfig(ignore_regions=tuple(args.ignore_region)),
+            GeometryConfig(camera_hfov_deg=args.camera_hfov),
             associator=ByteTrackAssociator(),
         ),
         held=HeldProductTracker(catalog) if catalog else None,
@@ -337,6 +339,14 @@ def argument_parser() -> argparse.ArgumentParser:
         metavar="X1,Y1,X2,Y2",
         help="frame fractions where people are not the audience (another TV, a rollup "
         "banner); repeatable. They are still blurred in keyframes.",
+    )
+    parser.add_argument(
+        "--camera-hfov",
+        type=float,
+        default=90.0,
+        metavar="DEGREES",
+        help="the webcam's horizontal field of view; sets where viewers count as near/far "
+        "(far = 3 m+, whose looks bill nothing). docs/stack.md specifies >= 90.",
     )
     parser.add_argument("--no-keyframes", action="store_true")
     parser.add_argument(

@@ -112,6 +112,12 @@ def exit_hint(log_path: Path) -> str:
     return next((line.strip()[:200] for line in reversed(lines) if line.strip()), "")
 
 
+def agent_geometry_args(*, camera_hfov: float) -> list[str]:
+    """The webcam's horizontal FOV, so the agent's near/far bands are metres on this lens
+    (far = 3 m+ bills nothing). docs/stack.md specifies a >= 90 degree webcam."""
+    return ["--camera-hfov", f"{camera_hfov:g}"]
+
+
 def agent_live_args(*, start_live: bool) -> list[str]:
     """Agents in a standby station wait for the switch before opening the camera loop or mic."""
     return [] if start_live else ["--await-live"]
@@ -179,6 +185,12 @@ def main() -> int:
     )
     parser.add_argument("--screen", default="demo-01")
     parser.add_argument("--camera", type=int, default=0)
+    parser.add_argument(
+        "--camera-hfov",
+        type=float,
+        default=90.0,
+        help="the webcam's horizontal field of view in degrees (near/far viewer bands)",
+    )
     parser.add_argument(
         "--paid-providers",
         action="store_true",
@@ -324,6 +336,7 @@ def main() -> int:
                 else "props/markers.json",
                 "--device",
                 "cpu",
+                *agent_geometry_args(camera_hfov=args.camera_hfov),
                 *agent_live_args(start_live=args.start_live),
             ],
             ROOT / "edge",

@@ -6,6 +6,7 @@ All functions are pure and deterministic.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from agent.contract import DistanceBand
@@ -18,12 +19,35 @@ class GeometryConfig:
     # Nose offset from the eye midpoint, as a fraction of the eye distance.
     # Facing the camera ≈ 0; a 45° head turn ≈ 0.5.
     max_nose_offset: float = 0.35
-    # Shoulder width as a fraction of frame width (720p, ~90° FOV webcam).
-    near_shoulder_fraction: float = 0.22  # ≲ 1.2 m
-    far_shoulder_fraction: float = 0.10  # ≳ 3 m
+    # Distance bands in metres, turned into shoulder width as a fraction of frame width
+    # by a pinhole model of the camera (docs/stack.md: wide FOV, ≥ 90°). "far" means too
+    # far to read the ad, so its looks bill nothing: a judge at 2-2.5 m must stay "mid".
+    camera_hfov_deg: float = 90.0
+    shoulder_width_m: float = 0.40
+    near_m: float = 1.2
+    far_m: float = 3.0
     # Fallback when shoulders aren't visible: box height as a fraction of frame height.
     near_height_fraction: float = 0.85
     far_height_fraction: float = 0.40
+
+    def __post_init__(self) -> None:
+        if not 30.0 <= self.camera_hfov_deg <= 170.0:
+            raise ValueError("camera_hfov_deg must be between 30 and 170 degrees")
+        if not 0 < self.near_m < self.far_m:
+            raise ValueError("distance bands need 0 < near_m < far_m")
+
+    def shoulder_fraction_at(self, metres: float) -> float:
+        """Shoulder width / frame width for a viewer `metres` from the camera."""
+        half_view = metres * math.tan(math.radians(self.camera_hfov_deg) / 2)
+        return self.shoulder_width_m / (2 * half_view)
+
+    @property
+    def near_shoulder_fraction(self) -> float:
+        return self.shoulder_fraction_at(self.near_m)
+
+    @property
+    def far_shoulder_fraction(self) -> float:
+        return self.shoulder_fraction_at(self.far_m)
 
 
 DEFAULT_GEOMETRY = GeometryConfig()
