@@ -297,3 +297,16 @@ def test_a_signal_dropout_keeps_the_ad_for_the_grace_too() -> None:
     )
     assert back.action is SwapAction.UNCHANGED
     assert dropout.hold_token is not None and desk.release(dropout.hold_token) is None
+
+
+def test_a_backward_clock_step_does_not_stretch_the_minimum_ad_time() -> None:
+    # NTP steps the station clock 30 s back 5 s into a play. Rebased, the play is
+    # still 5 s old, so a new group swaps at once instead of waiting ~30 s more.
+    desk = desk_on_air(opportunity(FITNESS_ONLY, *demo_bidders()))
+    desk.clock_stepped(timedelta(seconds=-30))
+    outcome = desk.run(
+        opportunity(CO_BRAND, *demo_bidders(), baskets=DEMO_BASKETS),
+        Trigger.MOMENT_CHANGED,
+        now=at(5 - 30),
+    )
+    assert outcome.swap_now, outcome.not_before

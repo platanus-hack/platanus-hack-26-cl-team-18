@@ -1,6 +1,7 @@
 import { ConsoleOutboundSchema, type ConsoleOutbound } from "@/contract";
 import { backendWsUrl } from "@/lib/config";
 import { createStore, useStore } from "@/lib/store";
+import { HEARTBEAT_IDLE_MS } from "@/lib/ws/heartbeat";
 import { TypedSocket } from "@/lib/ws/typed-socket";
 import { Badge } from "@/shared/ui/badge";
 import { ErrorBoundary } from "@/shared/ui/ErrorBoundary";
@@ -26,6 +27,8 @@ export function ConsolePage() {
             new TypedSocket<ConsoleOutbound>({
                 // ?live=1: a station console also gets what airs, what is next and the book.
                 url: `${backendWsUrl}/ws/console?live=1`,
+                // A dead Wi-Fi link must read "reconnecting", not "En vivo" with frozen numbers.
+                idleTimeoutMs: HEARTBEAT_IDLE_MS,
                 schema: ConsoleOutboundSchema,
                 onMessage: (message) => {
                     const at = Date.now();

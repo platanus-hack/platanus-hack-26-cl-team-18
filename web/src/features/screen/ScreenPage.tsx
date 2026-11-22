@@ -2,6 +2,7 @@ import { PlayerOutboundSchema, type PlayerInbound, type PlayerOutbound } from "@
 import { backendWsUrl, screenIdFromLocation } from "@/lib/config";
 import { screenProtocols, screenToken } from "@/lib/device";
 import { createStore, useStore } from "@/lib/store";
+import { HEARTBEAT_IDLE_MS } from "@/lib/ws/heartbeat";
 import { TypedSocket } from "@/lib/ws/typed-socket";
 import { ErrorBoundary } from "@/shared/ui/ErrorBoundary";
 import { useEffect, useState } from "react";
@@ -78,6 +79,8 @@ function ScreenPlayer() {
         () =>
             new TypedSocket<PlayerOutbound, PlayerInbound>({
                 url: `${backendWsUrl}/ws/screen/${encodeURIComponent(screenId)}?attention=1&live=1`,
+                // A silently dead link reconnects for the current creative (never a frozen ad).
+                idleTimeoutMs: HEARTBEAT_IDLE_MS,
                 // The screen token makes this player's reports bill; without it, view-only.
                 protocols: screenProtocols(screenToken()),
                 schema: PlayerOutboundSchema,

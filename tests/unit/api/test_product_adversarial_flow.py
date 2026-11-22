@@ -200,7 +200,11 @@ def test_two_screen_journey_keeps_billing_and_redemption_correct_in_every_operat
         container.router.on(AudienceSnapshot, observed)
         stale = snapshot_for("adult", 3, T0).model_copy(update={"screen_id": "south"})
         agent.send_text(stale.model_dump_json())
-        observed.wait_for(1)
+        # 4 s late against this link's normal: the gateway's freshness gate drops it
+        # (app/realtime/freshness.py) before the loop's own ordering ever has to.
+        agent.send_text("{}")
+        assert agent.receive_json()["type"] == "system.error"
+        assert container.freshness.dropped == 1 and observed.items == []
         with client.websocket_connect("/ws/screen/south") as reconnect:
             assert paid_brands(CreativeReady.model_validate(reconnect.receive_json())) == ()
 

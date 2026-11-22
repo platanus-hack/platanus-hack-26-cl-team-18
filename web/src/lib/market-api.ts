@@ -28,14 +28,30 @@ export async function fetchBook(signal?: AbortSignal, screenId = "demo-01"): Pro
     return ConsoleBookSchema.parse(await response.json());
 }
 
+/**
+ * A write that hasn't answered by now is abandoned (a phone on a stalled tunnel would
+ * otherwise wait minutes, and the slider's later moves with it). Every write here is
+ * safe to resend: bids carry a seq, top-ups an idempotency key, stock is a set.
+ */
+const POST_TIMEOUT_MS = 8_000;
+
 async function post(path: string, body: unknown): Promise<unknown> {
-    const response = await fetch(`${backendHttpUrl}${path}`, {
-        method: "POST",
-        headers: { "content-type": "application/json", ...demoHeaders() },
-        body: JSON.stringify(body),
-    });
-    if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);
-    return response.json();
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+        controller.abort();
+    }, POST_TIMEOUT_MS);
+    try {
+        const response = await fetch(`${backendHttpUrl}${path}`, {
+            method: "POST",
+            headers: { "content-type": "application/json", ...demoHeaders() },
+            body: JSON.stringify(body),
+            signal: controller.signal,
+        });
+        if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);
+        return await response.json();
+    } finally {
+        clearTimeout(timer);
+    }
 }
 
 let lastSeq = 0;

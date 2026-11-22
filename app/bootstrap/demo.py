@@ -161,8 +161,15 @@ from app.realtime.scheduler import Scheduler, thread_timer
 
 DEMO_SCREEN = "demo-01"
 MAX_MEASUREMENT_SKEW = timedelta(seconds=10)
+# The server stamps arrivals in order; a stamp this far behind the previous one means
+# the wall clock itself stepped back (NTP), not that a reading arrived late.
+CLOCK_STEP_BACK = timedelta(seconds=2)
 # Worst-case play length held against a winner's budget while it is on air (R-B6/R-B7).
 MAX_PLAY_SECONDS = 15
+# This run's receipts and redemptions, replayed to a station console that (re)connects:
+# a reload or a Wi-Fi drop on laptop B must not reset or undercount "Cobrado".
+SESSION_RECEIPTS = 200
+SESSION_REDEMPTIONS = 50
 logger = logging.getLogger(__name__)
 
 
@@ -523,7 +530,10 @@ def register_demo(
     last_media_key: str | None = None
     current_brief: CreativeBrief | None = None
     latest_observed_at: UtcTimestamp | None = None
+    latest_received_at: datetime | None = None  # server stamp: detects a backward clock step
     latest_console: tuple[ConsoleMessage, ...] = ()
+    session_receipts: deque[ConsoleReceipt] = deque(maxlen=SESSION_RECEIPTS)
+    session_redemptions: deque[ConsoleRedemption] = deque(maxlen=SESSION_REDEMPTIONS)
     # Classified speech topics only; utterance text is never kept (ADR 0005).
     speech = SpeechEvidence()
     speech_revision = 0  # order utterances independently of slow warm-provider completion
@@ -617,9 +627,24 @@ def register_demo(
     def receive_snapshot(snapshot: AudienceSnapshot, received: Received) -> None:
         decide(snapshot, received, reconsider=False)
 
+    def clock_stepped(delta: timedelta) -> None:
+        """Laptop A's wall clock stepped back by -delta (NTP). Caller holds the lock.
+
+        Agent and backend share that clock (ADR 0008 D7), so readings after the step
+        are fresh but dated before the ones already seen: shift the instants this
+        screen orders by, or the loop drops the room for the size of the step and
+        the minimum ad time holds the old ad just as long.
+        """
+        nonlocal latest_observed_at
+        logger.warning("wall clock stepped back %.1f s: rebasing the loop", -delta.total_seconds())
+        if latest_observed_at is not None:
+            latest_observed_at = UtcTimestamp.create(latest_observed_at.value + delta)
+        looking_samples.clear()  # dated before the step: they would never age out
+        desk.clock_stepped(delta)
+
     def decide(snapshot: AudienceSnapshot, received: Received, *, reconsider: bool) -> None:
         nonlocal current_creative, current_moment, latest_observed_at, latest_console
-        nonlocal last_snapshot, briefed_party
+        nonlocal last_snapshot, briefed_party, latest_received_at
         if snapshot.screen_id != wire_screen_id:
             return
         measured_at = UtcTimestamp.create(snapshot.measured_at.astimezone(UTC))
@@ -630,6 +655,19 @@ def register_demo(
         # bound for ordering so an ahead clock cannot block subsequent samples.
         observed_at = UtcTimestamp.create(min(measured_at.value, received.received_at))
         with lock:
+            if not reconsider:
+                stepped_back = (
+                    latest_received_at is not None
+                    and received.received_at < latest_received_at - CLOCK_STEP_BACK
+                )
+                if stepped_back and latest_received_at is not None:
+                    clock_stepped(received.received_at - latest_received_at)
+                if (
+                    stepped_back
+                    or latest_received_at is None
+                    or received.received_at > latest_received_at
+                ):
+                    latest_received_at = received.received_at
             if (
                 not reconsider
                 and latest_observed_at is not None
@@ -1497,6 +1535,8 @@ def register_demo(
             redeemed_at=redemption.redeemed_at,
         )
         if created:
+            with lock:
+                session_redemptions.append(message)
             hub.broadcast_console_threadsafe(message)
         return message, created
 
@@ -1552,7 +1592,10 @@ def register_demo(
                 charge=charge.amount,
                 attention_seconds=charge.attention_seconds,
             )
-        hub.broadcast_console_threadsafe(receipt_message(receipt), book_view())
+        receipt_line = receipt_message(receipt)
+        with lock:
+            session_receipts.append(receipt_line)
+        hub.broadcast_console_threadsafe(receipt_line, book_view())
         # That spend may leave the brand on air unable to cover its current lease.
         with lock:
             short = (
@@ -1884,9 +1927,13 @@ def register_demo(
                 hub.broadcast_console_threadsafe(*latest_console, book_view(), sink=sink)
             if hub.is_station_console(sink):
                 # What airs now, and the book even before the first decision: a station
-                # in standby still shows its brands, bids and the house ad.
+                # in standby still shows its brands, bids and the house ad. Then this
+                # run's receipts and redemptions, oldest first: the console dedupes them,
+                # so a reconnect or reload shows the backend's session, not a partial one.
                 extras = (current_creative,) if latest_console else (current_creative, book_view())
-                hub.broadcast_station_threadsafe(*extras, sink=sink)
+                hub.broadcast_station_threadsafe(
+                    *extras, *session_receipts, *session_redemptions, sink=sink
+                )
 
     def receive_keyframe(keyframe: AudienceKeyframe, received: Received) -> None:
         # Face-blurred JPEG, in memory only (never stored or logged); tagged on the warm path.

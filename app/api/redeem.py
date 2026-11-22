@@ -3,6 +3,8 @@
 Phones reach it through the tunnel (ADR 0008 D3). Thin transport: validate → call the
 demo controls in a worker thread → map domain errors. The page is self-contained HTML
 (no app bundle) and stores only a random device nonce in localStorage, never a person.
+On a bad phone link the redeem call gives up after 10 s and a second tap retries with
+the same nonce (idempotent), and the web fonts never block the first paint.
 """
 
 from __future__ import annotations
@@ -101,7 +103,7 @@ _PAGE = """<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Oferta {code}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Geist+Mono:wght@500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Geist+Mono:wght@500&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <style>
 :root{--bg:#fffdf8;--card:#ffffff;--fg:#13131e;--muted:#63636e;--edge:#ddd7cb;--ok:#186666;--ok-fill:#dff4eb;--ok-edge:#72ddaa}
 @media (prefers-color-scheme:dark){:root{--bg:#13131e;--card:#1c1c28;--fg:#f4f2ec;--muted:#ababb7;--edge:#33333f;--ok:#72ddaa;--ok-fill:#16302a;--ok-edge:#2f6b55}}
@@ -138,8 +140,11 @@ button[disabled]{opacity:.55}
   var go=document.getElementById("go"),done=document.getElementById("done");
   function say(text,bad){done.textContent=text;done.className=bad?"err":""}
   go.onclick=function(){go.disabled=true;
+    var ctl=window.AbortController?new AbortController():null,
+      t=ctl?setTimeout(function(){ctl.abort()},10000):0;
     fetch(location.pathname+"/redeem",{method:"POST",headers:{"content-type":"application/json"},
-      body:JSON.stringify({nonce:nonce})}).then(function(r){
+      body:JSON.stringify({nonce:nonce}),signal:ctl?ctl.signal:undefined}).then(function(r){
+        clearTimeout(t);
         if(r.status===410){say("Esta oferta expiró.",true);return}
         if(r.status===404){say("Esta oferta no existe.",true);return}
         if(r.status===409){say("Esta oferta ya se canjeó en todos los teléfonos que permite.",true);return}
@@ -147,7 +152,7 @@ button[disabled]{opacity:.55}
         return r.json().then(function(body){go.hidden=true;say(body.new===false
           ?"Ya canjeaste esta oferta en este teléfono. Muéstrala en caja."
           :"¡Listo! Muestra esta pantalla en caja.");});})
-      .catch(function(){say("Sin conexión. Muéstralo en caja.",true);go.disabled=false});};
+      .catch(function(){clearTimeout(t);say("Sin conexión. Muéstralo en caja o vuelve a tocar.",true);go.disabled=false});};
 })();
 </script></main></body></html>
 """
@@ -157,7 +162,7 @@ _NOTICE = """<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Oferta</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Geist+Mono:wght@500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Geist+Mono:wght@500&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <style>
 :root{--bg:#fffdf8;--card:#ffffff;--fg:#13131e;--muted:#63636e;--edge:#ddd7cb;--ok:#186666;--ok-fill:#dff4eb;--ok-edge:#72ddaa}
 @media (prefers-color-scheme:dark){:root{--bg:#13131e;--card:#1c1c28;--fg:#f4f2ec;--muted:#ababb7;--edge:#33333f;--ok:#72ddaa;--ok-fill:#16302a;--ok-edge:#2f6b55}}

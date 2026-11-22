@@ -101,3 +101,16 @@ def test_a_code_redeemed_by_too_many_phones_answers_409(tmp_path: Path) -> None:
         answer = test_client.post("/r/ABCDEFGH/redeem", json={"nonce": "anonymous-phone"})
     assert answer.status_code == 409
     assert "redeemed" in answer.json()["detail"]
+
+
+def test_the_page_never_hangs_a_judge_on_a_bad_link(client: TestClient) -> None:
+    # Venue stress (evals/network_stress.py phones): on 64 kbit/s and 800 ms RTT,
+    # one redeem in five timed out. A hung fetch left the button disabled forever;
+    # it must give up, say so, and let a second tap retry with the same nonce
+    # (idempotent: never a second credit). Fonts must not block the first paint
+    # on a LAN without internet either.
+    page = client.get("/r/ABCDEFGH").text
+    assert "AbortController" in page and "ctl.abort()" in page
+    assert 'rel="stylesheet"' in page and 'media="print" onload="this.media=\'all\'"' in page
+    notice = client.get("/r/NOPE1234").text
+    assert 'media="print" onload="this.media=\'all\'"' in notice

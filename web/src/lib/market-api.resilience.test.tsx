@@ -1,7 +1,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
-import { useBook } from "./market-api";
+import { setBidMultiplier, useBook } from "./market-api";
 
 /** A hung backend: polling every second must not pile up requests. */
 
@@ -86,4 +86,31 @@ it("waits for a slow backend instead of aborting every answer", async () => {
         root.unmount();
         await Promise.resolve();
     });
+});
+
+it("a bid POST that hangs on a stalled tunnel gives up, so the slider's next move is sent", async () => {
+    // A judge's phone on bad 4G: the request never answers. Without a timeout the
+    // BidQueue waits on it forever and every later slider move is silently lost.
+    vi.useFakeTimers();
+    const signals: AbortSignal[] = [];
+    vi.stubGlobal(
+        "fetch",
+        vi.fn(
+            (_input: string, init?: RequestInit) =>
+                new Promise<Response>((_resolve, reject) => {
+                    if (init?.signal) signals.push(init.signal);
+                    init?.signal?.addEventListener("abort", () => {
+                        reject(new DOMException("aborted", "AbortError"));
+                    });
+                }),
+        ),
+    );
+    const outcome = setBidMultiplier("c-1", "2.0").then(
+        () => "sent",
+        () => "gave up",
+    );
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(await outcome).toBe("gave up");
+    expect(signals).toHaveLength(1);
+    expect(signals[0]!.aborted).toBe(true);
 });

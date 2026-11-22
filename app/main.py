@@ -50,7 +50,7 @@ def create_app(
 
         expiry_task = asyncio.create_task(expire_recognition())
         startup_tasks: list[asyncio.Future[None]] = [
-            asyncio.ensure_future(hook()) for hook in built.startup
+            asyncio.ensure_future(hook()) for hook in (*built.startup, *built.background)
         ]
         try:
             yield

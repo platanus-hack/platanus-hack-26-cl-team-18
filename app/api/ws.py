@@ -222,6 +222,13 @@ async def agent_socket(ws: WebSocket) -> None:
                 received_at = c.clock.now_utc()
                 if not gate.admit((message.type, message.screen_id), message.seq):
                     continue  # duplicate or stale: drop, never queue
+                # A healed link flushes its backlog at once: drop it (freshness.py).
+                if isinstance(message, AudienceSnapshot) and not c.freshness.admit(
+                    (message.type, message.screen_id),
+                    measured_at=message.measured_at,
+                    received_at=received_at,
+                ):
+                    continue  # a stalled link's backlog: older than this link ever runs
                 if isinstance(message, AgentHello):
                     if message.role is AgentRole.VISION:
                         vision_screens.add(message.screen_id)

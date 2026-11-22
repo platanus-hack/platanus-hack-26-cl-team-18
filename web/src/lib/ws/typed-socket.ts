@@ -9,6 +9,10 @@ import type { z } from "zod";
  *   are counted and dropped; they never reach UI code.
  * - A handshake that doesn't open within `connectTimeoutMs` (a stalled tunnel
  *   or proxy) is abandoned and retried; the browser itself may wait minutes.
+ * - An open link that goes silent for `idleTimeoutMs` (a Wi-Fi drop without a
+ *   reset: the browser never notices, it sends no pings) is treated as dead and
+ *   reconnected, so the UI says "reconnecting" instead of showing frozen data as
+ *   live. Only for endpoints with a server heartbeat (live.status every 5 s).
  * - Reconnects forever with capped exponential backoff + jitter. The UI keeps
  *   showing the last good state while `status` is "reconnecting" (never blank).
  * - Connection status is a discriminated union, not boolean soup.
@@ -41,6 +45,8 @@ interface Options<In> {
     readonly maxFrameBytes?: number;
     readonly backoff?: { readonly baseMs: number; readonly maxMs: number };
     readonly connectTimeoutMs?: number;
+    /** Close and reconnect an open link that sent nothing for this long (heartbeat endpoints). */
+    readonly idleTimeoutMs?: number;
     /** Injected for tests. */
     readonly createSocket?: (url: string, protocols?: readonly string[]) => WebSocket;
     readonly random?: () => number;
@@ -73,6 +79,7 @@ export class TypedSocket<In, Out = never> {
     private socket: WebSocket | null = null;
     private retryTimer: ReturnType<typeof setTimeout> | null = null;
     private connectTimer: ReturnType<typeof setTimeout> | null = null;
+    private idleTimer: ReturnType<typeof setTimeout> | null = null;
     private attempt = 0;
     private stopped = true;
     private stats_: SocketStats = { received: 0, invalid: 0, reconnects: 0 };
@@ -104,6 +111,7 @@ export class TypedSocket<In, Out = never> {
         if (this.retryTimer !== null) clearTimeout(this.retryTimer);
         this.retryTimer = null;
         this.clearConnectTimer();
+        this.clearIdleTimer();
         const socket = this.socket;
         this.socket = null; // Invalidate callbacks before close (which may fire synchronously).
         socket?.close(1000, "client stop");
@@ -140,21 +148,43 @@ export class TypedSocket<In, Out = never> {
             this.clearConnectTimer();
             this.attempt = 0;
             this.setState({ status: "open", since: Date.now() });
+            this.armIdleTimer(socket);
         };
         socket.onmessage = (event: MessageEvent) => {
             if (this.stopped || this.socket !== socket) return;
+            this.armIdleTimer(socket); // any frame proves the link, valid or not
             this.handleFrame(event.data);
         };
         socket.onclose = (event?: CloseEvent) => {
             if (this.stopped || this.socket !== socket) return;
             this.socket = null;
             this.clearConnectTimer();
+            this.clearIdleTimer();
             this.options.onClose?.(event?.code ?? 1006);
             this.scheduleReconnect();
         };
         socket.onerror = () => {
             // onclose follows; reconnect is handled there.
         };
+    }
+
+    private armIdleTimer(socket: WebSocket): void {
+        const idleMs = this.options.idleTimeoutMs;
+        if (idleMs === undefined) return;
+        this.clearIdleTimer();
+        this.idleTimer = setTimeout(() => {
+            this.idleTimer = null;
+            if (this.stopped || this.socket !== socket) return;
+            this.socket = null; // Invalidate callbacks before close.
+            socket.close();
+            this.options.onClose?.(1006);
+            this.scheduleReconnect();
+        }, idleMs);
+    }
+
+    private clearIdleTimer(): void {
+        if (this.idleTimer !== null) clearTimeout(this.idleTimer);
+        this.idleTimer = null;
     }
 
     private clearConnectTimer(): void {

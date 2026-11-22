@@ -6,13 +6,14 @@ is where each bounded context plugs its handlers into the realtime router.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.bootstrap.demo import DemoControls
+from app.bootstrap.demo import DEMO_SCREEN, DemoControls
 from app.bootstrap.live import register_live_market
 from app.config.settings import AppSettings
 from app.contract.messages import AudienceKeyframe, LiveStatus
@@ -38,6 +39,7 @@ from app.modules.creative.infrastructure.elevenlabs_tts import ElevenLabsVoiceSy
 from app.modules.creative.infrastructure.media_store import FileMediaStore
 from app.modules.delivery.application.ports.ledger import ChargeLedger
 from app.modules.delivery.infrastructure.ledger import InMemoryChargeLedger, PostgresChargeLedger
+from app.realtime.freshness import FreshnessGate
 from app.realtime.hub import ConnectionHub, Sink
 from app.realtime.input_activity import InputActivity
 from app.realtime.live_switch import LiveSwitchboard
@@ -72,6 +74,9 @@ class Container:
     scheduler: Scheduler = thread_timer
     recognition: RecognitionStore = field(default_factory=RecognitionStore)
     input_activity: InputActivity = field(default_factory=InputActivity)
+    # Per screen, across agent connections: a reconnect's first reading may itself be
+    # the backlog of a stalled link, so the lag the last connection ran at is kept.
+    freshness: FreshnessGate = field(default_factory=FreshnessGate)
     # Warm, opt-in VLM enrichment of recognition tracklets (never in prod).
     vlm: RecognitionVlm | None = None
     # Claude vision behind AudienceTagger: keyframes -> IAB segments (AUDIENCE_AI, warm).
@@ -82,6 +87,8 @@ class Container:
     # Async hooks run once at app startup, in the background (connection warm-up,
     # voice-over pre-generation). They never block serving.
     startup: list[Callable[[], Awaitable[None]]] = field(default_factory=list)
+    # Loops that run for the app's whole life (the live heartbeat); cancelled at shutdown.
+    background: list[Callable[[], Awaitable[None]]] = field(default_factory=list)
     writer: WriteBehindWriter | None = None
     redemption_ledger: Any = None  # RedemptionLedger; in memory unless DATABASE_URL is set
     # CampaignRegistry: stable campaign ids, budgets and live bids (Postgres when set).
@@ -331,6 +338,10 @@ def register_dev_stream(container: Container) -> None:
     container.warm.observe(observe)
 
 
+# Pages treat ~3 missed heartbeats as a dead link (web/src/lib/ws/typed-socket.ts).
+LIVE_HEARTBEAT_S = 5.0
+
+
 def register_live_switch(container: Container) -> None:
     """Push the "En vivo" switch to every party that acts on it (live_switch.py).
 
@@ -355,6 +366,26 @@ def register_live_switch(container: Container) -> None:
         if screens:
             hub.broadcast_live_threadsafe(*map(live.status, screens), sink=sink)
 
+    async def heartbeat() -> None:
+        # A browser can't see a link that silently died (no client-side pings): the
+        # TV kept airing a frozen ad and the console said "En vivo" over frozen
+        # numbers. The current status every few seconds lets each page notice the
+        # silence (TypedSocket `idleTimeoutMs`) and reconnect for a full catch-up;
+        # it also repairs a status a stalled link lost (the mic indicator).
+        while True:
+            await asyncio.sleep(LIVE_HEARTBEAT_S)
+            try:
+                known = {status.screen_id for status in live.statuses()}
+                screens = sorted(known | set(hub.connected_screens())) or [DEMO_SCREEN]
+                statuses = [live.status(screen_id) for screen_id in screens]
+                await asyncio.gather(
+                    hub.broadcast_live(*statuses),
+                    *(hub.send_to_screen(status) for status in statuses),
+                )
+            except Exception:
+                logger.exception("live heartbeat failed")
+
     live.on_change(announce)
     container.router.on_player_connected(player_connected)
     container.router.on_console_connected(console_connected)
+    container.background.append(heartbeat)

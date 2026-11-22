@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.modules.auction.application.ports.engine import AuctionEngine
 from app.modules.auction.domain.opportunity import AdOpportunity
@@ -130,6 +130,15 @@ class AuctionDesk:
         """The player confirmed the on-air creative is visible: holds count from here."""
         if self._on_air is not None and at > self._on_air.displayed_at:
             self._on_air = replace(self._on_air, displayed_at=at)
+
+    def clock_stepped(self, delta: timedelta) -> None:
+        """The wall clock jumped by `delta` (NTP step): the on-air play keeps its age.
+
+        Without this a backward step leaves `displayed_at` in the future, so the
+        minimum ad time would hold every new moment for the size of the step.
+        """
+        if self._on_air is not None:
+            self._on_air = replace(self._on_air, displayed_at=self._on_air.displayed_at + delta)
 
     @property
     def hold_pending(self) -> bool:

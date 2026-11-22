@@ -37,6 +37,12 @@ export interface ScreenView {
     readonly billed: number;
     /** Newest first; QR/promo redemptions credited to every brand in the basket. */
     readonly redemptions: readonly ConsoleRedemption[];
+    /**
+     * Keys of every receipt and redemption already counted. The backend replays the
+     * run's receipts on each (re)connect, so a replay must neither double count nor
+     * add timeline lines again. Bounded like the backend's replay (SESSION_*).
+     */
+    readonly counted: readonly string[];
     /** What the screen airs now (a station console gets it; ?live=1). */
     readonly onAir: CreativeReady | CreativeUpgraded | null;
     /** Newest first: the loop narrated, one line per fact. */
@@ -57,6 +63,16 @@ export const EVENT_WINDOW = 40;
 
 export const RECEIPT_WINDOW = 20;
 export const REDEMPTION_WINDOW = 10;
+const COUNTED_WINDOW = 500;
+
+/** Identity of a counted fact: one play window's receipt, one redemption. */
+function countedKey(m: ConsoleOutbound): string | null {
+    if (m.type === "console.receipt") {
+        return `r|${m.screen_id}|${m.creative_id}|${m.played_s}|${m.attention_seconds}|${m.total.amount}`;
+    }
+    if (m.type === "console.redemption") return `q|${m.screen_id}|${m.code}|${m.redeemed_at}`;
+    return null;
+}
 
 export interface ConsoleState {
     readonly connection: ConnectionState;
@@ -80,6 +96,7 @@ export const emptyScreen: ScreenView = {
     receipts: [],
     billed: 0,
     redemptions: [],
+    counted: [],
     onAir: null,
     events: [],
     next: null,
@@ -175,6 +192,14 @@ export function consoleReducer(state: ConsoleState, event: ConsoleEvent): Consol
     }
     const at = event.at ?? 0;
     const m = event.message;
+    const key = countedKey(m);
+    if (key !== null && "screen_id" in m) {
+        if (state.screens[m.screen_id]?.counted.includes(key)) return state; // a replay
+        state = update(state, m.screen_id, (v) => ({
+            ...v,
+            counted: [key, ...v.counted].slice(0, COUNTED_WINDOW),
+        }));
+    }
     if (describe(m) !== null && "screen_id" in m) {
         state = update(state, m.screen_id, (v) => withEvent(v, m, at));
     }
