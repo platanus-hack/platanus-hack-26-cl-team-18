@@ -153,8 +153,10 @@ The frame path, in `agent/vision/` (ADR 0004, 0007, 0008):
   an existing track but never create a new one. Inference failover retains
   tracks; gaps over 800 ms and resolution changes reset association. The
   dependency-free IoU matcher remains available for synthetic tests.
-- **Held products:** `held.py`. A marker near a person box, seen in 3 of the
-  last 8 frames, is a held product. `props/markers.json` maps marker id →
+- **Held products:** `held.py`. A marker within reach of a tracked person's
+  visible wrist (0.75 shoulder widths), seen in 3 of the last 8 frames, is a
+  held product. A prop on the demo table or behind a passer-by is not (a
+  detector without pose keypoints falls back to the padded person box). `props/markers.json` maps marker id →
   brand slug. Until the contract has a field, a held product travels as
   `DetectedObject(label="product:<slug>")` (ADR 0008 D2 has the two hand-offs).
 - **Noise filters** (ADR 0008 D10): people count only when their box is at
@@ -178,7 +180,32 @@ The frame path, in `agent/vision/` (ADR 0004, 0007, 0008):
   samples for these percentiles. Duplicate or out-of-order detections are
   dropped before tracking, safety votes or publication.
 - **Keyframes:** `pipeline.py` sends a blurred, 512 px JPEG at most every
-  1.5 s while someone is in frame.
+  1.5 s while someone is in frame. Heads are blurred from the hot-path persons
+  *and* from a high-recall pose pass (`HighRecallPeople`: 1280 px, conf 0.05)
+  run inside the encoder thread, because in a crowd the hot path alone left
+  50-76 % of faces unblurred.
+
+### Crowded hall (third vision audit)
+
+`tests/test_crowded_hall.py` pins what adversarial augmentations of real stock
+footage (crowd, -2 EV, backlight, TV colour cast, 50 Hz banding, AE hunting,
+blur, 15° tilt, occlusion) showed. Known limits, with the venue mitigation:
+
+- **Prop markers are small.** The 56 mm print reads reliably to ~1.5 m on a
+  90° webcam (2 m at 0°-30° yaw; 0 % at 2.5 m), and any finger over its black
+  border or a 1.5 px motion blur beyond 1 m kills it. Print the marker at
+  ≥ 100 mm, keep fingers off it, and have the judge hold the cup still at 1-1.5 m.
+- **The hall inflates the audience.** Background people ≥ 18 % of the frame
+  height count: a duo in front of a crowd published 3.4 people / 1.4 looking
+  (alone: 1.8 / 0.9), and facts change ~40-60 times/min instead of ~6. Aim the
+  camera down and at a wall or backdrop, not at the aisle.
+- **Our own TV light moves the facts.** A colour cast that changes with each
+  creative tripled fact changes on a still group (12 → 42/min). Light the
+  audience with a constant key light; keep the TV out of reflective surfaces.
+- **Life-size people on other screens or rollup banners are people** (a TV
+  showing two faces added ~2 lookers: 2.2 → 4.3). Keep them out of the frame,
+  or mask them with `--ignore-region X1,Y1,X2,Y2` (frame fractions, repeatable;
+  masked people are still blurred in keyframes).
 
 Tests: `tests/test_vision.py` uses synthetic detections and needs neither
 OpenCV nor a camera (runs in CI). `tests/test_vision_opencv.py` exercises real

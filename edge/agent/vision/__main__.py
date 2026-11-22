@@ -29,7 +29,12 @@ from pathlib import Path
 from agent.backend_link import BackendLink
 from agent.contract import AgentHello, AgentRole
 from agent.live import LiveGate
-from agent.vision.adapters import DEFAULT_OBJECT_MODEL, ArucoMarkerDetector, UltralyticsDetector
+from agent.vision.adapters import (
+    DEFAULT_OBJECT_MODEL,
+    ArucoMarkerDetector,
+    HighRecallPeople,
+    UltralyticsDetector,
+)
 from agent.vision.detector import (
     CompositeDetector,
     Detector,
@@ -73,7 +78,7 @@ class _TimedDetector:
 async def run(args: argparse.Namespace) -> int:
     from agent.vision.association import ByteTrackAssociator
     from agent.vision.capture import ClipSource, LatestFrameCamera, VideoFileSource
-    from agent.vision.tracking import PersonTracker
+    from agent.vision.tracking import PersonTracker, TrackerConfig
 
     source: LatestFrameCamera | VideoFileSource | ClipSource
     if args.record:
@@ -100,6 +105,12 @@ async def run(args: argparse.Namespace) -> int:
         cpu_threads=args.cpu_threads,
     )
     await asyncio.to_thread(local.warmup)
+    keyframes = None
+    if not (args.no_keyframes or args.record):
+        # Keyframes leave the process (VLM): redact with a high-recall pass too.
+        redaction = HighRecallPeople(args.pose_model, device=args.device)
+        await asyncio.to_thread(redaction.warmup)
+        keyframes = blur_encoder(more_people=redaction)
     remote: RemoteGpuDetector | None = None
     catalog = MarkerCatalog.from_file(Path(args.markers)) if args.markers else None
     main_detector: Detector = local
@@ -173,12 +184,15 @@ async def run(args: argparse.Namespace) -> int:
         source=source,
         detector=detector,
         link=link,
-        tracker=PersonTracker(associator=ByteTrackAssociator()),
+        tracker=PersonTracker(
+            TrackerConfig(ignore_regions=tuple(args.ignore_region)),
+            associator=ByteTrackAssociator(),
+        ),
         held=HeldProductTracker(catalog) if catalog else None,
         snapshots=SnapshotBuilder(
             args.screen, SnapshotConfig(debounce=timedelta(milliseconds=args.debounce_ms))
         ),
-        keyframes=None if (args.no_keyframes or args.record) else blur_encoder(),
+        keyframes=keyframes,
         # Wall-clock sources only: a lost camera publishes an empty room, not the last group.
         config=VisionConfig(blind_after=None if args.record else timedelta(seconds=2)),
         live=live,
@@ -235,6 +249,16 @@ def _positive_milliseconds(value: str) -> float:
     if not math.isfinite(number) or number <= 0:
         raise argparse.ArgumentTypeError("must be positive, finite milliseconds")
     return number
+
+
+def _region(value: str) -> tuple[float, float, float, float]:
+    try:
+        x1, y1, x2, y2 = (float(part) for part in value.split(","))
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("expected X1,Y1,X2,Y2 frame fractions") from exc
+    if not (0 <= x1 < x2 <= 1 and 0 <= y1 < y2 <= 1):
+        raise argparse.ArgumentTypeError("need 0 <= x1 < x2 <= 1 and 0 <= y1 < y2 <= 1")
+    return (x1, y1, x2, y2)
 
 
 def dev_stream_on(args: argparse.Namespace) -> bool:
@@ -296,6 +320,15 @@ def argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--minor-hits", type=int, default=7, help="hits needed in the window")
     parser.add_argument("--device", default=None, help="e.g. 0, cpu, mps")
     parser.add_argument("--markers", help="JSON {marker_id: brand_slug} for the demo props")
+    parser.add_argument(
+        "--ignore-region",
+        type=_region,
+        action="append",
+        default=[],
+        metavar="X1,Y1,X2,Y2",
+        help="frame fractions where people are not the audience (another TV, a rollup "
+        "banner); repeatable. They are still blurred in keyframes.",
+    )
     parser.add_argument("--no-keyframes", action="store_true")
     parser.add_argument(
         "--dev-stream",

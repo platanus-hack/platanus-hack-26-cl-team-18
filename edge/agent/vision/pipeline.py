@@ -12,7 +12,7 @@ import contextlib
 import json
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -30,7 +30,7 @@ from agent.vision.held import HeldProductTracker
 from agent.vision.minor import ChildPropVote, MinorVote, strongest
 from agent.vision.snapshot import SnapshotBuilder
 from agent.vision.tracking import PersonTracker
-from agent.vision.types import FrameDetections
+from agent.vision.types import FrameDetections, PersonDetection
 from agent.vision.vocabulary import CHILD_PROP_LABELS
 
 logger = logging.getLogger(__name__)
@@ -124,10 +124,10 @@ class VisionPipeline:
         self._latest_at = detections.measured_at
         detected_at = datetime.now(UTC)
         tracks = self._tracker.update(detections)
-        held = self._held.update(detections.markers, tracks) if self._held else []
         # The tracked (near) people of this frame: a refreshed track holds its person's box.
         boxes = [t.box for t in tracks]
         tracked = [p for p in detections.persons if p.box in boxes]
+        held = self._held.update(detections.markers, tracks, tracked) if self._held else []
         minor = strongest(
             self._minor.update(tracked, detections.height),
             self._child_props.update(detections.objects, boxes),
@@ -326,12 +326,28 @@ class VisionPipeline:
         self.stats.keyframes += 1
 
 
-def blur_encoder(long_side: int = 512, quality: int = 80) -> KeyframeEncoder:
-    """Keyframe encoder that blurs every detected head before encoding (needs OpenCV)."""
+def blur_encoder(
+    long_side: int = 512,
+    quality: int = 80,
+    *,
+    more_people: Callable[[Frame], Sequence[PersonDetection]] | None = None,
+) -> KeyframeEncoder:
+    """Keyframe encoder that blurs every detected head before encoding (needs OpenCV).
+
+    `more_people` is a second, high-recall person source run on the frame being
+    encoded (`adapters.HighRecallPeople`). The hot-path detections are tuned for
+    counting, not redaction: in a crowd they miss most background faces, which
+    would then reach the VLM unblurred (invariant 3). Its heads are blurred too.
+    It runs inside the encoder (a worker thread, one keyframe at most every 1.5 s),
+    never in the hot path.
+    """
     from agent.vision.capture import blurred_keyframe
 
     def encode(frame: Frame, detections: FrameDetections) -> bytes:
-        heads = [head_box(person) for person in detections.persons]
+        people = list(detections.persons)
+        if more_people is not None:
+            people += more_people(frame)
+        heads = [head_box(person) for person in people]
         return blurred_keyframe(frame, heads, long_side=long_side, quality=quality)
 
     return encode

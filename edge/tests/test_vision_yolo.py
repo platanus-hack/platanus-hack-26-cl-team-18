@@ -87,3 +87,23 @@ def test_full_pipeline_on_a_real_photo_produces_a_valid_snapshot(
     last = sent[-1]
     assert getattr(last, "people", 0) >= 2
     assert getattr(last, "looking", 0) >= 1
+
+
+def test_keyframe_redaction_finds_the_small_faces_the_hot_path_misses(
+    detector: UltralyticsDetector,
+) -> None:
+    """A crowd mosaic (bus.jpg shrunk into a 4x3 grid): the high-recall pass behind
+    keyframe redaction must see more faces than the hot path (crowded-hall audit)."""
+    import numpy as np
+
+    from agent.vision.adapters import HighRecallPeople
+
+    bus = cv2.resize(cv2.imread(str(ASSETS / "bus.jpg")), (320, 240))
+    crowd = np.vstack([np.hstack([bus] * 4)] * 3)  # 1280 x 720
+
+    def faces(people: list) -> int:  # people with at least two face keypoints
+        return sum(sum(k.confidence >= 0.3 for k in p.keypoints[:5]) >= 2 for p in people)
+
+    hot_path = faces(list(detector.detect(crowd, T0).persons))
+    redaction = faces(HighRecallPeople(os.environ.get("YOLO_POSE", "yolo26n-pose.pt"))(crowd))
+    assert redaction > hot_path

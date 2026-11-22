@@ -22,6 +22,8 @@ class Kp(IntEnum):
     RIGHT_EAR = 4
     LEFT_SHOULDER = 5
     RIGHT_SHOULDER = 6
+    LEFT_WRIST = 9
+    RIGHT_WRIST = 10
 
 
 @dataclass(frozen=True, slots=True)

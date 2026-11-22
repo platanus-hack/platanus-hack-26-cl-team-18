@@ -50,8 +50,11 @@ def person(
     facing: bool = True,
     shoulders: float = 180,
     score: float = 0.9,
+    hand: tuple[float, float] | None = None,
 ) -> PersonDetection:
-    """A synthetic pose detection. `facing=False` turns the nose toward one eye."""
+    """A synthetic pose detection. `facing=False` turns the nose toward one eye.
+
+    `hand` places a visible right wrist; without it neither wrist is visible."""
     cx = x + width / 2
     nose_x = cx if facing else cx + 30
     kps = [Keypoint(0, 0, 0.0)] * 17
@@ -62,6 +65,8 @@ def person(
     kps[4] = Keypoint(cx - 35, top + 45, 0.6)
     kps[5] = Keypoint(cx + shoulders / 2, top + 140, 0.9)
     kps[6] = Keypoint(cx - shoulders / 2, top + 140, 0.9)
+    if hand is not None:
+        kps[10] = Keypoint(hand[0], hand[1], 0.8)
     return PersonDetection(box=Box(x, top, x + width, bottom), score=score, keypoints=tuple(kps))
 
 
@@ -733,7 +738,8 @@ def test_pipeline_reports_held_products_from_markers() -> None:
     link = RecordingLink()
     pipeline = _pipeline(link, held=HeldProductTracker(CATALOG, window=3, min_hits=2))
     for i in range(8):  # held after 2 hits, published once stable for the 500 ms debounce
-        pipeline.process(object(), frame(ms(200 * i), person(400), markers=(marker_at(1, 500),)))
+        holder = person(400, hand=(500, 430))  # the wrist just below the cup's marker
+        pipeline.process(object(), frame(ms(200 * i), holder, markers=(marker_at(1, 500),)))
     labels = {o.label for m, _ in link.sent if isinstance(m, AudienceSnapshot) for o in m.objects}
     assert f"{HELD_LABEL_PREFIX}cafe-patio" in labels
 

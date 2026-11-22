@@ -37,6 +37,10 @@ class TrackerConfig:
     # Looking is smoothed: a track counts as looking if it looked within this window.
     looking_hold: timedelta = timedelta(milliseconds=500)
     presence_hold: timedelta = timedelta(milliseconds=300)
+    # Venue masks, as frame fractions (x1, y1, x2, y2): a person whose box centre falls
+    # inside is not the audience (another booth's TV, a life-size rollup banner). They
+    # are still in the detections, so keyframe redaction blurs them all the same.
+    ignore_regions: tuple[tuple[float, float, float, float], ...] = ()
 
 
 @dataclass(slots=True)
@@ -121,7 +125,13 @@ class PersonTracker:
         threshold = (
             self._config.min_recovery_score if self._associator else self._config.min_person_score
         )
-        people = [p for p in frame.persons if p.score >= threshold and self._near(p, frame.height)]
+        people = [
+            p
+            for p in frame.persons
+            if p.score >= threshold
+            and self._near(p, frame.height)
+            and not self._ignored(p, frame.width, frame.height)
+        ]
         if self._associator is not None:
             self._associate(people, frame)
         else:
@@ -178,6 +188,15 @@ class PersonTracker:
         if frame_height <= 0:
             return True
         return person.box.height / frame_height >= self._config.min_height_fraction
+
+    def _ignored(self, person: PersonDetection, width: int, height: int) -> bool:
+        if not self._config.ignore_regions or width <= 0 or height <= 0:
+            return False
+        cx, cy = person.box.center
+        fx, fy = cx / width, cy / height
+        return any(
+            x1 <= fx <= x2 and y1 <= fy <= y2 for x1, y1, x2, y2 in self._config.ignore_regions
+        )
 
     def _match(self, people: list[PersonDetection]) -> list[tuple[PersonDetection, Track]]:
         pairs = sorted(

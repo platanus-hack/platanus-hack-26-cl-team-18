@@ -135,6 +135,49 @@ class UltralyticsDetector:
         )
 
 
+class HighRecallPeople:
+    """Every person a keyframe might show, for redaction only (never counted or tracked).
+
+    The hot path runs pose at 640 px and confidence 0.35, tuned for counting the
+    audience. In a crowded hall that pass blurred only 24-50 % of the faces a
+    1280 px, low-threshold pass finds (third vision audit; 0.1 at 640 px still
+    left 38-59 % unblurred, 0.1 at 1280 px 6-14 %). Keyframes leave the
+    process for the VLM, so they are redacted from this pass as well: its own
+    model instance (the encoder runs in a worker thread), at most once per keyframe.
+    """
+
+    def __init__(
+        self,
+        pose_model: str = "yolo26n-pose.pt",
+        *,
+        imgsz: int = 1280,
+        conf: float = 0.05,  # a false positive only blurs a patch of background
+        device: str | None = None,
+    ) -> None:
+        from ultralytics import YOLO  # local import: optional dependency
+
+        self._pose = YOLO(pose_model)
+        self._imgsz = imgsz
+        self._conf = conf
+        self._device = device
+
+    def warmup(self) -> None:
+        import numpy as np
+
+        self(np.zeros((720, 1280, 3), dtype=np.uint8))
+
+    def __call__(self, frame: Frame) -> list[PersonDetection]:
+        result = self._pose.predict(
+            frame,
+            imgsz=self._imgsz,
+            conf=self._conf,
+            classes=[0],
+            device=self._device,
+            verbose=False,
+        )[0]
+        return _persons(result)
+
+
 def _persons(result: Any) -> list[PersonDetection]:
     boxes = result.boxes
     if boxes is None or len(boxes) == 0:
