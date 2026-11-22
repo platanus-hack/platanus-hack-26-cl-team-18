@@ -103,7 +103,6 @@ export function SetupPage() {
         <AppShell>
             <PageHeader
                 title="Anunciantes"
-                description="Configura tu marca para pujar por momentos en las pantallas."
                 actions={
                     profile && (
                         <Button

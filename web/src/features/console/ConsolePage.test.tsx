@@ -52,33 +52,6 @@ const health = {
 };
 
 const money = (amount: string) => ({ amount, currency: "CLP" });
-const book: ConsoleOutbound = {
-    type: "console.book",
-    v: 1,
-    screen_id: "demo-01",
-    lines: [
-        {
-            campaign_id: "c-voltio",
-            brand_id: "b-voltio",
-            brand_name: "Voltio",
-            category: "energy",
-            accent_color: "#c6f26b",
-            multiplier: "1",
-            multiplier_seq: 3,
-            logo_url: "/campaign-assets/logos/voltio.svg",
-            in_stock: true,
-            on_air: false,
-            budget: money("50000"),
-            spent: money("0"),
-            reserved: money("0"),
-            remaining: money("50000"),
-            autobid: false,
-            autobid_rule: null,
-            autobid_reason: null,
-        },
-    ],
-};
-
 let root: Root;
 let host: HTMLDivElement;
 
@@ -204,31 +177,7 @@ it("a failed click keeps the backend's truth and says so", async () => {
     expect(host.textContent).toContain("Iniciar en vivo");
 });
 
-it("shows every brand from the book, read-only without the demo key", async () => {
-    await push(book);
-    expect(host.querySelector('[data-brand="Voltio"]')).not.toBeNull();
-    expect(host.querySelector('[aria-label="Subir puja de Voltio"]')).toBeNull();
-    expect(host.textContent).toContain("abre una vez /demo/<clave>");
-});
-
-it("with the demo key remembered, bids and stock move from the home page", async () => {
-    window.localStorage.setItem("team18.demoKey", "k3y");
-    await push(book);
-    await click("Subir puja de Voltio");
-    expect(requests.at(-1)).toMatchObject({
-        path: "/api/advertiser/bid-multiplier",
-        key: "k3y",
-        body: { campaign_id: "c-voltio", multiplier: "1.5" },
-    });
-    await click("Stock de Voltio");
-    expect(requests.at(-1)).toMatchObject({
-        path: "/api/clerk/stock",
-        key: "k3y",
-        body: { brand_id: "b-voltio", in_stock: false },
-    });
-});
-
-it("previews the next ad while a swap waits, and explains the decision", async () => {
+it("previews the next ad while a swap waits", async () => {
     const spec = {
         layout_id: "solo",
         slots: [
@@ -264,5 +213,4 @@ it("previews the next ad while a swap waits, and explains the decision", async (
     expect(host.querySelector('[aria-label="Siguiente aviso"]')?.textContent).toContain(
         "Voltio · Trío $8.490",
     );
-    expect(host.textContent).toContain("Sin decisión todavía");
 });

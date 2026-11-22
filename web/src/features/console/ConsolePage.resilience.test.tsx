@@ -9,7 +9,7 @@ import {
     RECEIPT_WINDOW,
 } from "./console-state";
 import { ConsolePage } from "./ConsolePage";
-import type * as WhyModule from "./why";
+import type * as MetricsModule from "./metrics";
 
 /** Live-demo failure modes of the operator console: one broken section never blanks the page. */
 
@@ -19,10 +19,10 @@ vi.mock("@/lib/ws/typed-socket", () => ({
         stop() {}
     },
 }));
-// A render-time bug in one section ("Por qué este aviso").
-vi.mock("./why", async (original) => ({
-    ...(await original<typeof WhyModule>()),
-    explain: () => {
+// A render-time bug in one section (the session meters).
+vi.mock("./metrics", async (original) => ({
+    ...(await original<typeof MetricsModule>()),
+    percentile: () => {
         throw new Error("render bug");
     },
 }));
@@ -58,7 +58,7 @@ afterEach(async () => {
 it("a section that throws is contained; the rest of the console stays up", () => {
     expect(host.textContent).toContain("Cámara");
     expect(host.textContent).toContain("En pantalla");
-    expect(host.textContent).toContain("Sesión");
+    expect(host.textContent).toContain("Subasta");
     expect(host.textContent).toContain("No se pudo mostrar esta sección.");
 });
 

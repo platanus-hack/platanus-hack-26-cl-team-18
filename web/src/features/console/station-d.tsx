@@ -61,8 +61,6 @@ function Section({
     );
 }
 
-const pct = (score: number) => decimalCl(String(score), 2);
-
 function boxStyle(box: DevBox): React.CSSProperties {
     return {
         left: `${box.x1 * 100}%`,
@@ -115,8 +113,7 @@ export function CameraPanel({ view }: { view: ScreenView }) {
                                 style={boxStyle(person.box)}
                             >
                                 <span className="absolute -top-5 left-[-2px] rounded-sm bg-(--palette-salvia) px-1.5 text-metadata font-semibold whitespace-nowrap text-ink">
-                                    persona {index + 1} · {person.looking ? "mirando" : "no mira"} ·{" "}
-                                    {pct(person.confidence)}
+                                    persona {index + 1} · {person.looking ? "mirando" : "no mira"}
                                 </span>
                             </div>
                         ))}
@@ -127,7 +124,7 @@ export function CameraPanel({ view }: { view: ScreenView }) {
                                 style={boxStyle(object.box)}
                             >
                                 <span className="absolute -bottom-5 left-[-2px] rounded-sm bg-(--palette-lavanda) px-1.5 text-metadata font-semibold whitespace-nowrap text-ink">
-                                    {object.label} {pct(object.confidence)}
+                                    {object.label}
                                 </span>
                             </div>
                         ))}
@@ -140,8 +137,7 @@ export function CameraPanel({ view }: { view: ScreenView }) {
                                 <span className="absolute -bottom-5 left-[-2px] rounded-sm bg-(--palette-ambar) px-1.5 text-metadata font-semibold whitespace-nowrap text-ink">
                                     {(marker.brand_ref && DEMO_BRANDS[marker.brand_ref]) ??
                                         marker.brand_ref ??
-                                        "producto"}{" "}
-                                    · marcador #{marker.marker_id}
+                                        "producto"}
                                 </span>
                             </div>
                         ))}
@@ -205,20 +201,14 @@ export function PeopleScreen({ view }: { view: ScreenView }) {
                         </span>
                         <span className="font-semibold">
                             {next.auction_id === null
-                                ? "Aviso de la casa"
+                                ? "Sin avisos"
                                 : next.spec.slots.map((s) => s.brand_name).join(" + ")}
                             {next.spec.offer &&
                                 ` · ${next.spec.offer.label} ${moneyCl(next.spec.offer.price.amount)}`}
                         </span>
                     </div>
                 </Card>
-            ) : (
-                onAir?.spec.offer && (
-                    <p className="text-compact text-muted">
-                        {`${onAir.spec.slots.map((s) => s.brand_name).join(" + ")} · ${onAir.spec.offer.label} ${moneyCl(onAir.spec.offer.price.amount)}`}
-                    </p>
-                )
-            )}
+            ) : null}
         </Section>
     );
 }

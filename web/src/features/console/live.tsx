@@ -1,6 +1,6 @@
 import { cn } from "@/lib/cn";
-import { moneyCl } from "@/lib/format";
-import { useState, type ReactNode } from "react";
+import { decimalCl, moneyCl } from "@/lib/format";
+import type { ReactNode } from "react";
 import { BrandLogo } from "./BrandLogo";
 import type { ScreenView } from "./console-state";
 import { ms } from "./labels";
@@ -40,7 +40,8 @@ export function Pane({
     );
 }
 
-const perSecond = (amount: string) => `${moneyCl(amount)}/s`;
+/** A per-second rate, always with two decimals so a list of them lines up ("$6,89/s"). */
+const perSecond = (amount: string) => `$${decimalCl(amount, 2)}/s`;
 
 /** A brand's real logo from the book, looked up by its name (nothing when the book hasn't arrived). */
 function LogoFor({
@@ -66,72 +67,10 @@ function LogoFor({
     );
 }
 
-/** The basket's value over the last auctions, newest last (presentation only). */
-function useValueHistory(view: ScreenView, size = 32): { top: number[]; second: number[] } {
-    const [history, setHistory] = useState<{ id: string; top: number; second: number }[]>([]);
-    const auction = view.auction;
-    // Derived during render (React's "adjust state when a prop changes"): one point per new auction.
-    if (auction && auction.winners.length > 0 && history.at(-1)?.id !== auction.auction_id) {
-        const top = Number(auction.bundle_value.amount);
-        const second = Number(
-            auction.alternatives[1]?.value.amount ?? auction.single_brand_value.amount,
-        );
-        setHistory([...history, { id: auction.auction_id, top, second }].slice(-size));
-    }
-    return { top: history.map((p) => p.top), second: history.map((p) => p.second) };
-}
-
-function Sparkline({ top, second }: { top: number[]; second: number[] }) {
-    if (top.length < 2) return null;
-    const lo = Math.min(...top, ...second) * 0.96;
-    const hi = Math.max(...top, ...second) * 1.04 || 1;
-    const x = (i: number) => (i / (top.length - 1)) * 100;
-    const y = (v: number) => 40 - ((v - lo) / (hi - lo || 1)) * 40;
-    const line = top
-        .map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(2)} ${y(v).toFixed(2)}`)
-        .join(" ");
-    const base = y(second.at(-1) ?? lo).toFixed(2);
-    return (
-        <svg
-            viewBox="0 0 100 40"
-            preserveAspectRatio="none"
-            className="h-16 w-full overflow-visible"
-            aria-hidden
-        >
-            <defs>
-                <linearGradient id="winner-fade" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0" stopColor="var(--color-accent)" stopOpacity="0.22" />
-                    <stop offset="1" stopColor="var(--color-accent)" stopOpacity="0" />
-                </linearGradient>
-            </defs>
-            <line
-                x1="0"
-                x2="100"
-                y1={base}
-                y2={base}
-                stroke="var(--color-border-strong)"
-                strokeDasharray="2 3"
-                vectorEffect="non-scaling-stroke"
-            />
-            <path d={`${line} L100 40 L0 40 Z`} fill="url(#winner-fade)" />
-            <path
-                d={line}
-                fill="none"
-                stroke="var(--color-accent)"
-                strokeWidth="1.75"
-                strokeLinejoin="round"
-                vectorEffect="non-scaling-stroke"
-            />
-        </svg>
-    );
-}
-
-/** "Gana": who holds the screen and what the moment is worth, with its recent trend. */
+/** "Gana": who holds the screen and what each second of attention is worth. */
 export function WinnerPanel({ view }: { view: ScreenView }) {
     const auction = view.auction;
-    const history = useValueHistory(view);
     const won = auction !== null && auction.winners.length > 0;
-    const second = auction?.alternatives[1];
     return (
         <Pane label="Gana" ariaLabel="Ganador">
             {won ? (
@@ -139,7 +78,10 @@ export function WinnerPanel({ view }: { view: ScreenView }) {
                     <div className="flex flex-col gap-1">
                         <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-section font-semibold tracking-tight">
                             {auction.winners.map((w, i) => (
-                                <span key={w.campaign_id} className="inline-flex items-center gap-2">
+                                <span
+                                    key={w.campaign_id}
+                                    className="inline-flex items-center gap-2"
+                                >
                                     {i > 0 && <span className="text-muted">+</span>}
                                     <LogoFor view={view} brand={w.brand_name} size="md" />
                                     {w.brand_name}
@@ -152,17 +94,11 @@ export function WinnerPanel({ view }: { view: ScreenView }) {
                             </p>
                         )}
                     </div>
-                    <Sparkline top={history.top} second={history.second} />
-                    <div className="mt-auto flex items-baseline justify-between gap-2">
+                    <div className="mt-auto flex flex-col gap-0.5">
                         <span className="text-kpi font-semibold tracking-tight tabular-nums">
-                            {moneyCl(auction.bundle_value.amount)}
-                            <span className="ml-0.5 text-compact font-medium text-muted">/s</span>
+                            ${decimalCl(auction.bundle_value.amount, 2)}
                         </span>
-                        {second && (
-                            <span className="font-mono text-metadata text-muted tabular-nums">
-                                2.º {perSecond(second.value.amount)}
-                            </span>
-                        )}
+                        <span className="text-compact text-muted">por segundo de atención</span>
                     </div>
                 </div>
             ) : (
@@ -177,30 +113,11 @@ export function WinnerPanel({ view }: { view: ScreenView }) {
 /** "Subasta": every basket the auction weighed, as bars that ease to each new result. */
 export function AuctionRace({ view }: { view: ScreenView }) {
     const auction = view.auction;
-    // Auctions seen this session, counted once per id (derived during render).
-    const [count, setCount] = useState<{ last: string | null; n: number }>({ last: null, n: 0 });
-    if (auction && auction.auction_id !== count.last) {
-        setCount({ last: auction.auction_id, n: count.n + 1 });
-    }
     const options = auction?.alternatives ?? [];
     const max = Math.max(...options.map((o) => Number(o.value.amount)), 1);
     const winner = auction && auction.winners.length > 0 ? options[0] : undefined;
     return (
-        <Pane
-            label="Subasta"
-            ariaLabel="Subasta en vivo"
-            aside={
-                <span className="inline-flex items-center gap-2">
-                    {/* Re-keyed per auction, so each new result replays the beat. */}
-                    <span
-                        key={count.last ?? "idle"}
-                        aria-hidden
-                        className="size-1.5 rounded-full bg-border-strong motion-safe:animate-[auction-beat_420ms_ease-out]"
-                    />
-                    {count.n > 0 && `#${count.n.toLocaleString("es-CL")}`}
-                </span>
-            }
-        >
+        <Pane label="Subasta" ariaLabel="Subasta en vivo">
             {options.length === 0 ? (
                 <p className="text-compact text-muted">Sin subasta mientras nadie mira.</p>
             ) : (
