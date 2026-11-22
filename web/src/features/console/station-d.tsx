@@ -237,19 +237,7 @@ export function AuctionSection({ view, screen }: { view: ScreenView; screen: str
     return (
         <Card className="flex flex-col gap-4 p-5" aria-label="La subasta">
             <div className="flex flex-wrap items-baseline justify-between gap-3">
-                <div className="flex items-baseline gap-3">
-                    <h2 className="text-section font-semibold">La subasta</h2>
-                    {!auction && (
-                        <span className="text-compact text-muted">
-                            {shown.length} marcas
-                        </span>
-                    )}
-                    {auction && (
-                        <span className="text-compact text-muted tabular-nums">
-                            {`${auction.bids.length} pujas · ${new Date(auction.trace.cleared_at ?? auction.trace.measured_at ?? 0).toLocaleTimeString("es-CL", { hour12: false })}`}
-                        </span>
-                    )}
-                </div>
+                <h2 className="text-section font-semibold">La subasta</h2>
                 {auction && auction.winners.length > 0 && (
                     <span className="text-compact tabular-nums">
                         Canasta{" "}
@@ -812,10 +800,7 @@ export function TagsPanel({ view }: { view: ScreenView }) {
     const segments = moment ? [...moment.segments].sort((a, b) => b.score - a.score) : [];
     return (
         <Card className="flex flex-col gap-3.5 p-5" aria-label="Etiquetas">
-            <div className="flex items-baseline justify-between">
-                <h2 className="text-section font-semibold">Etiquetas</h2>
-                <span className="text-metadata text-muted">IAB</span>
-            </div>
+            <h2 className="text-section font-semibold">Etiquetas</h2>
             {segments.length === 0 ? (
                 <p className="text-compact text-muted">Sin intereses claros.</p>
             ) : (

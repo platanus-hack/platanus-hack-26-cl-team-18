@@ -157,11 +157,13 @@ export function DevPage() {
                 }
             />
             <div className="flex flex-wrap items-center gap-2" aria-label="Estado">
-                {consoleView.degradation.map((flag) => (
-                    <Badge key={flag} tone="warning" appearance="soft">
-                        {DEGRADATION[flag]}
-                    </Badge>
-                ))}
+                {consoleView.degradation
+                    .filter((flag) => flag !== "vlm_unavailable")
+                    .map((flag) => (
+                        <Badge key={flag} tone="warning" appearance="soft">
+                            {DEGRADATION[flag]}
+                        </Badge>
+                    ))}
                 {load.map((l) => (
                     <Badge
                         key={l.provider}
