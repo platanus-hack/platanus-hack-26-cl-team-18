@@ -428,6 +428,10 @@ def register_demo(
     kits_by_id = {kit.brand_id: kit for kit in kits}
     slug_of = {kit.brand_id: _slug(kit.name) for kit in kits}
     brand_by_slug = {slug: brand for brand, slug in slug_of.items()}
+    # Creatives whose copy is the approved campaign line (Catalog.pinned_copy): no AI rewrite.
+    pinned_copy = {
+        brand_by_slug[slug] for slug in market.catalog.pinned_copy if slug in brand_by_slug
+    }
     fitness, coffee, beer, food = (SegmentId.create(key) for key in ("408", "977", "369", "1404"))
     # A watching group with no other signal: a low-confidence coffee moment, never a
     # house ad for a whole queue (group_default.py; measured on real footage).
@@ -1187,7 +1191,11 @@ def register_demo(
                 compose_ms=composed.compose_ms if composed is not None else None,
                 note=note,
             )
-        if brief is not None and studio.needs_upgrade(brief):
+        if (
+            brief is not None
+            and studio.needs_upgrade(brief)
+            and not any(brand.brand_id in pinned_copy for brand in brief.brands)
+        ):
             request_copy(
                 _CopyJob(
                     brief=brief,

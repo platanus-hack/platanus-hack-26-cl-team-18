@@ -883,6 +883,9 @@ CHILE = Catalog(
     baskets=BASKETS,
     # A highway shop: water and fitness cues are a road moment ("Queda camino. A
     # recargar."), never "Entrenaste" (the fictional seed's gym story).
+    # The hackathon promo airs the team's own line, "¿No duermes? 6x Monster por $1.990.",
+    # never an AI rewrite of it.
+    pinned_copy=frozenset({"monster-energy"}),
     marker_cues=(
         ("super-8", CHOCOLATE_CANDY),
         ("ambrosoli", CANDY),

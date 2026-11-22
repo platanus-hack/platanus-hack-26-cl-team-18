@@ -424,6 +424,9 @@ class Catalog:
     # brand's printed marker stands in for the missing label, at full weight. Other
     # markers only mark a held product (complete the basket); they add no segment.
     marker_cues: tuple[tuple[str, str], ...] = ()
+    # Brands whose stock hook is the approved campaign line, word for word (a promo the
+    # team wrote): the warm AI copywriter never rewrites a creative that includes them.
+    pinned_copy: frozenset[str] = frozenset()
 
     def partners_of(self, slug: str) -> frozenset[str]:
         return frozenset(
