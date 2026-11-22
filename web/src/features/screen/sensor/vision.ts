@@ -23,6 +23,13 @@ const FRAME_INTERVAL_MS = 200;
 const HEARTBEAT_MS = 1_000;
 /** The edge agent's `keyframe_interval`. */
 const KEYFRAME_INTERVAL_MS = 1_500;
+/**
+ * A camera whose picture stopped advancing this long is treated as gone: a stalled
+ * UVC device keeps returning its last frame, and the room would look occupied forever.
+ */
+const FROZEN_MS = 3_000;
+/** Consecutive failed frames before the session is rebuilt (a lost WebGPU device never heals). */
+const MAX_FAILURES = 3;
 
 export type SnapshotFacts = Omit<AudienceSnapshot, "v" | "type" | "screen_id" | "seq">;
 /** The console camera panel's boxes (no image): what the edge agent sends as `dev.perception`. */
@@ -52,6 +59,12 @@ export class BrowserVision {
     private running = false;
     private readonly tracker = new Tracker();
     private detector = "yolo26n-pose-web";
+    /** Set after the GPU path failed mid-run: the next load goes straight to WASM. */
+    private gpuBroken = false;
+    private failures = 0;
+    private input: Float32Array | null = null;
+    private lastVideoTime = -1;
+    private lastAdvanceMs = 0;
 
     private frames = 0;
     private readonly minor = new MinorVote();
@@ -82,6 +95,13 @@ export class BrowserVision {
             video.srcObject = this.stream;
             await video.play();
             this.video = video;
+            // Unplugged or taken by the OS: let go; the next live.status starts again.
+            for (const track of this.stream.getVideoTracks()) {
+                track.addEventListener("ended", () => {
+                    this.recover("camera track ended");
+                });
+            }
+            this.lastAdvanceMs = performance.now();
             this.tick();
         } catch (error) {
             console.warn(`[sensor] camera unavailable: ${String(error)}`);
@@ -103,6 +123,18 @@ export class BrowserVision {
         this.tracker.reset();
         this.minor.reset();
         this.lastKeyframeMs = 0;
+        this.failures = 0;
+        this.lastVideoTime = -1;
+    }
+
+    /**
+     * Stop now; `ScreenSensor` calls `start()` again on the next `live.status`
+     * (every 5 s), so a camera or model hiccup heals itself without a reload.
+     */
+    private recover(reason: string): void {
+        if (!this.running) return;
+        console.warn(`[sensor] restarting vision: ${reason}`);
+        this.stop();
     }
 
     private release(): void {
@@ -121,7 +153,7 @@ export class BrowserVision {
         const options = { graphOptimizationLevel: "all" } as const;
         let session: Ort.InferenceSession | null = null;
         let backend = "wasm";
-        if ("gpu" in navigator) {
+        if ("gpu" in navigator && !this.gpuBroken) {
             try {
                 session = await ort.InferenceSession.create(MODEL_URL, {
                     ...options,
@@ -144,7 +176,12 @@ export class BrowserVision {
         // One throwaway run so the first person seen doesn't pay for kernel setup.
         const size = 3 * MODEL_SIZE * MODEL_SIZE;
         await session.run({
-            images: new ort.Tensor("float32", new Float32Array(size), [1, 3, MODEL_SIZE, MODEL_SIZE]),
+            images: new ort.Tensor("float32", new Float32Array(size), [
+                1,
+                3,
+                MODEL_SIZE,
+                MODEL_SIZE,
+            ]),
         });
         this.session = session;
         this.ort = ort;
@@ -153,11 +190,28 @@ export class BrowserVision {
     private tick = (): void => {
         if (!this.running) return;
         const started = performance.now();
-        void this.step().finally(() => {
-            if (!this.running) return;
-            const wait = Math.max(0, FRAME_INTERVAL_MS - (performance.now() - started));
-            this.timer = setTimeout(this.tick, wait);
-        });
+        void this.step()
+            .then(
+                () => {
+                    this.failures = 0;
+                },
+                (error: unknown) => {
+                    this.failures++;
+                    console.warn(`[sensor] frame failed: ${String(error)}`);
+                    if (this.failures < MAX_FAILURES) return;
+                    // Rebuild the session (on WASM if the GPU path was the one failing).
+                    if (this.detector.endsWith("/webgpu")) this.gpuBroken = true;
+                    const session = this.session;
+                    this.session = null;
+                    void session?.release().catch(() => {});
+                    this.recover(`${String(this.failures)} failed frames`);
+                },
+            )
+            .finally(() => {
+                if (!this.running) return;
+                const wait = Math.max(0, FRAME_INTERVAL_MS - (performance.now() - started));
+                this.timer = setTimeout(this.tick, wait);
+            });
     };
 
     private lastSentMs = 0;
@@ -170,6 +224,14 @@ export class BrowserVision {
         const width = video.videoWidth;
         const height = video.videoHeight;
         if (width === 0 || height === 0) return;
+        const nowMs = performance.now();
+        if (video.currentTime !== this.lastVideoTime) {
+            this.lastVideoTime = video.currentTime;
+            this.lastAdvanceMs = nowMs;
+        } else if (nowMs - this.lastAdvanceMs > FROZEN_MS) {
+            this.recover("camera picture frozen");
+            return;
+        }
         const measuredAt = new Date();
         // One still for both inference and the keyframe: redacting a later frame
         // could show a face that moved out of the head box detected on this one.
@@ -302,7 +364,9 @@ export class BrowserVision {
                   }));
         const ctx = canvas.getContext("2d", { willReadFrequently: true }) as
             CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
-        const out = new Float32Array(3 * MODEL_SIZE * MODEL_SIZE);
+        // Reused: a fresh 4.9 MB buffer per frame at 5 fps is ~25 MB/s of GC churn
+        // on a kiosk that runs all day. Safe: `session.run` has finished with it.
+        const out = (this.input ??= new Float32Array(3 * MODEL_SIZE * MODEL_SIZE));
         if (ctx === null) return out;
         const lb = letterbox(width, height);
         ctx.fillStyle = "rgb(114,114,114)";

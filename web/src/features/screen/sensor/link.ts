@@ -14,6 +14,7 @@ import {
 } from "@/contract";
 import { backendWsUrl } from "@/lib/config";
 import { screenProtocols } from "@/lib/device";
+import { HEARTBEAT_IDLE_MS } from "@/lib/ws/heartbeat";
 import { TypedSocket } from "@/lib/ws/typed-socket";
 import { BrowserSpeech } from "./speech";
 import { BrowserVision } from "./vision";
@@ -49,6 +50,8 @@ export class ScreenSensor {
         this.socket = new TypedSocket<AgentOutbound, AgentInbound>({
             url: `${backendWsUrl}/ws/agent`,
             protocols: screenProtocols(token),
+            // The backend repeats live.status to hello'd agents: silence means a dead uplink.
+            idleTimeoutMs: HEARTBEAT_IDLE_MS,
             schema: AgentOutboundSchema,
             onMessage: (message) => {
                 if (message.type === "live.status" && message.screen_id === screenId) {

@@ -47,6 +47,21 @@ def test_station_console_and_tv_get_a_heartbeat_while_nothing_happens(
         assert _types_within(player, 5).count("live.status") >= 3
 
 
+def test_a_hello_d_agent_gets_a_heartbeat_too(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The /screen page's in-browser sensor only sends; without a heartbeat on
+    # /ws/agent a half-open uplink would leave the screen deaf for the rest of the day.
+    monkeypatch.setattr(container_module, "LIVE_HEARTBEAT_S", 0.05)
+    settings = AppSettings(app_env="test", demo_simulator=True, media_dir=tmp_path)
+    with (
+        TestClient(create_app(container=build_container(settings))) as client,
+        client.websocket_connect("/ws/agent") as agent,
+    ):
+        agent.send_json({"type": "agent.hello", "screen_id": "demo-01", "role": "vision"})
+        assert _types_within(agent, 5).count("live.status") >= 3
+
+
 def test_raw_console_readers_never_see_the_heartbeat(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

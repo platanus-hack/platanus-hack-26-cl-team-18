@@ -413,9 +413,12 @@ def register_live_switch(container: Container) -> None:
                 known = {status.screen_id for status in live.statuses()}
                 screens = sorted(known | set(hub.connected_screens())) or [DEMO_SCREEN]
                 statuses = [live.status(screen_id) for screen_id in screens]
+                # Agents too: the /screen page's own sensor (ADR 0010) sends but
+                # rarely hears back, so without this it can't tell a dead uplink.
                 await asyncio.gather(
                     hub.broadcast_live(*statuses),
                     *(hub.send_to_screen(status) for status in statuses),
+                    *(hub.send_to_agents(status) for status in statuses),
                 )
             except Exception:
                 logger.exception("live heartbeat failed")
