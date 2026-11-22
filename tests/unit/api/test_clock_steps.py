@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import threading
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -23,7 +23,12 @@ from scripts.replay_audience import paid_brands, snapshot_for
 
 from app.bootstrap.container import build_container
 from app.config.settings import AppSettings
-from app.contract.messages import CONSOLE_OUTBOUND, ConsoleAuction, CreativeReady
+from app.contract.messages import (
+    CONSOLE_OUTBOUND,
+    AudienceSnapshot,
+    ConsoleAuction,
+    CreativeReady,
+)
 from app.main import create_app
 from app.modules.common.infrastructure.clock.fixed_clock import FixedClock
 
@@ -39,6 +44,22 @@ class Rig:
     console: Any
     agent: Any
     seq: int = 0
+    processed: int = 0
+    changed: threading.Condition = field(default_factory=threading.Condition)
+
+    def note_processed(self, seq: int) -> None:
+        with self.changed:
+            self.processed = max(self.processed, seq)
+            self.changed.notify_all()
+
+    def settle(self, timeout: float = 5.0) -> None:
+        """Wait until the loop has handled every reading sent so far (sockets aren't ordered
+        against this test's clock: a reading still in flight when the clock steps would be
+        stamped after the step)."""
+        with self.changed:
+            assert self.changed.wait_for(lambda: self.processed >= self.seq, timeout), (
+                f"loop handled seq {self.processed} of {self.seq}"
+            )
 
     def send(self, scene: str, *, after_s: float = 0.2) -> None:
         now = self.clock.advance(timedelta(seconds=after_s))
@@ -74,6 +95,10 @@ def rig(tmp_path: Path) -> Iterator[Rig]:
         client.websocket_connect("/ws/agent") as agent,
     ):
         rig = Rig(clock, player, console, agent)
+        # Handlers run in registration order: this one fires after the loop's own.
+        container.router.on(
+            AudienceSnapshot, lambda snapshot, _received: rig.note_processed(snapshot.seq)
+        )
         assert console_ready.wait(2)
         assert paid_brands(rig.creative()) == ()  # house ad first
         yield rig
@@ -85,6 +110,7 @@ def _air(rig: Rig, scene: str, brands: tuple[str, ...]) -> None:
     while not rig.auction().winners:
         pass
     assert paid_brands(rig.creative()) == brands
+    rig.settle()  # the second reading too: callers step the clock next
 
 
 def test_a_backward_ntp_step_does_not_freeze_the_screen_on_the_old_ad(rig: Rig) -> None:
