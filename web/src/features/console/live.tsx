@@ -1,6 +1,7 @@
 import { cn } from "@/lib/cn";
 import { moneyCl } from "@/lib/format";
 import { useState, type ReactNode } from "react";
+import { BrandLogo } from "./BrandLogo";
 import type { ScreenView } from "./console-state";
 import { ms } from "./labels";
 import { percentile } from "./metrics";
@@ -40,6 +41,30 @@ export function Pane({
 }
 
 const perSecond = (amount: string) => `${moneyCl(amount)}/s`;
+
+/** A brand's real logo from the book, looked up by its name (nothing when the book hasn't arrived). */
+function LogoFor({
+    view,
+    brand,
+    size = "sm",
+    highlight = false,
+}: {
+    view: ScreenView;
+    brand: string;
+    size?: "sm" | "md";
+    highlight?: boolean;
+}) {
+    const line = view.book?.lines.find((l) => l.brand_name === brand);
+    if (!line) return null;
+    return (
+        <BrandLogo
+            src={line.logo_url}
+            accent={line.accent_color ?? null}
+            size={size}
+            highlight={highlight}
+        />
+    );
+}
 
 /** The basket's value over the last auctions, newest last (presentation only). */
 function useValueHistory(view: ScreenView, size = 32): { top: number[]; second: number[] } {
@@ -112,8 +137,14 @@ export function WinnerPanel({ view }: { view: ScreenView }) {
             {won ? (
                 <div className="flex flex-1 flex-col gap-3">
                     <div className="flex flex-col gap-1">
-                        <p className="text-section font-semibold tracking-tight">
-                            {auction.winners.map((w) => w.brand_name).join(" + ")}
+                        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-section font-semibold tracking-tight">
+                            {auction.winners.map((w, i) => (
+                                <span key={w.campaign_id} className="inline-flex items-center gap-2">
+                                    {i > 0 && <span className="text-muted">+</span>}
+                                    <LogoFor view={view} brand={w.brand_name} size="md" />
+                                    {w.brand_name}
+                                </span>
+                            ))}
                         </p>
                         {auction.offer && (
                             <p className="text-compact text-muted">
@@ -185,11 +216,16 @@ export function AuctionRace({ view }: { view: ScreenView }) {
                             >
                                 <span
                                     className={cn(
-                                        "truncate text-compact",
+                                        "flex min-w-0 items-center gap-2 text-compact",
                                         isWin && "font-semibold",
                                     )}
                                 >
-                                    {name}
+                                    <span className="flex shrink-0 items-center gap-1">
+                                        {option.brands.map((brand) => (
+                                            <LogoFor key={brand} view={view} brand={brand} />
+                                        ))}
+                                    </span>
+                                    <span className="truncate">{name}</span>
                                 </span>
                                 <span className="relative h-1.5 overflow-hidden rounded-full bg-surface-sunken max-sm:col-span-2 max-sm:row-start-2">
                                     <span
