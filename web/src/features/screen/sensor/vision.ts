@@ -24,8 +24,9 @@ const HEARTBEAT_MS = 1_000;
 /** The edge agent's `keyframe_interval`. */
 const KEYFRAME_INTERVAL_MS = 1_500;
 /**
- * A camera whose picture stopped advancing this long is treated as gone: a stalled
- * UVC device keeps returning its last frame, and the room would look occupied forever.
+ * A camera that delivered no new frame for this long is treated as gone. A dead or
+ * stalled camera keeps returning its last frame (and `currentTime` keeps counting:
+ * measured in Chromium), so the room would look occupied forever.
  */
 const FROZEN_MS = 3_000;
 /** Consecutive failed frames before the session is rebuilt (a lost WebGPU device never heals). */
@@ -63,8 +64,9 @@ export class BrowserVision {
     private gpuBroken = false;
     private failures = 0;
     private input: Float32Array | null = null;
+    /** When the camera last delivered a new frame (requestVideoFrameCallback, else currentTime). */
+    private lastFrameMs = 0;
     private lastVideoTime = -1;
-    private lastAdvanceMs = 0;
 
     private frames = 0;
     private readonly minor = new MinorVote();
@@ -101,7 +103,7 @@ export class BrowserVision {
                     this.recover("camera track ended");
                 });
             }
-            this.lastAdvanceMs = performance.now();
+            this.watchFrames(video);
             this.tick();
         } catch (error) {
             console.warn(`[sensor] camera unavailable: ${String(error)}`);
@@ -125,6 +127,34 @@ export class BrowserVision {
         this.lastKeyframeMs = 0;
         this.failures = 0;
         this.lastVideoTime = -1;
+    }
+
+    /** Stamp each new camera frame; stops by itself once this video is released. */
+    private watchFrames(video: HTMLVideoElement): void {
+        this.lastFrameMs = performance.now();
+        if (typeof video.requestVideoFrameCallback !== "function") return;
+        const onFrame = () => {
+            if (this.video !== video) return;
+            this.lastFrameMs = performance.now();
+            video.requestVideoFrameCallback(onFrame);
+        };
+        video.requestVideoFrameCallback(onFrame);
+    }
+
+    /** Why the camera can no longer be trusted, or null while it is healthy. */
+    private cameraProblem(video: HTMLVideoElement): string | null {
+        // A track stopped from this side never fires "ended"; its state still says so.
+        const tracks = this.stream?.getVideoTracks() ?? [];
+        if (tracks.some((t) => t.readyState === "ended")) return "camera track ended";
+        const now = performance.now();
+        // Without requestVideoFrameCallback, an advancing currentTime is the next best sign.
+        if (typeof video.requestVideoFrameCallback !== "function") {
+            if (video.currentTime !== this.lastVideoTime) {
+                this.lastVideoTime = video.currentTime;
+                this.lastFrameMs = now;
+            }
+        }
+        return now - this.lastFrameMs > FROZEN_MS ? "camera picture frozen" : null;
     }
 
     /**
@@ -224,12 +254,9 @@ export class BrowserVision {
         const width = video.videoWidth;
         const height = video.videoHeight;
         if (width === 0 || height === 0) return;
-        const nowMs = performance.now();
-        if (video.currentTime !== this.lastVideoTime) {
-            this.lastVideoTime = video.currentTime;
-            this.lastAdvanceMs = nowMs;
-        } else if (nowMs - this.lastAdvanceMs > FROZEN_MS) {
-            this.recover("camera picture frozen");
+        const problem = this.cameraProblem(video);
+        if (problem !== null) {
+            this.recover(problem);
             return;
         }
         const measuredAt = new Date();
