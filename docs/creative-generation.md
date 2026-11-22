@@ -559,17 +559,19 @@ an AI draft can only replace stock copy if it keeps them.
 - **Results.** `GET /api/hooks` (demo market only) lists every option with plays, attention,
   scans and reward per play. Learning is in memory and per screen.
 
-**Layout** (`web/src/features/screen/CreativeView.tsx`, `creative.css`, `ad-theme.ts`), after the
-Relvo brand deck (`relvo_10abril` pp. 18–25):
+**Layout** (`web/src/features/screen/CreativeView.tsx`, `creative.css`, `ad-theme.ts`), in the
+ADverse house style (design system: https://claude.ai/artifact/EeZ77bPntDUWb7c8sEteng):
 
-- **Two fields, one system.** By day (07:00–20:00 on the screen's clock) the ad is light: Relvo
-  grey (#E8E8E8) and ink type, with the product photo as a right-hand panel cropped toward the
+- **Two fields, one system.** By day (07:00–20:00 on the screen's clock) the ad is light: a warm
+  Lino field (#F3EFE8) and Tinta type, with the product photo as a right-hand panel cropped toward the
   products. At night it is dark: the photo full-bleed under a shade, with white type. The studio
   previews both (Claro / Oscuro).
 - **Type.** The line of each stage is Instrument Sans, set large, at weight 500, with tight
-  tracking (Relvo's display treatment; no serif). Geist Mono caps are used for metadata only.
-- **Signature figure.** Each ad draws a stroke-only spirograph in the lead brand's accent, seeded
-  by the basket, so each pair keeps its own figure. In light ads it emerges from behind the photo
+  tracking (no serif). Geist Mono caps are used for metadata only.
+- **Signature figure.** Each ad draws the ADverse signature figure, stroke-only, in the lead
+  brand's accent: the logo's construction as lines (rays fanning down from a clear ring around a
+  focal point, plus concentric moment rings), seeded by the basket so each pair keeps its own
+  figure. In light ads it emerges from behind the photo
   panel; in dark ads it appears only when there is no photo.
 - **Baseline.** The brand lockup (real logos, "×" between partners) sits next to mono metadata at
   the bottom. During the hook the metadata carries the price ("$8.490 · Para 3"), so a three-second

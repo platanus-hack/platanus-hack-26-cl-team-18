@@ -229,18 +229,16 @@ def seed_market(
     registry: CampaignRegistry | None = None,
     catalog: demo_catalog.Catalog = demo_catalog.FICTIONAL,
 ) -> LiveMarket:
-    # Keep the project mark on the house ad. The fictional brands have fixed
+    # The ADverse mark on the house ad. The fictional brands have fixed
     # mock marks included with their kits.
-    logo = Path(__file__).resolve().parents[2].joinpath("project-logo.png").read_bytes()
-    logo_url = "data:image/png;base64," + b64encode(logo).decode("ascii")
+    logo_url = _house_logo_url()
     # Brands use their own wordmarks (demo_catalog.wordmark); never AI-drawn logos.
 
     # One brand catalog (app/bootstrap/demo_catalog.py, docs/demo.md): rivals in each
     # category, pre-approved partner pairs, offers sized to the group (architecture §6.1).
-    # Project mark on the house ad; brands with a mock mark in the campaign assets use it,
-    # the rest get a generated wordmark. Never an AI-drawn logo.
-    logo = Path(__file__).resolve().parents[2].joinpath("project-logo.png").read_bytes()
-    logo_url = "data:image/png;base64," + b64encode(logo).decode("ascii")
+    # The ADverse mark on the house ad; brands with a mock mark in the campaign assets use
+    # it, the rest get a generated wordmark. Never an AI-drawn logo.
+    logo_url = _house_logo_url()
     # Stable ids, budgets and live bids come from the registry (Postgres in prod), so
     # charges keep pointing at the same campaign and spend survives a restart.
     registry = registry or InMemoryCampaignRegistry(ids)
@@ -504,10 +502,10 @@ def register_demo(
         (
             BrandKit(
                 brand_id=BrandId.create(ids.new_uuid7()),
-                name="advisor",
+                name="ADverse",
                 logo_url=market.house_logo_url,
-                stock_copy="advisor · Acércate. Hay una oferta para tu grupo.",
-                accent_color="#d0ff0b",
+                stock_copy="ADverse · Acércate. Hay una oferta para tu grupo.",
+                accent_color="#f4845f",  # Coral: the ADverse moment
             ),
         ),
     )
@@ -1985,6 +1983,18 @@ def nearest_band(tracklets: Sequence[Tracklet]) -> DistanceBand | None:
     """The nearest looking viewer's distance band; the layout serves whoever can read it."""
     bands = {t.distance_band for t in tracklets if t.looking}
     return next((band for band in _NEAREST_FIRST if band in bands), None)
+
+
+def _house_logo_url() -> str:
+    # The ADverse mark (design system: web/public/brand/), inlined so the house ad needs no
+    # network and survives any outage (invariant 5: the screen is never blank).
+    mark = (
+        Path(__file__)
+        .resolve()
+        .parents[2]
+        .joinpath("web", "public", "brand", "adverse-mark-on-dark.svg")
+    )
+    return "data:image/svg+xml;base64," + b64encode(mark.read_bytes()).decode("ascii")
 
 
 def _brand_logo(slug: str, name: str, color: str) -> str:

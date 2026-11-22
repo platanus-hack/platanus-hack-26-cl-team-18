@@ -93,7 +93,7 @@ function BrandPicker({
                     <span
                         aria-hidden
                         className="size-2.5 shrink-0 rounded-full"
-                        style={{ background: l.accent_color ?? "var(--palette-gris-oscuro)" }}
+                        style={{ background: l.accent_color ?? "var(--palette-ceniza)" }}
                     />
                     <span className="font-medium">{l.brand_name}</span>
                     <span className="text-compact text-muted">{category(l.category)}</span>

@@ -2,24 +2,25 @@
  * The ad canvas (16:9 TV, read from 1–4 m). Sizes are container units so the
  * studio preview and the TV render the same layout.
  *
- * After the Relvo brand system: a grotesk set large and tight for the one line
- * of each stage, Geist Mono caps for metadata on the bottom baseline beside the
- * brand lockup, a stroke-only line figure as the signature texture, and one
+ * The ADverse house style (design system: https://claude.ai/artifact/EeZ77bPntDUWb7c8sEteng):
+ * a grotesk set large and tight for the one line of each stage, Geist Mono caps
+ * for metadata on the bottom baseline beside the brand lockup, the ADverse
+ * signature figure (rays + moment rings, stroke-only) as the texture, and one
  * accent (the lead brand's) for the figure and a single fill. Light accents are
  * fills, never text: ink sits on them. Square corners except the pill tag.
  *
  * Two fields, one system:
- * - light (day): Relvo grey, ink type, the product photo as a right-hand panel
- *   with the figure emerging from behind it;
- * - dark (night): the photo full-bleed under a shade, white type.
+ * - light (day): warm Lino field, Tinta type, the product photo as a right-hand
+ *   panel with the figure emerging from behind it;
+ * - dark (night): the photo full-bleed under a shade, light type on Tinta.
  */
 .creative-canvas {
     container-type: size;
-    --ad-field: #e8e8e8;
+    --ad-field: #f3efe8; /* Lino */
     --ad-ink: var(--palette-ink-950);
-    --ad-muted: #55555f;
+    --ad-muted: #6b645b; /* 5.1:1 on Lino */
     --ad-rule: color-mix(in srgb, var(--palette-ink-950) 18%, transparent);
-    --creative-accent: var(--palette-mint);
+    --creative-accent: var(--palette-coral);
     --creative-gutter: 4.4cqw;
     --ad-column: 50cqw;
     --ad-panel: 54cqw;
@@ -121,7 +122,7 @@
     max-width: calc(var(--ad-column) - 2 * var(--creative-gutter));
 }
 
-/* One line per stage: Relvo's display treatment, regular weight, tight. */
+/* One line per stage: the display treatment, regular weight, tight. */
 .creative-hook {
     font-family: var(--font-display);
     font-size: clamp(1.25rem, 6.8cqw, 9rem);

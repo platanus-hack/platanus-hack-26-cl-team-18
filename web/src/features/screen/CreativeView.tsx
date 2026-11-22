@@ -2,7 +2,7 @@ import type { CreativeSlot, CreativeSpec, CreativeStageName, DistanceBand } from
 import { assetUrl } from "@/lib/config";
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { readableAccent } from "./accent";
-import { spirographPath, themeForHour, type AdTheme } from "./ad-theme";
+import { signaturePath, themeForHour, type AdTheme } from "./ad-theme";
 import "./creative.css";
 import {
     copyFit,
@@ -53,11 +53,11 @@ function VideoLoop({ url }: { url: string }) {
  * Renders a CreativeSpec as DOM over an optional photo or video loop. Logos are
  * the brand kit's real assets (never generated); 1–3 slots share the screen.
  *
- * House style (docs/creative-generation.md §12), after the Relvo brand system:
- * one grotesk set large and tight for the line of the stage, mono caps for
- * metadata on the bottom baseline next to the brand lockup, and one accent (the
- * lead brand's) for the stroke-only figure and a single fill.
- * - light (day): a grey field, ink type, the product photo as a right panel.
+ * ADverse house style (docs/creative-generation.md §12): one grotesk set large
+ * and tight for the line of the stage, mono caps for metadata on the bottom
+ * baseline next to the brand lockup, and one accent (the lead brand's) for the
+ * ADverse signature figure and a single fill.
+ * - light (day): a warm Lino field, Tinta type, the product photo as a right panel.
  * - dark (night): the photo full-bleed under a shade, white type.
  * Stages: the hook (the price waits on the baseline), the offer line with the
  * price set apart (never AI-written: it comes from `spec.offer`), then one
@@ -173,9 +173,9 @@ function KeepWords({ text }: { text: string }) {
     );
 }
 
-/** The signature line figure: stroke-only, seeded by the basket, in the lead brand's accent. */
+/** The ADverse signature figure (rays + moment rings): stroke-only, seeded by the basket, in the lead brand's accent. */
 function Figure({ seed }: { seed: string }) {
-    const d = useMemo(() => spirographPath(seed), [seed]);
+    const d = useMemo(() => signaturePath(seed), [seed]);
     return (
         <svg className="creative-figure" viewBox="-1.02 -1.02 2.04 2.04" aria-hidden="true">
             <path d={d} fill="none" vectorEffect="non-scaling-stroke" />

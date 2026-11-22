@@ -101,10 +101,10 @@ export function CameraPanel({ view }: { view: ScreenView }) {
                         {fresh.people.map((person, index) => (
                             <div
                                 key={person.track_id}
-                                className="absolute rounded-sm border-2 border-(--palette-verde)"
+                                className="absolute rounded-sm border-2 border-(--palette-salvia)"
                                 style={boxStyle(person.box)}
                             >
-                                <span className="absolute -top-5 left-[-2px] rounded-sm bg-(--palette-verde) px-1.5 text-metadata font-semibold whitespace-nowrap text-ink">
+                                <span className="absolute -top-5 left-[-2px] rounded-sm bg-(--palette-salvia) px-1.5 text-metadata font-semibold whitespace-nowrap text-ink">
                                     persona {index + 1} · {person.looking ? "mirando" : "no mira"} ·{" "}
                                     {pct(person.confidence)}
                                 </span>
@@ -113,10 +113,10 @@ export function CameraPanel({ view }: { view: ScreenView }) {
                         {fresh.objects.map((object, index) => (
                             <div
                                 key={`${object.label}:${index}`}
-                                className="absolute rounded-sm border-2 border-(--palette-lila)"
+                                className="absolute rounded-sm border-2 border-(--palette-lavanda)"
                                 style={boxStyle(object.box)}
                             >
-                                <span className="absolute -bottom-5 left-[-2px] rounded-sm bg-(--palette-lila) px-1.5 text-metadata font-semibold whitespace-nowrap text-ink">
+                                <span className="absolute -bottom-5 left-[-2px] rounded-sm bg-(--palette-lavanda) px-1.5 text-metadata font-semibold whitespace-nowrap text-ink">
                                     {object.label} {pct(object.confidence)}
                                 </span>
                             </div>
@@ -124,10 +124,10 @@ export function CameraPanel({ view }: { view: ScreenView }) {
                         {fresh.markers.map((marker) => (
                             <div
                                 key={marker.marker_id}
-                                className="absolute rounded-sm border-2 border-(--palette-naranjo)"
+                                className="absolute rounded-sm border-2 border-(--palette-ambar)"
                                 style={boxStyle(marker.box)}
                             >
-                                <span className="absolute -bottom-5 left-[-2px] rounded-sm bg-(--palette-naranjo) px-1.5 text-metadata font-semibold whitespace-nowrap text-ink">
+                                <span className="absolute -bottom-5 left-[-2px] rounded-sm bg-(--palette-ambar) px-1.5 text-metadata font-semibold whitespace-nowrap text-ink">
                                     {(marker.brand_ref && DEMO_BRANDS[marker.brand_ref]) ??
                                         marker.brand_ref ??
                                         "producto"}{" "}
@@ -759,7 +759,7 @@ function AuctionRow({
                                         className={
                                             won
                                                 ? "block h-1 rounded-full bg-accent"
-                                                : "block h-1 rounded-full bg-(--palette-gris-oscuro)"
+                                                : "block h-1 rounded-full bg-(--palette-ceniza)"
                                         }
                                         style={{ width: `${Math.round(row.valueShare * 100)}%` }}
                                     />
@@ -834,7 +834,7 @@ export function TagsPanel({ view }: { view: ScreenView }) {
                     {moment.held_products.map((product) => (
                         <span
                             key={`${product.brand_ref ?? ""}:${product.category}`}
-                            className="rounded-full border border-(--palette-naranjo) px-2.5 py-0.5 text-warning"
+                            className="rounded-full border border-(--palette-ambar) px-2.5 py-0.5 text-warning"
                         >
                             En mano:{" "}
                             {(product.brand_ref && DEMO_BRANDS[product.brand_ref]) ??

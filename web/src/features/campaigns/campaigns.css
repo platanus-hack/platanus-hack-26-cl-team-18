@@ -1,4 +1,4 @@
-/* Campaign studio. Relvo tokens only (global.css); selection uses --ui-selected. */
+/* Campaign studio. ADverse tokens only (global.css); selection uses --ui-selected. */
 .campaign-studio {
     font-size: var(--text-compact);
 }
@@ -133,7 +133,7 @@
     margin-left: auto;
     color: var(--color-fg);
 }
-/* Segmented controls: ink fill when pressed, like relvo's primary. */
+/* Segmented controls: ink fill when pressed. */
 .studio-party-options,
 .studio-format,
 .studio-stages {
@@ -222,7 +222,7 @@
     align-items: center;
     justify-content: center;
     gap: 0.75rem;
-    color: var(--palette-gris-oscuro);
+    color: var(--palette-piedra);
 }
 .studio-updating {
     position: absolute;
