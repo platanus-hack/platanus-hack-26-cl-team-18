@@ -1,0 +1,10 @@
+{
+  "name": "speech-platanos-slip",
+  "beat": "The recognizer writes \"Platanus\" as \"plátanos\": the hackathon promo still airs",
+  "catalog": "chile",
+  "kpis": false,
+  "steps": [
+    {"scene": {"people": 1, "objects": [{"label": "laptop", "score": 1}]}, "expect": {"no_bid": ["Monster Energy"]}},
+    {"speech": ["hackathon"], "speech_text": "unos plátanos", "expect": {"brands": ["Monster Energy"], "copy_contains": "6x Monster"}}
+  ]
+}

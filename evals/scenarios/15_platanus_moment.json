@@ -1,0 +1,24 @@
+{
+  "name": "platanus-moment",
+  "beat": "\"Platanus\" (and how speech recognition hears it) airs the six-pack; \"no es una hackatón\" does not",
+  "description": "Chile catalog. A negated mention changes nothing; \"esto es Platanus\" and the recognizer's usual slip \"plátanos\" both air the Monster six-pack over whatever the camera sees.",
+  "catalog": "chile",
+  "kpis": false,
+  "steps": [
+    {
+      "scene": {"people": 2, "objects": [{"label": "energy drink can", "score": 1}, {"label": "cup", "score": 1}]},
+      "expect": {"no_bid": ["Monster Energy"]}
+    },
+    {
+      "speech": [],
+      "speech_text": "no es una hackatón",
+      "expect": {"no_change": true},
+      "note": "a negated mention sells nothing"
+    },
+    {
+      "speech": ["hackathon"],
+      "speech_text": "esto es Platanus",
+      "expect": {"brands": ["Monster Energy"], "copy_contains": "¿No duermes? 6x Monster por $1.990"}
+    }
+  ]
+}

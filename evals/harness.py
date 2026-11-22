@@ -195,7 +195,11 @@ def set_stock(backend: LiveBackend, stock: dict[str, bool]) -> None:
 def run_scenario(scenario: Scenario, *, swap_holds: bool | None = None) -> RunRecord:
     record = RunRecord(source=scenario.name)
     started = time.perf_counter()
-    with live_backend(speech_mode_screens=[DEMO_SCREEN], auction_swap_holds=swap_holds) as backend:
+    with live_backend(
+        speech_mode_screens=[DEMO_SCREEN],
+        auction_swap_holds=swap_holds,
+        demo_catalog=scenario.catalog,
+    ) as backend:
         session = _Session(backend)
         record.initial = session.initial
         try:

@@ -326,3 +326,12 @@ def test_the_hackathon_promo_is_reached_by_speech_or_its_marker_never_by_a_lapto
     assert ("hackathon", segment) in CHILE.cue_segments
     assert ("monster-energy", segment) in CHILE.marker_cues
     assert [other.slug for other in CHILE.brands if segment in other.segments] == [promo.slug]
+
+
+def test_the_hackathon_promo_airs_the_six_pack_photo_and_its_own_loop() -> None:
+    found = media_for(load_campaign_media(), (("monster-energy", "energy_pack"),))
+    assert found is not None
+    assert found[1].photo_urls[0].endswith("/cl-monster-sixpack.webp")
+    assert (ROOT / "var" / "media" / "loops" / "monster-energy.mp4").is_file()
+    offer = next(b for b in CHILE.baskets if b.slugs == frozenset({"monster-energy"}))
+    assert offer.tiers == ((1, "6x Monster", " six pack", 1990),)

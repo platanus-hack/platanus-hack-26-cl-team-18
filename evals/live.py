@@ -85,6 +85,9 @@ def live_backend(
     the composition root's own override points, so the full generation stack
     (studio, guard, cache, voice-over service, warm worker) runs unmodified.
     """
+    # Evals pin the fictional seed, whatever DEMO_CATALOG the station's .env has; a
+    # scenario that tests a Chile-only campaign asks for it explicitly.
+    catalog = settings_overrides.pop("demo_catalog", "fictional")
     with tempfile.TemporaryDirectory(prefix="evals-media-") as tmp:
         options = {
             "_env_file": None,
@@ -99,8 +102,7 @@ def live_backend(
         }
         settings = AppSettings(
             app_env="test",
-            # Evals pin the fictional seed, whatever DEMO_CATALOG the station's .env has.
-            demo_catalog="fictional",
+            demo_catalog=catalog,
             demo_simulator=True,
             media_dir=media_dir or Path(tmp) / "media",
             elevenlabs_budget_file=Path(tmp) / "elevenlabs-budget.json",

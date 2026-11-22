@@ -40,6 +40,7 @@ with the brand's own packaging, never edited or redrawn (CLAUDE.md invariant 4).
 | `cl-dulces.webp` | [HardCandy.jpg](https://commons.wikimedia.org/wiki/File:HardCandy.jpg) | Adam Zivner | CC BY-SA 3.0 | cropped to 16:9 |
 | `cl-monster-mega.webp` | [Monster Energy Mega can.jpg](https://commons.wikimedia.org/wiki/File:Monster_Energy_Mega_can.jpg) | DYVER | CC BY-SA 4.0 | pack shot: whole, on its own blurred photo |
 | `cl-monster-lineup.webp` | [Monster Energy drinks 04.jpg](https://commons.wikimedia.org/wiki/File:Monster_Energy_drinks_04.jpg) | Oto Zapletal | CC BY-SA 4.0 | cropped to 16:9 |
+| `cl-monster-sixpack.webp` | [Monster Energy drinks 11.jpg](https://commons.wikimedia.org/wiki/File:Monster_Energy_drinks_11.jpg) | Oto Zapletal | CC BY-SA 4.0 | pack shot: whole, on its own blurred photo, cut from the wider shot |
 | `cl-coca-cola-zero.webp` | [Coca Cola Zero 1L Sense Sucre Cara A.jpg](https://commons.wikimedia.org/wiki/File:Coca_Cola_Zero_1L_Sense_Sucre_Cara_A.jpg) | DigitalCompas | CC BY 4.0 | pack shot: whole, on its own blurred photo |
 | `cl-pepsi-max.webp` | [Pepsi Max can.jpg](https://commons.wikimedia.org/wiki/File:Pepsi_Max_can.jpg) | Ramolito | Public domain | pack shot: whole, on its own blurred photo |
 | `cl-bilz.webp` | [Botella Bilz 2023.jpg](https://commons.wikimedia.org/wiki/File:Botella_Bilz_2023.jpg) | Anuchikibrikiivdamke | CC BY-SA 4.0 | pack shot: whole, on its own blurred photo |

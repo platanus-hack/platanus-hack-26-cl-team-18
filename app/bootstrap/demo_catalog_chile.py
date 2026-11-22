@@ -427,7 +427,10 @@ BRANDS: tuple[DemoBrand, ...] = (
         category="energy_pack",
         age_restricted=False,
         segments=(PROGRAMMING,),
-        rate_clp_per_as="9",
+        # Saying it must always win the screen: above any basket the camera can build
+        # (the hero Score + Juan Valdez peaks at ~17.5 with the night boost). Exact match
+        # on an audience only speech or its marker reach, so it never outbids elsewhere.
+        rate_clp_per_as="25",
         color="#000000",
         stock_copy="Monster Energy · Six pack 473 ml para la noche de código.",
         voice=("directo", "nocturno"),
@@ -996,7 +999,7 @@ MARKET_SHAPE: dict[str, tuple[int, str | None]] = {
     "starbucks": (70_000, "3.2"),
     "guinness-0-0": (50_000, "3.5"),
     "vital": (30_000, "2"),
-    "monster-energy": (60_000, None),  # the hackathon promo
+    "monster-energy": (150_000, None),  # the hackathon promo: never paces out mid-demo
 }
 
 CHILE = replace(

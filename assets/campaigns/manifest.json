@@ -350,11 +350,11 @@
       ]
     },
     "monster-energy": {
-      "photo": "cl-monster-lineup",
-      "video": "cl-monster-lineup",
+      "photo": "cl-monster-sixpack",
+      "video": "cl-monster-sixpack",
       "alternates": [
-        "cl-monster-hielo",
-        "cl-monster-mega"
+        "cl-monster-lineup",
+        "cl-monster-hielo"
       ]
     }
   }

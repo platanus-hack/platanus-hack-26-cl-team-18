@@ -86,6 +86,10 @@ class Scenario:
     # its checks and the invariant gates still apply, but its decisions stay out
     # of the product-KPI ratchets, which track a representative demo mix.
     kpis: bool = True
+    # Which demo catalog the backend boots (demo_catalog.catalog_named). The economic
+    # benchmark and its baseline stay on the pinned fictional seed; a scenario about a
+    # Chile-only campaign (the hackathon promo) opts in with "catalog": "chile".
+    catalog: str = "fictional"
 
 
 def load_scenes(path: Path = SCENES_FILE) -> dict[str, Scene]:
@@ -139,6 +143,7 @@ def parse_scenario(raw: dict[str, Any], scenes: dict[str, Scene]) -> Scenario:
         description=raw.get("description", ""),
         steps=tuple(steps),
         kpis=bool(raw.get("kpis", True)),
+        catalog=str(raw.get("catalog", "fictional")),
     )
 
 

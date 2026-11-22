@@ -221,6 +221,13 @@ are informational KPIs. `evals/scenarios/11_segment_affinity.json` is the probe.
 re-auction. `measured_offset_s` simulates stale facts or a fast device clock.
 Run a single scenario with `make eval ARGS="--only basket-ad --soak 0"`.
 
+Scenarios run the pinned fictional catalog unless they set `"catalog": "chile"`. The
+hackathon moment does (`14_hackathon_moment.json`, `15_platanus_moment.json`, and
+`speech/platanos_slip.json`): saying "hackathon" or "Platanus" (or the recognizer's
+"plátanos") must air Monster's six-pack with "¿No duermes? 6x Monster por $1.990", over
+the hero basket; a laptop or the hero scene must never even make it bid, and "no es una
+hackatón" changes nothing. They are probes (`kpis: false`), gated like every check.
+
 **Every bug found in a rehearsal becomes a scenario** before it is fixed.
 
 ## 4. Real video, no mocks

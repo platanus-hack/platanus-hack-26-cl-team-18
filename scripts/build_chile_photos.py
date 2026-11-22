@@ -45,6 +45,9 @@ class CommonsPhoto:
     # screen height on the right, over a blurred, darkened copy of the same photo, so a
     # portrait pack shot is never cropped mid-label and the copy keeps the left.
     pack: bool = False
+    # Fractions (left, top, right, bottom) to cut from the original first: a group of
+    # products inside a wider shot (six cans of a stacked lineup). Never retouched.
+    region: tuple[float, float, float, float] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,6 +110,13 @@ COMMONS: tuple[CommonsPhoto, ...] = (
         pack=True,
     ),
     CommonsPhoto(stem="cl-monster-lineup", title="File:Monster Energy drinks 04.jpg"),
+    # The hackathon promo's six-pack: six whole cans (3 x 2) from a stacked lineup.
+    CommonsPhoto(
+        stem="cl-monster-sixpack",
+        title="File:Monster Energy drinks 11.jpg",
+        pack=True,
+        region=(0.561, 0.015, 0.962, 0.905),
+    ),
     CommonsPhoto(
         stem="cl-coca-cola-zero", title="File:Coca Cola Zero 1L Sense Sucre Cara A.jpg", pack=True
     ),
@@ -248,10 +258,21 @@ def _download_and_save(photo: CommonsPhoto, meta: dict, originals: dict[str, Ima
         original = ImageOps.exif_transpose(Image.open(data)).convert("RGB")
         original.thumbnail((3200, 3200))  # originals can be 8000+ px wide
         originals[photo.title] = original
+    source = originals[photo.title]
+    if photo.region is not None:
+        left, top, right, bottom = photo.region
+        source = source.crop(
+            (
+                round(left * source.width),
+                round(top * source.height),
+                round(right * source.width),
+                round(bottom * source.height),
+            )
+        )
     if photo.pack:
-        _save(_pack(originals[photo.title]), photo.stem)
+        _save(_pack(source), photo.stem)
         return
-    framed = _frame(originals[photo.title], photo.focus, photo.zoom)
+    framed = _frame(source, photo.focus, photo.zoom)
     _save(ImageOps.mirror(framed) if photo.mirror else framed, photo.stem)
 
 
@@ -283,6 +304,7 @@ def build_commons(credits: list[str], *, force: bool = False) -> None:
             f"| `{photo.stem}.webp` | [{photo.title[5:]}]({meta['descriptionurl']}) "
             f"| {artist} | {license_name} | "
             + ("pack shot: whole, on its own blurred photo" if photo.pack else "cropped to 16:9")
+            + (", cut from the wider shot" if photo.region else "")
             + (", mirrored" if photo.mirror else "")
             + " |"
         )

@@ -1,0 +1,30 @@
+{
+  "name": "hackathon-moment",
+  "beat": "The demo's own moment: say \"hackathon\" and Monster's six-pack takes the screen",
+  "description": "Chile catalog. The promo bids only the Programming audience (IAB 702), which no camera label reaches: laptops and the hero scene never make it bid. Saying the word does, with the exact hook, and it holds when the group grows.",
+  "catalog": "chile",
+  "kpis": false,
+  "steps": [
+    {
+      "scene": {"people": 2, "objects": [{"label": "laptop", "score": 1}]},
+      "expect": {"no_bid": ["Monster Energy"]},
+      "note": "a demo table full of laptops never triggers the promo"
+    },
+    {
+      "scene": {"people": 2, "objects": [{"label": "energy drink can", "score": 1}, {"label": "cup", "score": 1}]},
+      "expect": {"no_bid": ["Monster Energy"]},
+      "note": "nor does the hero scene (a can and a coffee)"
+    },
+    {
+      "speech": ["hackathon"],
+      "speech_text": "estamos en la hackatón",
+      "expect": {"brands": ["Monster Energy"], "copy_contains": "¿No duermes? 6x Monster por $1.990"},
+      "note": "say it: the six-pack takes the screen, over the hero basket"
+    },
+    {
+      "scene": {"people": 4, "objects": [{"label": "laptop", "score": 1}, {"label": "energy drink can", "score": 1}, {"label": "cup", "score": 1}]},
+      "expect": {"brands": ["Monster Energy"], "copy_contains": "six pack para compartir"},
+      "note": "the group grows: still the promo, one six-pack to share"
+    }
+  ]
+}
