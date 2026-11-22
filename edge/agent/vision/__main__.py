@@ -46,7 +46,7 @@ from agent.vision.pipeline import (
     VisionPipeline,
     blur_encoder,
 )
-from agent.vision.remote import RemoteGpuDetector
+from agent.vision.remote import RemoteGpuDetector, check_gpu_url
 from agent.vision.snapshot import SnapshotBuilder, SnapshotConfig
 from agent.vision.types import FrameDetections
 
@@ -103,9 +103,17 @@ async def run(args: argparse.Namespace) -> int:
     remote: RemoteGpuDetector | None = None
     catalog = MarkerCatalog.from_file(Path(args.markers)) if args.markers else None
     main_detector: Detector = local
-    if args.gpu_url:  # remote GPU primary, local hot standby (ADR 0007)
+    gpu_url = args.gpu_url
+    if gpu_url:
+        try:
+            check_gpu_url(gpu_url)
+        except ValueError as exc:
+            # Never send raw frames over it; perception keeps running locally.
+            logger.error("ignoring --gpu-url, running on the local detector only: %s", exc)
+            gpu_url = None
+    if gpu_url:  # remote GPU primary, local hot standby (ADR 0007)
         remote = RemoteGpuDetector(
-            args.gpu_url,
+            gpu_url,
             token=args.gpu_token or os.environ.get("GPU_TOKEN") or None,
             timeout_s=args.gpu_timeout_ms / 1000,
             connect_timeout_s=args.gpu_connect_timeout_ms / 1000,

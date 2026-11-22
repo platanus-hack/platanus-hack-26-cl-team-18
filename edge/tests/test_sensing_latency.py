@@ -317,7 +317,7 @@ def test_remote_object_requests_follow_capture_deadlines_without_frame_count_dep
             requested.append(request["objects"])
 
     detector = RemoteGpuDetector(
-        "ws://unused",
+        "ws://localhost",
         encoder=lambda _: (b"jpeg", 10, 10),
         object_every=100,
         object_interval=timedelta(milliseconds=200),

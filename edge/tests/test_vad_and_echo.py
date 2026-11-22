@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 import numpy as np
 import pytest
 
-from agent.speech.echo_guard import AudioWindow, EchoGuard
+from agent.speech.echo_guard import MAX_WINDOWS, AudioWindow, EchoGuard
 from agent.speech.vad import FRAME_BYTES, FRAME_SAMPLES, EnergyVad, GateEvent, SpeechGate
 
 T0 = datetime(2026, 11, 21, 15, tzinfo=UTC)
@@ -81,6 +81,22 @@ def test_echo_guard_drops_our_own_line_heard_late() -> None:
     assert guard.is_echo("voltio y café patio", later)  # a fragment
     assert not guard.is_echo("uf qué hambre", later)  # a person, not our ad
     assert guard.dropped == 2
+
+
+def test_echo_guard_prunes_on_announce_without_is_echo() -> None:
+    guard = EchoGuard()
+    for minute in range(200):  # a long demo where nobody speaks: is_echo never runs
+        start = T0 + timedelta(minutes=minute)
+        guard.announce(AudioWindow(start, start + timedelta(seconds=3), f"línea {minute}"))
+    assert len(guard._windows) == 1  # only the window still on air survives
+
+
+def test_echo_guard_caps_windows_announced_in_a_burst() -> None:
+    guard = EchoGuard()
+    for i in range(500):
+        guard.announce(AudioWindow(T0, T0 + timedelta(seconds=3), f"línea {i}"))
+    assert len(guard._windows) == MAX_WINDOWS
+    assert guard.is_echo("cualquier cosa", T0 + timedelta(seconds=1))
 
 
 def test_echo_guard_rejects_inverted_windows() -> None:

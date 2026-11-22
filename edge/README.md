@@ -133,7 +133,10 @@ The frame path, in `agent/vision/` (ADR 0004, 0007, 0008):
   exceeds 150 ms, and probes back after 10 s. `remote.py` implements the `gpu/`
   WebSocket protocol, with at most two frames in flight and invalid replies
   triggering local fallback. Use `--gpu-url wss://host/infer` and `GPU_TOKEN`;
-  the local detector is warmed before capture begins (ADR 0007).
+  the local detector is warmed before capture begins (ADR 0007). Raw frames
+  need TLS: `ws://` is accepted only for loopback, private/link-local LAN
+  addresses, `localhost` and `*.local` (a venue LAN box); any other plaintext
+  URL is rejected and the agent runs on the local detector alone.
   Live GPU replies have a 150 ms deadline (`--gpu-timeout-ms`) and connections
   a 500 ms deadline (`--gpu-connect-timeout-ms`). Both are configurable positive
   millisecond values. Replies must echo the captured frame's sequence, timestamp
