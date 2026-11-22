@@ -314,6 +314,8 @@ DEFAULT_KEYTERMS = KeytermCatalog.from_mapping(
         "isotónica": ("isotónico", "isotónicas", "isotónicos", "hidratante"),
         # A beer without alcohol: "cerveza" itself is rejected in that clause (above).
         "sin alcohol": ("cero alcohol", "0.0", "libre de alcohol"),
+        # The demo's own word: the venue is Platanus Hack (Monster's six-pack promo).
+        "hackathon": ("hackatón", "hackaton", "hackeatón", "platanus", "platanus hack"),
     },
     misheard={
         "hambre": ("ambre", "hambe", "hanbre", "hungry", "starving"),
@@ -326,5 +328,6 @@ DEFAULT_KEYTERMS = KeytermCatalog.from_mapping(
         "dulce": ("candy",),
         "bebida": ("soda",),
         "sin alcohol": ("alcohol free", "non alcoholic"),
+        "hackathon": ("plátano", "plátanos", "platanos", "plátanus", "jacatón", "hack"),
     },
 )

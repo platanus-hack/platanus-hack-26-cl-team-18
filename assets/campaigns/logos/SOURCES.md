@@ -12,6 +12,7 @@ affiliation. Never AI-drawn or redrawn (CLAUDE.md invariant 4).
 |---|---|
 | `red-bull.svg` | File:Logo of Red bull.svg |
 | `monster.svg` | File:Logo Monster Energy.webp |
+| `monster-energy.svg` | the same file as `monster.svg` (Monster's six-pack promo account) |
 | `juan-valdez.svg` | File:Logo JVC.jpg (plate set to the file's own #f8f9fd ground so no box shows) |
 | `nescafe.svg` | File:Nescafé logo 2014.svg |
 | `pronto-copec.svg` | File:Copec Logo 2023.svg |

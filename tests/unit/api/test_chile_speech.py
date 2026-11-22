@@ -135,3 +135,19 @@ def test_a_child_in_the_group_blocks_the_zero_alcohol_beer(tmp_path: Path) -> No
     hits, brands, _ = _aired("una cerveza", tmp_path, minor=True)
     assert hits == ("cerveza",)
     assert "Guinness 0.0" not in brands
+
+
+@pytest.mark.parametrize(
+    "text", ["estamos en la hackatón", "esto es Platanus", "platanus hack", "unos plátanos"]
+)
+def test_saying_hackathon_or_platanus_airs_the_monster_six_pack(tmp_path: Path, text: str) -> None:
+    hits, brands, teaser = _aired(text, tmp_path)
+    assert hits == ("hackathon",)
+    assert brands == ["Monster Energy"]
+    assert teaser == "¿No duermes? 6x Monster por $1.990."
+
+
+def test_saying_it_is_not_a_hackathon_sells_nothing(tmp_path: Path) -> None:
+    hits, brands, _ = _aired("no es una hackatón", tmp_path)
+    assert hits == ()
+    assert brands == []

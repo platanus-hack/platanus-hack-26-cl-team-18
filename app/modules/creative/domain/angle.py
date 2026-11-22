@@ -63,7 +63,9 @@ ANGLE_CATEGORIES: Mapping[Angle, frozenset[str]] = {
             "ice_cream",
         }
     ),
-    Angle.ENERGY: frozenset({"energy_drink", "sports_goods", "sports_drink", "coffee", "water"}),
+    Angle.ENERGY: frozenset(
+        {"energy_drink", "energy_pack", "sports_goods", "sports_drink", "coffee", "water"}
+    ),
     Angle.COFFEE_BREAK: frozenset({"coffee", "pastry", "dairy"}),
     Angle.POST_WORKOUT: frozenset(
         {"sports_goods", "energy_drink", "sports_drink", "coffee", "water"}
@@ -86,6 +88,7 @@ CATEGORY_ANGLE: Mapping[str, Angle] = {
     "cola": Angle.HUNGER,  # a cold soda answers the burger moment
     "water": Angle.POST_WORKOUT,
     "energy_drink": Angle.ENERGY,
+    "energy_pack": Angle.ENERGY,
     "sports_goods": Angle.ENERGY,
     "alcohol": Angle.SOCIAL,
     "beer_zero": Angle.SOCIAL,  # a 0.0 beer is still an age-restricted brand

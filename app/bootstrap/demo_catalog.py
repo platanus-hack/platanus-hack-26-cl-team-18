@@ -37,6 +37,7 @@ JUICES = "988"  # Purchase Intent | CPG | Edible | Beverages | Juices
 SPORTS_DRINKS = "998"  # Purchase Intent | CPG | Edible | Beverages | Sports/Energy Drinks | Sports
 CHOCOLATE_CANDY = "1076"  # Purchase Intent | CPG | Edible | General Food | Candy | Chocolate
 MILK = "1140"  # Purchase Intent | CPG | Edible | Refrigerated | Dairy | Milk
+PROGRAMMING = "702"  # Interest | Technology & Computing | Computing | Programming Languages
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

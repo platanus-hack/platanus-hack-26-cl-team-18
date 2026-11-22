@@ -39,6 +39,7 @@ from app.bootstrap.demo_catalog import (
     MILK,
     NON_ALCOHOLIC,
     PASTRY,
+    PROGRAMMING,
     READY_TO_DRINK_COFFEE,
     SALTY_SNACKS,
     SNACKS,
@@ -415,6 +416,23 @@ BRANDS: tuple[DemoBrand, ...] = (
         tagline="Lo bueno se hace esperar.",  # its "Good things come to those who wait"
         voice=("sereno", "nocturno"),
         product="beer_zero",
+    ),
+    # The demo's own moment (Platanus Hack): say "hackathon" or "Platanus" and Monster's
+    # six-pack promo takes the screen. Its own aisle (energy_pack) and one audience no
+    # camera label reaches, programming, so laptops on the demo table never trigger it:
+    # only speech, or the promo's printed marker as demo insurance.
+    DemoBrand(
+        slug="monster-energy",
+        name="Monster Energy",
+        category="energy_pack",
+        age_restricted=False,
+        segments=(PROGRAMMING,),
+        rate_clp_per_as="9",
+        color="#000000",
+        stock_copy="Monster Energy · Six pack 473 ml para la noche de código.",
+        voice=("directo", "nocturno"),
+        broad_match=False,  # exact match only: the promo never leaks into other moments
+        product="energy_drink",
     ),
 )
 
@@ -806,6 +824,12 @@ BASKETS: tuple[DemoBasket, ...] = (
             (1390, 2590, 3690, 4690),
         ),
     ),
+    # One six-pack for the whole group, whatever its size (a demo promo price).
+    DemoBasket(
+        slugs=frozenset({"monster-energy"}),
+        names="Monster Energy",
+        tiers=((1, "6x Monster", " six pack", 1990),),
+    ),
     DemoBasket(
         slugs=frozenset({"starbucks"}),
         names="Starbucks",
@@ -853,6 +877,7 @@ CHILE = Catalog(
         ("soprole", MILK),
         ("powerade", SPORTS_DRINKS),
         ("gatorade", SPORTS_DRINKS),
+        ("monster-energy", PROGRAMMING),  # the hackathon promo, if the room is too loud
     ),
     segment_angles=(
         (WATER, "energy"),
@@ -860,6 +885,7 @@ CHILE = Catalog(
         (SPORTS_DRINKS, "energy"),
         # "Una sin alcohol": the Guinness 0.0 moment, with its own "cero alcohol" hook.
         (NON_ALCOHOLIC, "social"),
+        (PROGRAMMING, "energy"),  # a night of code: "¿No duermes?"
     ),
     # Every brand airs imagery: its own campaign photos, else its category's scene.
     category_scenes=True,
@@ -880,6 +906,7 @@ CHILE = Catalog(
         ("bebida", SOFT_DRINKS),
         ("isotónica", SPORTS_DRINKS),
         ("sin alcohol", NON_ALCOHOLIC),
+        ("hackathon", PROGRAMMING),  # "hackatón", "Platanus" (the demo's own moment)
     ),
     daypart_boosts=(
         # Highway dayparts (venue local time, creative.domain.brief.daypart_for_hour):
@@ -946,6 +973,7 @@ MARKET_SHAPE: dict[str, tuple[int, str | None]] = {
     "starbucks": (70_000, "3.2"),
     "guinness-0-0": (50_000, "3.5"),
     "vital": (30_000, "2"),
+    "monster-energy": (60_000, None),  # the hackathon promo
 }
 
 CHILE = replace(

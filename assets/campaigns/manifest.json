@@ -348,6 +348,14 @@
       "alternates": [
         "cl-papas-rusticas"
       ]
+    },
+    "monster-energy": {
+      "photo": "cl-monster-lineup",
+      "video": "cl-monster-lineup",
+      "alternates": [
+        "cl-monster-hielo",
+        "cl-monster-mega"
+      ]
     }
   }
 }

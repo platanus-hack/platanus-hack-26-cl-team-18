@@ -187,6 +187,8 @@ _CATEGORY_TEASERS: dict[str, tuple[str, str]] = {
     "water": ("Sed de ruta. Recarga con agua fría.", "Sed de ruta. Recarga para los {group}."),
     "sports_drink": ("Hidrátate y recarga energía.", "Hidratación y recarga para los {group}."),
     "beer_zero": ("El panorama, con cero alcohol.", "Los {group}, el panorama con cero alcohol."),
+    # The hackathon promo (Monster Energy six-pack): the line the team asked for.
+    "energy_pack": ("¿No duermes? 6x Monster por $1.990.", "¿No duermen? 6x Monster por $1.990."),
 }
 
 

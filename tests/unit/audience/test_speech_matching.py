@@ -137,6 +137,10 @@ def test_misheard_forms_are_matched_but_never_bias_the_recognizer():
         ("qué dulce eres", ()),
         ("es muy dulce", ()),
         ("no quiero helado", ()),
+        # The demo's own word, and how Platanus gets heard.
+        ("estamos en la hackatón", ("hackathon",)),
+        ("esto es Platanus", ("hackathon",)),
+        ("unos plátanos", ("hackathon",)),
     ],
 )
 def test_chilean_store_words_and_their_other_meanings(text, wanted):

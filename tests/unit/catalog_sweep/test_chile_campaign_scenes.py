@@ -103,6 +103,7 @@ SEEN: dict[str, str | None] = {
     "domino": "hot dog",
     "vital": "bottle",
     "guinness-0-0": "beer bottle",
+    "monster-energy": None,  # the hackathon promo: speech or its marker, never a camera label
 }
 
 # Hour (UTC; Santiago is UTC-3) each basket's story happens at. Default: lunch.
@@ -291,12 +292,20 @@ def test_each_campaign_airs_in_its_scene(slugs: frozenset[str]) -> None:
     assert {winner.brand_name for winner in auction.winners} == names
     assert {slot.brand_name for slot in creative.spec.slots} == names
 
-    duo = next(label for party, label, *_ in basket.tiers if party == 2)
+    # The largest tier a party of two fits (a promo may have a single tier for all).
+    duo = max((tier for tier in basket.tiers if tier[0] <= 2), key=lambda tier: tier[0])[1]
     assert auction.offer is not None and auction.offer.label == duo
 
     teaser = next(stage.copy_text for stage in creative.spec.stages if stage.name == "teaser")
     assert teaser
-    rivals = {b.name for b in CHILE.brands if b.slug not in slugs}
+    own = {BRANDS[slug].name for slug in slugs}
+    # A name inside the campaign's own brand name is its own product ("Monster" in
+    # "Monster Energy"), as the copy guard reads it.
+    rivals = {
+        b.name
+        for b in CHILE.brands
+        if b.slug not in slugs and not any(b.name in name for name in own)
+    }
     assert not [rival for rival in rivals if rival in teaser], teaser
 
     found = media_for(
@@ -306,3 +315,14 @@ def test_each_campaign_airs_in_its_scene(slugs: frozenset[str]) -> None:
     photos = found[1].photo_urls
     assert photos[0].rsplit("/", 1)[-1].startswith("cl-"), photos  # a real Chilean lead
     assert creative.spec.slots[0].hero_image_url in photos
+
+
+def test_the_hackathon_promo_is_reached_by_speech_or_its_marker_never_by_a_laptop() -> None:
+    # A demo table is full of laptops: the promo must not hijack every other beat.
+    promo = BRANDS["monster-energy"]
+    (segment,) = promo.segments
+    assert segment not in {cue["segment"] for cue in VISION_CUES}
+    assert not promo.broad_match
+    assert ("hackathon", segment) in CHILE.cue_segments
+    assert ("monster-energy", segment) in CHILE.marker_cues
+    assert [other.slug for other in CHILE.brands if segment in other.segments] == [promo.slug]

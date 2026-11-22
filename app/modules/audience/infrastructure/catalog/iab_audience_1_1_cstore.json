@@ -112,6 +112,13 @@
       "tier": "interest"
     },
     {
+      "id": "702",
+      "label": "Programming Languages",
+      "label_es": "Programación",
+      "path": "Interest | Technology & Computing | Computing | Programming Languages",
+      "tier": "interest"
+    },
+    {
       "id": "733",
       "label": "Video Gaming",
       "label_es": "Videojuegos",

@@ -176,6 +176,12 @@ cansado" Score, "tengo hambre" Pronto (`tests/unit/api/test_chile_speech.py`). T
 meanings ("está helado afuera", "mis papás", "qué dulce eres") sell nothing, and beer is
 heard but answered with Guinness 0.0 (Ley 21.363), never to a group with a child.
 
+**The hackathon moment:** say "hackathon", "hackatón" or "Platanus" (Scribe often
+writes it "plátanos"; both count) in speech mode and Monster's six-pack promo takes the
+screen: "¿No duermes? 6x Monster por $1.990." It bids only the Programming audience
+(IAB 702), which no camera label reaches, so the laptops on the demo table never trigger
+it. Demo insurance: hold the Monster Energy marker (id 27) on the sheet.
+
 **Wow moments from the team's references** (Dominó, Starbucks, Vital, Guinness 0.0):
 
 - *Completo + Guinness 0.0.* Hold a hot dog and a beer bottle at night: the screen airs
