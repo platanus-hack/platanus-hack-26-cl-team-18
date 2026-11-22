@@ -25,8 +25,8 @@ secret_names = [
   "FAL_KEY", # fal media generation (ImageGenerator / VideoGenerator); unset = no hosted media
   # Device tokens (app/api/device_auth.py), 24+ chars each (openssl rand -hex 16).
   # Unset in prod means closed: no agent connects, no player bills.
-  "AGENT_TOKEN",  # the edge agent's bearer token on /ws/agent
-  "SCREEN_TOKEN", # the kiosk player: open /screen?token=... once; without it, view-only
-  "DEMO_KEY",     # 24+ chars (openssl rand -hex 16): bids, stock and campaigns in prod
+  "AGENT_TOKEN",   # the edge agent's bearer token on /ws/agent
+  "SCREEN_TOKEN",  # the kiosk player: open /screen?token=... once; without it, view-only
+  "DEMO_KEY",      # 24+ chars (openssl rand -hex 16): bids, stock and campaigns in prod
   "CONSOLE_TOKEN", # /ws/console (every bid, charge, budget); unset = open, so set it
 ]
