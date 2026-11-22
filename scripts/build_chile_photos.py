@@ -60,16 +60,6 @@ class Relight:
 
 
 COMMONS: tuple[CommonsPhoto, ...] = (
-    CommonsPhoto(
-        stem="cl-completo",
-        title="File:Completo italiano.jpg",
-        focus=(0.5, 0.52),
-        mirror=True,
-    ),
-    # Top-aligned: the 4:3 original loses height at 16:9; keep the cup's rim.
-    CommonsPhoto(
-        stem="cl-cafe-medialuna", title="File:Taza de café con leche.jpg", focus=(0.5, 0.0)
-    ),
     # Rotation and category scenes (manifest `alternates`, `category:<name>`): more of
     # the same moment so a returning viewer sees a new frame. Food, drink and road only:
     # no faces, no third-party marks.
@@ -97,12 +87,10 @@ COMMONS: tuple[CommonsPhoto, ...] = (
     CommonsPhoto(
         stem="cl-helado-playa", title="File:2 ice cream cones 2025-05-02.jpg", focus=(0.5, 0.45)
     ),
-    CommonsPhoto(
-        stem="cl-paleta", title="File:Patriotic Ice Pop (4685807904).jpg", focus=(0.5, 0.35)
-    ),
     CommonsPhoto(stem="cl-chocolatada", title="File:Chocolate milk.JPG", focus=(0.55, 0.5)),
-    CommonsPhoto(stem="cl-nectar", title="File:Orange juice 1 edit1.jpg", focus=(0.5, 0.62)),
-    CommonsPhoto(stem="cl-papas", title="File:Papas fritas bowl.jpg", focus=(0.5, 0.5)),
+    CommonsPhoto(stem="cl-nectar", title="File:Orange juice 1 edit1.jpg", pack=True),
+    # Medialunas with coffee: a Commons "Quality image" (sharp, well lit).
+    CommonsPhoto(stem="cl-medialunas", title="File:MediasLunasenMardelPlata.jpg", mirror=True),
     CommonsPhoto(stem="cl-papas-rusticas", title="File:Dill pickle chips.jpg", focus=(0.5, 0.5)),
     CommonsPhoto(
         stem="cl-ruta-amanecer", title="File:Ruta 5 Sur Chile (km 104,8).jpg", focus=(0.5, 0.6)

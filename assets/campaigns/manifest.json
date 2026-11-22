@@ -53,21 +53,20 @@
       "video": "coffee",
       "alternates": [
         "cl-cappuccino",
-        "cl-cafe-medialuna"
+        "cl-medialunas"
       ]
     },
     "nescafe": {
       "photo": "cl-cappuccino",
       "video": "cl-cappuccino",
       "alternates": [
-        "cl-cafe-medialuna"
+        "cl-medialunas"
       ]
     },
     "pronto-copec": {
-      "photo": "cl-completo",
-      "video": "cl-completo",
+      "photo": "cl-completo-palta",
+      "video": "cl-completo-palta",
       "alternates": [
-        "cl-completo-palta",
         "cl-desayuno",
         "cl-copec-estacion"
       ]
@@ -89,23 +88,22 @@
       ]
     },
     "juan-valdez+pronto-copec": {
-      "photo": "cl-cafe-medialuna",
-      "video": "cl-cafe-medialuna",
+      "photo": "cl-medialunas",
+      "video": "cl-medialunas",
       "alternates": [
         "cl-desayuno"
       ]
     },
     "coca-cola+pronto-copec": {
-      "photo": "cl-completo",
-      "video": "cl-completo",
+      "photo": "cl-completo-palta",
+      "video": "cl-completo-palta",
       "alternates": [
-        "cl-coca-cola-zero",
-        "cl-completo-palta"
+        "cl-coca-cola-zero"
       ]
     },
     "monster+pronto-copec": {
-      "photo": "cl-completo",
-      "video": "cl-completo",
+      "photo": "cl-completo-palta",
+      "video": "cl-completo-palta",
       "alternates": [
         "cl-monster-mega",
         "cl-ruta-5"
@@ -123,8 +121,7 @@
       "photo": "cl-completo-palta",
       "video": "cl-completo-palta",
       "alternates": [
-        "cl-bilz",
-        "cl-completo"
+        "cl-bilz"
       ]
     },
     "category:coffee": {
@@ -138,7 +135,7 @@
       "photo": "cl-desayuno",
       "video": "cl-desayuno",
       "alternates": [
-        "cl-cafe-medialuna"
+        "cl-medialunas"
       ]
     },
     "category:cola": {
@@ -156,11 +153,8 @@
       ]
     },
     "category:snacks": {
-      "photo": "cl-papas",
-      "video": "cl-papas",
-      "alternates": [
-        "cl-papas-rusticas"
-      ]
+      "photo": "cl-papas-rusticas",
+      "video": "cl-papas-rusticas"
     },
     "category:candy": {
       "photo": "cl-dulces",
@@ -171,10 +165,7 @@
     },
     "category:ice_cream": {
       "photo": "cl-helado-playa",
-      "video": "cl-helado-playa",
-      "alternates": [
-        "cl-paleta"
-      ]
+      "video": "cl-helado-playa"
     },
     "category:dairy": {
       "photo": "cl-chocolatada",
@@ -227,17 +218,11 @@
     },
     "cachantun+savory": {
       "photo": "cl-helado-playa",
-      "video": "cl-helado-playa",
-      "alternates": [
-        "cl-paleta"
-      ]
+      "video": "cl-helado-playa"
     },
     "bresler+cachantun": {
       "photo": "cl-helado-playa",
-      "video": "cl-helado-playa",
-      "alternates": [
-        "cl-paleta"
-      ]
+      "video": "cl-helado-playa"
     },
     "cachantun+marco-polo": {
       "photo": "cl-ruta-5",
@@ -254,15 +239,15 @@
       ]
     },
     "gatorade+lays": {
-      "photo": "cl-papas",
-      "video": "cl-papas",
+      "photo": "cl-papas-rusticas",
+      "video": "cl-papas-rusticas",
       "alternates": [
         "cl-agua"
       ]
     },
     "lays+pepsi": {
-      "photo": "cl-papas",
-      "video": "cl-papas",
+      "photo": "cl-papas-rusticas",
+      "video": "cl-papas-rusticas",
       "alternates": [
         "cl-pepsi-max"
       ]
