@@ -92,6 +92,8 @@ class CategoryMultiplier:
 
     category: str
     multiplier: Decimal
+    # Why ("afternoon×1.5", "hot×1.4"): the console shows them; no effect on clearing.
+    reasons: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.multiplier.is_finite() or not Decimal("0.2") <= self.multiplier <= 5:

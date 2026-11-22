@@ -5,6 +5,7 @@ import {
     type AdvertiserBidMultiplier,
     type AdvertiserBudgetTopUp,
     type AdvertiserProfiles,
+    type ConditionsSet,
     type ConsoleBook,
     type StockSet,
 } from "@/contract";
@@ -150,6 +151,20 @@ export async function setStock(
         in_stock: inStock,
     };
     return post("/api/clerk/stock", message);
+}
+
+/** Pin the venue weather for the demo (re-auctions the screen), or `null` for the real one. */
+export async function setConditions(
+    weather: { temperatureC: number; raining: boolean } | null,
+): Promise<unknown> {
+    const message: ConditionsSet = {
+        type: "conditions.set",
+        v: 1,
+        live: weather === null,
+        temperature_c: weather?.temperatureC ?? 20,
+        raining: weather?.raining ?? false,
+    };
+    return post("/api/conditions", message);
 }
 
 export interface BookState {

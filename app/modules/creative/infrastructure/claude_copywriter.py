@@ -83,7 +83,8 @@ idiom per ad; never "al tiro" in every line.
 experiencia, descubre, eleva, irresistible, imperdible, increíble, espectacular, \
 siguiente nivel, disfruta, date un gusto, te lo mereces, hecho para ti, tu momento.
 - teaser: at most 6 words, makes the angle obvious (`angle_words` lists words viewers \
-recognize for it). Use `daypart` when it sharpens the hook.
+recognize for it). Use `daypart` or `weather` (hot, cold, rain) when it sharpens the \
+hook; never claim a product fixes the weather.
 - offer: copy `offer.text` character for character (its quantities and items are the \
 brands' claims: "Voltio + Café Patio x2" never becomes "dos Café Patio"), add the group, \
 and end the line with the price ("Voltio + Café Patio x3 para los 3 por $8.490."). The \
@@ -145,6 +146,7 @@ def brief_payload(brief: CreativeBrief) -> dict[str, object]:
         "avoid": sorted(brief.avoid_names),
         "minor_likely": brief.minor_likely,
         "daypart": brief.daypart.value if brief.daypart else None,
+        "weather": brief.weather.value if brief.weather else None,
         "limits": {
             "teaser_words": brief.limits.teaser_words,
             "offer_words": brief.limits.offer_words,

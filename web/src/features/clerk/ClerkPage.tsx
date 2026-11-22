@@ -1,10 +1,17 @@
 import { cn } from "@/lib/cn";
 import { screenIdFromLocation } from "@/lib/config";
-import { setStock, useBook } from "@/lib/market-api";
+import { setConditions, setStock, useBook } from "@/lib/market-api";
 import { Badge } from "@/shared/ui/badge";
 import { Card } from "@/shared/ui/card";
 import { AppShell, EmptyState, PageHeader } from "@/shared/ui/page";
 import { useState } from "react";
+
+// Demo weather (market-wide): the auction re-weighs ice cream vs. coffee at once.
+const WEATHER_PRESETS = [
+    { label: "Calor 33 °C", weather: { temperatureC: 33, raining: false } },
+    { label: "Frío con lluvia 8 °C", weather: { temperatureC: 8, raining: true } },
+    { label: "Clima real", weather: null },
+] as const;
 
 /** `/clerk?id=demo-01`: the store's stock tablet. A stock-out re-forms the basket at once. */
 export function ClerkPage() {
@@ -28,6 +35,27 @@ export function ClerkPage() {
                     No se guardó {failed}. Inténtalo otra vez.
                 </Badge>
             )}
+            <Card className="flex flex-wrap items-center gap-2 px-4 py-3">
+                <span className="mr-auto font-medium">Clima</span>
+                {WEATHER_PRESETS.map((preset) => (
+                    <button
+                        key={preset.label}
+                        type="button"
+                        className="rounded-md border border-control-edge px-3 py-1 text-compact hover:bg-surface-pressed"
+                        onClick={() => {
+                            setConditions(preset.weather)
+                                .then(() => {
+                                    setFailed(null);
+                                })
+                                .catch(() => {
+                                    setFailed("el clima");
+                                });
+                        }}
+                    >
+                        {preset.label}
+                    </button>
+                ))}
+            </Card>
             {lines.length === 0 ? (
                 <Card>
                     <EmptyState

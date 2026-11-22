@@ -498,6 +498,8 @@ class BidLine(_Model):
     value_per_s: MoneyDTO | None = None  # the bid's money value per screen-second
     multiplier: Annotated[str, Field(pattern=r"^\d+(\.\d+)?$", max_length=16)] | None = None
     matches: list[BidMatch] = Field(default_factory=list, max_length=32)
+    # Time-of-day × weather factor on this bid's category (ranking only, never the charge).
+    context_multiplier: Annotated[str, Field(pattern=r"^\d+(\.\d+)?$", max_length=16)] | None = None
 
 
 class Exclusion(_Model):
@@ -518,6 +520,26 @@ class BundleAlternative(_Model):
 
     brands: Annotated[list[Annotated[str, Field(max_length=80)]], Field(min_length=1, max_length=2)]
     value: MoneyDTO  # per screen-second
+
+
+class ContextFactor(_Model):
+    """One category's context multiplier and the rules behind it ("afternoon×1.5")."""
+
+    category: Annotated[str, Field(max_length=64)]
+    multiplier: Annotated[str, Field(pattern=r"^\d+(\.\d+)?$", max_length=16)]
+    reasons: list[Annotated[str, Field(max_length=40)]] = Field(default_factory=list, max_length=4)
+
+
+class AuctionConditions(_Model):
+    """The venue context the auction cleared against: local daypart and weather."""
+
+    daypart: Literal["morning", "midday", "afternoon", "evening", "night"] | None = None
+    temperature_c: Annotated[float, Field(ge=-60, le=60)] | None = None
+    weather: list[Literal["cold", "mild", "warm", "hot", "rain"]] = Field(
+        default_factory=list, max_length=2
+    )
+    weather_source: Literal["live", "override", "none"] = "none"
+    factors: list[ContextFactor] = Field(default_factory=list, max_length=32)
 
 
 class ConsoleAuction(_Message):
@@ -542,6 +564,7 @@ class ConsoleAuction(_Message):
         None  # swap | held | unchanged | keep_incumbent
     )
     alternatives: list[BundleAlternative] = Field(default_factory=list, max_length=6)
+    conditions: AuctionConditions | None = None
 
 
 class ConsoleNext(_Message):
@@ -662,6 +685,18 @@ class StockSet(_Message):
     screen_id: ScreenId
     brand_id: EntityId
     in_stock: bool
+
+
+class ConditionsSet(_Message):
+    """Pin the venue weather for the demo ("ola de calor"), or `live` to use the real one.
+
+    A change re-auctions the moment on screen (Trigger.CONDITIONS_CHANGED).
+    """
+
+    type: Literal["conditions.set"] = "conditions.set"
+    live: bool = False  # true = drop the override; the two fields below are ignored
+    temperature_c: Annotated[float, Field(ge=-30, le=50)] = 20.0
+    raining: bool = False
 
 
 class BookLine(_Model):
@@ -1250,6 +1285,7 @@ class CampaignGenerated(_Message):
 ALL_MESSAGES += (CampaignCatalog, CampaignGenerate, CampaignGenerated)
 ALL_MESSAGES += (ConsoleNext,)
 ALL_MESSAGES += (AdvertiserProfiles, AdvertiserBudgetTopUp)
+ALL_MESSAGES += (ConditionsSet,)
 
 # Socket unions exported to TS, by name.
 SOCKET_UNIONS: dict[str, tuple[type[_Message], ...]] = {

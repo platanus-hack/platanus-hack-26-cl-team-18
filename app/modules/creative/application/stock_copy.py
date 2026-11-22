@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from app.modules.creative.application.ports.copywriter import WrittenCopy
 from app.modules.creative.domain.angle import Angle, AngleReason
-from app.modules.creative.domain.brief import CreativeBrief, Daypart
+from app.modules.creative.domain.brief import CreativeBrief, Daypart, WeatherHook
 from app.modules.creative.domain.draft import CopyDraft, CopySource
 
 # (solo, group) hooks for when the hour or the head count can't sharpen them. The group
@@ -104,6 +104,34 @@ _DAYPART_TEASERS: dict[tuple[Angle, Daypart], tuple[str, str]] = {
     ),
 }
 
+# The venue's weather sharpens a hook more than the hour does, but only where it is
+# the product's reason to exist (a hot day sells cold water, not a candy bar). Each
+# keeps its angle's keyword: "recarga" (energy), "frío" (ice cream), "café".
+_WEATHER_CATEGORY_TEASERS: dict[tuple[WeatherHook, str], tuple[str, str]] = {
+    (WeatherHook.HOT, "ice_cream"): (
+        "Con este calor, algo frío.",
+        "Con este calor, algo frío para los {group}.",
+    ),
+    (WeatherHook.HOT, "water"): (
+        "Con este calor, recarga con agua fría.",
+        "Con este calor, recarguen los {group}.",
+    ),
+    (WeatherHook.HOT, "sports_drink"): (
+        "Con este calor, hidrátate y recarga.",
+        "Con este calor, recarguen los {group}.",
+    ),
+}
+_WEATHER_TEASERS: dict[tuple[Angle, WeatherHook], tuple[str, str]] = {
+    (Angle.COFFEE_BREAK, WeatherHook.COLD): (
+        "Hace frío. Café calentito.",
+        "Hace frío. Café para los {group}.",
+    ),
+    (Angle.COFFEE_BREAK, WeatherHook.RAIN): (
+        "Llueve afuera. Café adentro.",
+        "Llueve afuera. Café para los {group}.",
+    ),
+}
+
 # One alternate per angle for hook testing (HookLab): same need, different line. Each is
 # person-neutral (works for one viewer or a group) and keeps its angle's keyword.
 _ALTERNATE_HOOKS: dict[Angle, str] = {
@@ -144,7 +172,10 @@ def teaser_for(brief: CreativeBrief, angle: Angle) -> str:
     by_category = (
         next(
             (
-                _CATEGORY_TEASERS[b.category]
+                _WEATHER_CATEGORY_TEASERS.get((brief.weather, b.category))
+                if brief.weather is not None
+                and (brief.weather, b.category) in _WEATHER_CATEGORY_TEASERS
+                else _CATEGORY_TEASERS[b.category]
                 for b in brief.brands
                 if b.category in _CATEGORY_TEASERS
             ),
@@ -153,7 +184,9 @@ def teaser_for(brief: CreativeBrief, angle: Angle) -> str:
         if angle in (Angle.HUNGER, Angle.ENERGY, Angle.SOCIAL)
         else None
     )
-    by_hour = _DAYPART_TEASERS.get((angle, brief.daypart)) if brief.daypart else None
+    by_hour = (_WEATHER_TEASERS.get((angle, brief.weather)) if brief.weather else None) or (
+        _DAYPART_TEASERS.get((angle, brief.daypart)) if brief.daypart else None
+    )
     if by_category is not None:
         solo_hook, counted_hook = by_category
         template = counted_hook if count is not None else solo_hook

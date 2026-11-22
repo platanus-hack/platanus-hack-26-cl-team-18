@@ -1,3 +1,5 @@
+import type { AuctionConditions } from "@/contract";
+import { categoryLabel } from "@/lib/categories";
 import { Badge } from "@/shared/ui/badge";
 import { Panel } from "@/shared/ui/Panel";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/shared/ui/table";
@@ -104,6 +106,54 @@ export function AudiencePanel({ view }: { view: ScreenView }) {
     );
 }
 
+const DAYPART: Readonly<Record<string, string>> = {
+    morning: "Mañana",
+    midday: "Mediodía",
+    afternoon: "Tarde",
+    evening: "Atardecer",
+    night: "Noche",
+};
+const WEATHER: Readonly<Record<string, string>> = {
+    cold: "Frío",
+    mild: "Templado",
+    warm: "Cálido",
+    hot: "Calor",
+    rain: "Lluvia",
+};
+
+/** "Tarde · 33 °C Calor (simulado)" and each category the context lifts or lowers. */
+export function ContextLine({ conditions }: { conditions: AuctionConditions }) {
+    const head = [
+        conditions.daypart && DAYPART[conditions.daypart],
+        conditions.temperature_c != null &&
+            `${Math.round(conditions.temperature_c)} °C ${conditions.weather.map((w) => WEATHER[w]).join(" + ")}`,
+    ].filter(Boolean);
+    if (head.length === 0 && conditions.factors.length === 0) return null;
+    return (
+        <div className="flex flex-col gap-1 text-compact" aria-label="Contexto de la subasta">
+            <span className="text-muted">
+                Contexto: {head.join(" · ") || "sin datos"}
+                {conditions.weather_source === "override" && " (simulado)"}
+                {conditions.weather_source === "none" && " · sin clima"}
+            </span>
+            {conditions.factors.length > 0 && (
+                <span className="flex flex-wrap gap-1">
+                    {conditions.factors.map((f) => (
+                        <Badge
+                            key={f.category}
+                            appearance="soft"
+                            tone={Number(f.multiplier) >= 1 ? "success" : "warning"}
+                            title={f.reasons.join(" · ")}
+                        >
+                            {categoryLabel(f.category)} ×{f.multiplier}
+                        </Badge>
+                    ))}
+                </span>
+            )}
+        </div>
+    );
+}
+
 export function AuctionPanel({ view }: { view: ScreenView }) {
     const a = view.auction?.moment_id === view.moment?.moment_id ? view.auction : null;
     const lift = a ? coBrandLift(a.bundle_value.amount, a.single_brand_value.amount) : null;
@@ -135,6 +185,7 @@ export function AuctionPanel({ view }: { view: ScreenView }) {
                             tiempo mínimo en pantalla.
                         </p>
                     )}
+                    {a.conditions && <ContextLine conditions={a.conditions} />}
                     <p className="text-compact text-muted tabular-nums">
                         Valor de la canasta {money(a.bundle_value)} · mejor marca sola{" "}
                         {money(a.single_brand_value)}
@@ -167,6 +218,14 @@ export function AuctionPanel({ view }: { view: ScreenView }) {
                                         <TableRow key={bid.campaign_id}>
                                             <TableCell>
                                                 {bid.brand_name}
+                                                {bid.context_multiplier && (
+                                                    <span
+                                                        className="ml-1 text-metadata text-muted tabular-nums"
+                                                        aria-label="Multiplicador de contexto"
+                                                    >
+                                                        ×{bid.context_multiplier}
+                                                    </span>
+                                                )}
                                                 {routes && (
                                                     <span
                                                         className="block text-metadata text-muted"
