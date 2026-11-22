@@ -173,7 +173,7 @@ TEAM_SUPPLIED = (
     "(16:9 crop or pack shot) and shown only for their own brand: real product photography\n"
     "with the brand's own packaging, never edited or redrawn (CLAUDE.md invariant 4).\n"
     "`cl-domino-completos` (Dominó), `cl-starbucks-frappuccino` (Starbucks),\n"
-    "`cl-guinness-pint` (Guinness 0.0), `cl-monster-hielo` (Monster) and `cl-vital-picnic`\n"
+    "`cl-guinness-pint` (Guinness 0.0), `cl-monster-hielo` (Monster), `cl-score-guarana` (Score's own ad, ALTO EN seal kept) and `cl-vital-picnic`\n"
     "(Vital). Trademarks of their owners, used for a hackathon demo without affiliation.\n\n"
 )
 

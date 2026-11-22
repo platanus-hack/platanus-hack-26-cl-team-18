@@ -8,8 +8,11 @@ Benedictino). No beer, spirits or Loto: Chile bans alcohol sales at gas stations
 (Ley 21.363). The one beer brand is Guinness 0.0, a non-alcoholic beer the shop can
 sell; Ley 21.363 still treats an alcohol brand's 0.0 line as alcohol advertising, so it
 is age-restricted like the "ALTO EN" products (Ley 20.606 bans their advertising to
-children under 14): snacks, candy, flavoured milk, nectars and ice cream. Energy and sports drinks stay open so the hero basket
-survives a false minor flag; a stricter reading would restrict them too.
+children under 14): snacks, candy, flavoured milk, nectars and ice cream. Sugared energy
+drinks (Score, Red Bull, Monster) carry the "ALTO EN AZÚCARES" seal too (Score's own ad
+shows it), so they are restricted the same way: with a child in the group the hero
+basket gives way to the coffee. Sports drinks stay open (check their seals before the
+demo).
 
 These are real trademarks used for a local demo without affiliation; the fictional
 catalog stays the default for tests, evals and the public URL. Logos are official
@@ -57,11 +60,11 @@ BRANDS: tuple[DemoBrand, ...] = (
         slug="score",
         name="Score",
         category="energy_drink",
-        age_restricted=False,
+        age_restricted=True,  # "ALTO EN AZÚCARES" (its own ad)
         segments=(FITNESS, ENERGY_DRINKS),
         rate_clp_per_as="8",
         color="#f5c400",
-        stock_copy="Score · Original 473 ml, helada para el turno largo.",
+        stock_copy="Score · Guaraná 500 ml, helada para el turno largo.",  # as on the can
         tagline="Score. Máxima potencia.",  # its own site: "Bebida Energética con Máxima Potencia"
         voice=("directo", "chileno", "sin adornos"),
         product="energy_drink",
@@ -73,7 +76,7 @@ BRANDS: tuple[DemoBrand, ...] = (
         slug="red-bull",
         name="Red Bull",
         category="energy_drink",
-        age_restricted=False,
+        age_restricted=True,  # sugared energy drink: "ALTO EN AZÚCARES"
         segments=(ENERGY_DRINKS, FITNESS),
         rate_clp_per_as="7",
         color="#db0a40",
@@ -86,7 +89,7 @@ BRANDS: tuple[DemoBrand, ...] = (
         slug="monster",
         name="Monster",
         category="energy_drink",
-        age_restricted=False,
+        age_restricted=True,  # sugared energy drink: "ALTO EN AZÚCARES"
         segments=(ENERGY_DRINKS, FITNESS),
         rate_clp_per_as="6",
         color="#95d600",
@@ -425,7 +428,7 @@ BRANDS: tuple[DemoBrand, ...] = (
         slug="monster-energy",
         name="Monster Energy",
         category="energy_pack",
-        age_restricted=False,
+        age_restricted=True,  # sugared energy drink: "ALTO EN AZÚCARES"
         segments=(PROGRAMMING,),
         # Saying it must always win the screen: above any basket the camera can build
         # (the hero Score + Juan Valdez peaks at ~17.5 with the night boost). Exact match
@@ -654,7 +657,7 @@ BASKETS: tuple[DemoBasket, ...] = (
         slugs=frozenset({"score"}),
         names="Score",
         tiers=_solo(
-            ("Score Original 473 ml", "Dos Score", "Tres Score", "Cuatro Score"),
+            ("Score Guaraná 500 ml", "Dos Score", "Tres Score", "Cuatro Score"),
             (1590, 2890, 3990, 4990),
         ),
     ),

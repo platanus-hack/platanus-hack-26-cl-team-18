@@ -44,3 +44,16 @@ def test_a_solo_loop_is_a_single_graded_pane() -> None:
     cmd = compose_command("ffmpeg", [(Path("beer.mp4"), "#f6d15a")], Path("o.mp4"))
     graph = cmd[cmd.index("-filter_complex") + 1]
     assert "hstack" not in graph and "s=1280x720" in " ".join(cmd)
+
+
+def test_a_real_brand_loops_its_own_photo_never_the_fictional_ai_clip() -> None:
+    from scripts.build_bundle_loops import ASSETS, VIDEOS
+
+    media = {
+        "score": CampaignMedia(photo_url="/campaign-assets/photos/cl-score-guarana.webp"),
+        "voltio": CampaignMedia(photo_url="/campaign-assets/photos/energy.webp"),
+    }
+    # A Chilean energy drink with a real (cl-) campaign photo: that photo, not energy.mp4.
+    assert source_for("score", "energy_drink", media) == ASSETS / "photos/cl-score-guarana.webp"
+    # The fictional brands keep their category footage.
+    assert source_for("voltio", "sports_goods", media) == VIDEOS / "energy.mp4"

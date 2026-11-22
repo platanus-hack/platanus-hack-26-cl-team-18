@@ -27,11 +27,11 @@
       "video": "rayo-coffee"
     },
     "score": {
-      "photo": "cl-lata-fria",
-      "video": "cl-lata-fria",
+      "photo": "cl-score-guarana",
+      "video": "cl-score-guarana",
       "alternates": [
-        "cl-ruta-amanecer",
-        "cl-ruta-5"
+        "cl-lata-fria",
+        "cl-ruta-amanecer"
       ]
     },
     "red-bull": {
@@ -78,8 +78,8 @@
       "photo": "cl-ruta-amanecer",
       "video": "cl-ruta-amanecer",
       "alternates": [
-        "cl-cappuccino",
-        "cl-lata-fria"
+        "cl-score-guarana",
+        "cl-cappuccino"
       ]
     },
     "juan-valdez+red-bull": {
