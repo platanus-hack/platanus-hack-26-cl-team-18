@@ -174,6 +174,7 @@ BRANDS: tuple[DemoBrand, ...] = (
         rate_clp_per_as="2.8",
         color="#7fcbe8",
         stock_copy="Benedictino · Agua fría para el camino.",
+        tagline="Benedictino. Vive a fondo.",  # its own line, on its official mark
         voice=("simple", "tranquilo"),
         product="water",
     ),

@@ -27,7 +27,8 @@ affiliation. Never AI-drawn or redrawn (CLAUDE.md invariant 4).
 | `score.svg` | Brand site: scoreenergydrink.com (logosscore-02.svg), on a black plate |
 | `colun.svg` | Brand site: colun.cl footer logo, cropped above its copyright line |
 | `ambrosoli.svg` | Brand site: ambrosoli.cl logo, on Ambrosoli red |
+| `benedictino.svg` | Bottler's site: koandina.com brand portfolio (Benedictino-100x-100-pix.jpg), trimmed |
 
 Missing (a plain wordmark is drawn until the brand's press-kit file is dropped in as
-`<slug>.svg`, `.png` or `.webp`): `benedictino`, `marco-polo`, `super-8`,
+`<slug>.svg`, `.png` or `.webp`): `marco-polo`, `super-8`,
 `bilz-y-pap`, `andina-del-valle`, `savory`.

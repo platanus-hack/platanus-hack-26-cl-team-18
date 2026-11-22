@@ -18,12 +18,8 @@ import { coBrandLift, percentile, serverDecisionMs, traceSteps } from "./metrics
 
 export const pct = (ratio: number) => `${Math.round(ratio * 100)} %`;
 
+/** Display names for held-product slugs (the station's catalog, app/bootstrap/demo_catalog_chile.py). */
 export const DEMO_BRANDS: Readonly<Record<string, string>> = {
-    "cafe-patio": "Café Patio",
-    voltio: "Voltio",
-    rayo: "Rayo",
-    "malta-sur": "Malta Sur",
-    // DEMO_CATALOG=chile (app/bootstrap/demo_catalog_chile.py)
     score: "Score",
     "red-bull": "Red Bull",
     monster: "Monster",

@@ -61,44 +61,9 @@ interface Starter {
     media: CampaignGenerate["media"];
 }
 
+// The Pronto Copec catalog's campaigns (DEMO_CATALOG=chile); only the running
+// catalog's starters show, and any other catalog opens on its first approved basket.
 const STARTERS: readonly Starter[] = [
-    {
-        title: "Salida del gimnasio",
-        subtitle: "Voltio lidera · para 3",
-        brands: ["voltio", "cafe-patio"],
-        party: 3,
-        moment: "post_workout",
-        daypart: null,
-        media: "video",
-    },
-    {
-        title: "Café de media tarde",
-        subtitle: "Café Patio lidera · para 2",
-        brands: ["cafe-patio", "rayo"],
-        party: 2,
-        moment: "coffee_break",
-        daypart: "afternoon",
-        media: "photo",
-    },
-    {
-        title: "Pilas bajas",
-        subtitle: "Rayo lidera · tarde",
-        brands: ["rayo", "cafe-patio"],
-        party: 1,
-        moment: "energy",
-        daypart: "afternoon",
-        media: "video",
-    },
-    {
-        title: "Completa el café",
-        subtitle: "Producto en mano · para 1",
-        brands: ["cafe-patio", "voltio"],
-        party: 1,
-        moment: "complete_basket",
-        daypart: null,
-        media: "video",
-    },
-    // DEMO_CATALOG=chile (real brands at a Pronto Copec); only the running catalog's show.
     {
         title: "Turno de noche",
         subtitle: "Score lidera · para 2",
@@ -205,10 +170,10 @@ function explainFailure(reason: unknown): string {
 
 export function CampaignsPage() {
     const [catalog, setCatalog] = useState<CampaignCatalog | null>(null);
-    const [brands, setBrands] = useState(["voltio", "cafe-patio"]);
+    const [brands, setBrands] = useState(["score", "juan-valdez"]);
     const [party, setParty] = useState(2);
-    const [moment, setMoment] = useState<CampaignGenerate["moment"]>("post_workout");
-    const [daypart, setDaypart] = useState<Daypart | null>(null);
+    const [moment, setMoment] = useState<CampaignGenerate["moment"]>("energy");
+    const [daypart, setDaypart] = useState<Daypart | null>("night");
     const [distance, setDistance] = useState<DistanceBand | undefined>(undefined);
     const [theme, setTheme] = useState<"light" | "dark">("light");
     const [media, setMedia] = useState<CampaignGenerate["media"]>("video");
@@ -226,13 +191,15 @@ export function CampaignsPage() {
                 if (controller.signal.aborted) return;
                 const parsed = CampaignCatalogSchema.parse(data);
                 setCatalog(parsed);
-                // The default pair is fictional; another catalog starts on its first starter.
+                // Open on the hero pair; a catalog without it starts on its own first
+                // starter, else its first approved basket.
                 const known = new Set(parsed.brands.map((brand) => brand.slug));
                 setBrands((current) =>
                     current.every((slug) => known.has(slug))
                         ? current
                         : [
                               ...(startersFor(parsed)[0]?.brands ??
+                                  parsed.approved_baskets[0] ??
                                   parsed.brands.slice(0, 1).map((b) => b.slug)),
                           ],
                 );
@@ -480,8 +447,23 @@ export function CampaignsPage() {
                                     if (
                                         event.target.checked &&
                                         selected.some((brand) => brand.age_restricted)
-                                    )
-                                        setBrands(["cafe-patio"]);
+                                    ) {
+                                        // Keep what is safe for a minor, else the
+                                        // catalog's first unrestricted brand.
+                                        const safe = selected
+                                            .filter((brand) => !brand.age_restricted)
+                                            .map((brand) => brand.slug);
+                                        const fallback = catalog?.brands.find(
+                                            (brand) => !brand.age_restricted,
+                                        )?.slug;
+                                        setBrands(
+                                            safe.length > 0
+                                                ? safe
+                                                : fallback !== undefined
+                                                  ? [fallback]
+                                                  : [],
+                                        );
+                                    }
                                 }}
                             />
                             <span>

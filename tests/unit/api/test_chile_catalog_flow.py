@@ -135,10 +135,8 @@ def test_official_logos_are_used_where_present_and_a_wordmark_elsewhere() -> Non
     for slug in ("powerade", "gatorade", "soprole", "watts", "bresler"):
         brand = BRANDS[slug]
         assert _brand_logo(slug, brand.name, brand.color) == f"/campaign-assets/logos/{slug}.svg"
-    benedictino = BRANDS["benedictino"]
-    assert _brand_logo(benedictino.slug, benedictino.name, benedictino.color).startswith(
-        "data:image/svg+xml"
-    )
+    savory = BRANDS["savory"]
+    assert _brand_logo(savory.slug, savory.name, savory.color).startswith("data:image/svg+xml")
 
 
 def _snapshot(seq: int, at: datetime, objects: list[DetectedObject]) -> AudienceSnapshot:
@@ -267,3 +265,33 @@ def test_every_chilean_brand_and_basket_airs_a_photo_and_most_rotate() -> None:
         and len(found[1].photo_urls) > 1
     ]
     assert len(rotating) >= len(CHILE.brands) * 2 // 3
+
+
+@pytest.mark.parametrize(
+    ("brands", "party", "hook"),
+    [
+        (["savory"], 1, "Antojo de algo frío."),
+        (["super-8"], 3, "Un antojo dulce para los tres."),
+        (["watts"], 2, "Algo rico para los dos antes de partir."),
+    ],
+)
+def test_a_craving_gets_its_own_hook_not_generic_hunger(
+    tmp_path, brands: list[str], party: int, hook: str
+) -> None:
+    settings = AppSettings(
+        _env_file=None,
+        app_env="test",
+        demo_catalog="chile",
+        media_dir=tmp_path,
+        audience_ai=False,
+        creative_ai_copy=False,
+        voiceovers_enabled=False,
+    )
+    with TestClient(create_app(settings)) as client:
+        response = client.post(
+            "/api/campaigns/generate",
+            json={"brands": brands, "party_size": party, "moment": "hunger", "media": "photo"},
+        )
+    assert response.status_code == 200
+    teaser = next(s for s in response.json()["spec"]["stages"] if s["name"] == "teaser")
+    assert teaser["copy_text"] == hook

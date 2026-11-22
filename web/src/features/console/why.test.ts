@@ -14,7 +14,7 @@ const moment = {
         { segment_id: "408", label: "Fitness and Exercise", score: 0.92, sources: ["vision"] },
     ],
     minor_likely: { value: false, confidence: 0.9 },
-    held_products: [{ category: "cup", brand_ref: "cafe-patio", score: 0.9 }],
+    held_products: [{ category: "cup", brand_ref: "juan-valdez", score: 0.9 }],
 } as unknown as ConsoleMoment;
 
 const auction = {
@@ -44,7 +44,7 @@ describe("explain", () => {
             "Voltio + Café Patio, porque juntas llegan a las 3 personas y valen más que cualquier marca sola.",
         );
         expect(why.steps.map((s) => s.text)).toEqual([
-            "3 personas mirando con Café Patio en la mano",
+            "3 personas mirando con Juan Valdez en la mano",
             "Fitness and Exercise · Coffee",
             "Voltio + Café Patio",
             "Trío $8.490 · $ 0 si nadie mira",

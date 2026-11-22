@@ -139,8 +139,12 @@ def teaser_for(brief: CreativeBrief, angle: Angle) -> str:
     held = brief.held_brand or brief.names[0]
     partners = tuple(name for name in brief.names if name != held) or brief.names
     count = _GROUP_WORDS.get(brief.addressed_party or 0)
+    by_category = _CATEGORY_TEASERS.get(lead.category) if angle is Angle.HUNGER else None
     by_hour = _DAYPART_TEASERS.get((angle, brief.daypart)) if brief.daypart else None
-    if by_hour is not None:
+    if by_category is not None:
+        solo_hook, counted_hook = by_category
+        template = counted_hook if count is not None else solo_hook
+    elif by_hour is not None:
         solo_hook, counted_hook = by_hour
         template = counted_hook if count is not None else solo_hook
     elif count is not None and angle in _GROUP_TEASERS:
@@ -156,6 +160,17 @@ def teaser_for(brief: CreativeBrief, angle: Angle) -> str:
         # the house ad. The short form keeps the angle's keyword and the partner.
         teaser = _SHORT_TEASERS[angle].format(**fields)
     return teaser
+
+
+# A craving is not hunger: the lead product's own hook beats the generic "Hambre..." one
+# (ice cream, sweets, chocolate milk, nectar). (solo, counted with {group}); each keeps a
+# hunger keyword (ANGLE_KEYWORDS) so the scorer still reads the moment.
+_CATEGORY_TEASERS: dict[str, tuple[str, str]] = {
+    "ice_cream": ("Antojo de algo frío.", "Antojo de algo frío para los {group}."),
+    "candy": ("Un antojo dulce antes de seguir.", "Un antojo dulce para los {group}."),
+    "dairy": ("Antojo de chocolate frío.", "Antojo de chocolate frío para los {group}."),
+    "juice": ("Algo rico antes de partir.", "Algo rico para los {group} antes de partir."),
+}
 
 
 # Name-bearing hooks, shortened for long brand names (each still names a basket brand).
