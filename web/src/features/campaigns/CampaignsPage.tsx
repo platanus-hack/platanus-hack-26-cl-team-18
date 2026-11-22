@@ -175,7 +175,6 @@ export function CampaignsPage() {
     const [moment, setMoment] = useState<CampaignGenerate["moment"]>("energy");
     const [daypart, setDaypart] = useState<Daypart | null>("night");
     const [distance, setDistance] = useState<DistanceBand | undefined>(undefined);
-    const [theme, setTheme] = useState<"light" | "dark">("light");
     const [media, setMedia] = useState<CampaignGenerate["media"]>("video");
     const [minor, setMinor] = useState(false);
     const [stage, setStage] = useState<"teaser" | "offer" | "close">("offer");
@@ -514,7 +513,6 @@ export function CampaignsPage() {
                                     playKey={campaign.campaign_key}
                                     previewStage={stage}
                                     previewDistance={distance}
-                                    previewTheme={theme}
                                 />
                             ) : (
                                 <div className="studio-preview-empty">
@@ -543,28 +541,6 @@ export function CampaignsPage() {
                                         }
                                         onClick={() => {
                                             setStage(value);
-                                        }}
-                                    >
-                                        {label}
-                                    </button>
-                                ))}
-                            </div>
-                            <div
-                                className="studio-stages"
-                                role="group"
-                                aria-label="Fondo del anuncio"
-                            >
-                                {(
-                                    [
-                                        ["light", "Claro"],
-                                        ["dark", "Oscuro"],
-                                    ] as const
-                                ).map(([value, label]) => (
-                                    <button
-                                        key={value}
-                                        aria-pressed={theme === value}
-                                        onClick={() => {
-                                            setTheme(value);
                                         }}
                                     >
                                         {label}

@@ -2,7 +2,7 @@ import type { CreativeSlot, CreativeSpec, CreativeStageName, DistanceBand } from
 import { assetUrl } from "@/lib/config";
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { readableAccent } from "./accent";
-import { signaturePath, themeForHour, type AdTheme } from "./ad-theme";
+import { signaturePath } from "./ad-theme";
 import "./creative.css";
 import {
     copyFit,
@@ -57,8 +57,8 @@ function VideoLoop({ url }: { url: string }) {
  * and tight for the line of the stage, mono caps for metadata on the bottom
  * baseline next to the brand lockup, and one accent (the lead brand's) for the
  * ADverse signature figure and a single fill.
- * - light (day): a warm Lino field, Tinta type, the product photo as a right panel.
- * - dark (night): the photo full-bleed under a shade, white type.
+ * Always dark: the photo full-bleed under a shade, white type; the figure fills
+ * the field when there is no photo.
  * Stages: the hook (the price waits on the baseline), the offer line with the
  * price set apart (never AI-written: it comes from `spec.offer`), then one
  * instruction with a QR sized to scan from ~1.5 m.
@@ -69,7 +69,6 @@ export function CreativeView({
     readAttention,
     previewStage,
     previewDistance,
-    previewTheme,
 }: {
     spec: CreativeSpec;
     playKey: string;
@@ -78,13 +77,9 @@ export function CreativeView({
     previewStage?: CreativeStageName;
     /** The studio's distance preview; the live screen follows attention instead. */
     previewDistance?: DistanceBand | undefined;
-    /** The studio's day/night preview; the live screen follows the store's clock. */
-    previewTheme?: AdTheme | undefined;
 }) {
     const dwellStage = useDwellStage(playKey, spec.stages, readAttention);
     const liveDistance = useViewingDistance(readAttention);
-    const [clockTheme] = useState(() => themeForHour(new Date().getHours()));
-    const theme = previewTheme ?? clockTheme;
     const distance = previewDistance ?? liveDistance;
     const stage = spec.stages.find((item) => item.name === previewStage) ?? dwellStage;
     const photo = spec.slots.find((slot) => slot.hero_image_url)?.hero_image_url;
@@ -95,13 +90,12 @@ export function CreativeView({
     return (
         <div
             className="creative-canvas relative h-full w-full overflow-hidden"
-            data-theme={theme}
             data-media={media ? "yes" : "no"}
             data-distance={distance ?? undefined}
             data-stage={stage?.name ?? "legacy"}
             style={style}
         >
-            {(theme === "light" || !media) && <Figure seed={seed} />}
+            {!media && <Figure seed={seed} />}
             {media && (
                 <div className="creative-visual">
                     {photo && <img className="creative-media" src={assetUrl(photo)} alt="" />}

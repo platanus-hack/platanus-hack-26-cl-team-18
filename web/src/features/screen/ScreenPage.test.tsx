@@ -468,7 +468,7 @@ describe("glass-to-glass and attention-driven stages", () => {
         expect(host.textContent).toContain("válido 10 min");
     });
 
-    it("puts the price on the baseline during the hook and draws the day or night field", async () => {
+    it("puts the price on the baseline during the hook on the dark field", async () => {
         const spec = {
             ...HOUSE_AD.spec,
             stages: [{ name: "teaser" as const, copy_text: "Entrenaron. Ahora recarguen." }],
@@ -479,23 +479,14 @@ describe("glass-to-glass and attention-driven stages", () => {
                 party_size: 3,
             },
         };
-        for (const theme of ["light", "dark"] as const) {
-            await act(async () => {
-                root.render(
-                    <CreativeView
-                        spec={spec}
-                        playKey={theme}
-                        previewStage="teaser"
-                        previewTheme={theme}
-                    />,
-                );
-                await Promise.resolve();
-            });
-            const canvas = host.querySelector<HTMLElement>(".creative-canvas");
-            expect(canvas?.getAttribute("data-theme")).toBe(theme);
-            expect(host.querySelector(".creative-meta-price")?.textContent).toBe("$8.490 · Para 3");
-            expect(host.querySelector(".creative-figure path")?.getAttribute("d")).toMatch(/^M/);
-        }
+        await act(async () => {
+            root.render(<CreativeView spec={spec} playKey="dark" previewStage="teaser" />);
+            await Promise.resolve();
+        });
+        const canvas = host.querySelector<HTMLElement>(".creative-canvas");
+        expect(canvas?.hasAttribute("data-theme")).toBe(false);
+        expect(host.querySelector(".creative-meta-price")?.textContent).toBe("$8.490 · Para 3");
+        expect(host.querySelector(".creative-figure path")?.getAttribute("d")).toMatch(/^M/);
     });
 
     it("sets the approved price apart at the offer stage instead of repeating it", async () => {

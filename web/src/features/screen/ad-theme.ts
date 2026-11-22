@@ -1,10 +1,3 @@
-export type AdTheme = "light" | "dark";
-
-/** Store hours read as daylight: a light field under shop lighting, dark at night (less glare). */
-export function themeForHour(hour: number): AdTheme {
-    return hour >= 7 && hour < 20 ? "light" : "dark";
-}
-
 /** Deterministic hash → [0, 1): the same basket always draws the same figure. */
 function unit(seed: string, salt: number): number {
     let h = 2166136261 ^ salt;

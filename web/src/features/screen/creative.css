@@ -9,10 +9,8 @@
  * accent (the lead brand's) for the figure and a single fill. Light accents are
  * fills, never text: ink sits on them. Square corners except the pill tag.
  *
- * Two fields, one system:
- * - light (day): warm Lino field, Tinta type, the product photo as a right-hand
- *   panel with the figure emerging from behind it;
- * - dark (night): the photo full-bleed under a shade, light type on Tinta.
+ * Always dark: the photo full-bleed under a shade, light type on Tinta. With no
+ * photo the signature figure fills the field instead.
  *
  * Type and marks size in `--u`: 1cqw on a 16:9 canvas, held to the height on wider ones
  * (21:9) and free to grow on 4K, so every TV shows the same composition. Never cap a size in
@@ -21,60 +19,36 @@
 .creative-canvas {
     container-type: size;
     --u: min(1cqw, 1.7778cqh);
-    --ad-field: #f3efe8; /* Lino */
-    --ad-ink: var(--palette-ink-950);
-    --ad-muted: #6b645b; /* 5.1:1 on Lino */
-    --ad-rule: color-mix(in srgb, var(--palette-ink-950) 18%, transparent);
-    --creative-accent: var(--palette-coral);
-    --creative-gutter: 4.4cqw;
-    --ad-column: 50cqw;
-    --ad-panel: 54cqw;
-    background: var(--ad-field);
-    color: var(--ad-ink);
-    font-family: var(--font-sans);
-}
-.creative-canvas[data-theme="dark"] {
     --ad-field: var(--palette-ink-950);
     --ad-ink: var(--palette-ink-50);
     --ad-muted: var(--palette-ink-300);
     --ad-rule: color-mix(in srgb, var(--palette-ink-50) 22%, transparent);
+    --creative-accent: var(--palette-coral);
+    --creative-gutter: 4.4cqw;
     --ad-column: 60cqw;
+    background: var(--ad-field);
+    color: var(--ad-ink);
+    font-family: var(--font-sans);
 }
 
 /* ------------------------------------------------------------------ figure + media */
 .creative-figure {
     position: absolute;
-    width: 92cqh;
-    height: 92cqh;
-    top: 4cqh;
-    left: calc(var(--ad-panel) - 46cqh);
-    stroke: var(--creative-accent);
-    stroke-width: 1.1px;
-    stroke-opacity: 0.95;
-    pointer-events: none;
-}
-.creative-canvas[data-theme="dark"] .creative-figure {
-    left: auto;
     right: -30cqh;
     top: 50%;
     width: 120cqh;
     height: 120cqh;
     transform: translateY(-50%);
+    stroke: var(--creative-accent);
+    stroke-width: 1.1px;
     stroke-opacity: 0.8;
+    pointer-events: none;
 }
 .creative-visual {
     position: absolute;
-    inset: 0 0 0 var(--ad-panel);
+    inset: 0;
     overflow: hidden;
     background: var(--palette-ink-950);
-}
-.creative-canvas[data-theme="dark"] .creative-visual {
-    inset: 0;
-}
-/* The panel shows under half the 16:9 photo: the product photos put the products in their
-   right half (cup, then can), so the light panel crops toward there instead of the centre. */
-.creative-canvas[data-theme="light"] .creative-media {
-    object-position: 82% 50%;
 }
 .creative-media {
     position: absolute;
@@ -85,10 +59,6 @@
     transition: opacity var(--duration-crossfade) ease-out;
 }
 .creative-shade {
-    display: none;
-}
-.creative-canvas[data-theme="dark"] .creative-shade {
-    display: block;
     position: absolute;
     inset: 0;
     background:
@@ -105,7 +75,7 @@
             transparent 40%
         );
 }
-.creative-canvas[data-theme="dark"][data-stage="close"] .creative-shade {
+.creative-canvas[data-stage="close"] .creative-shade {
     background: color-mix(in srgb, var(--ad-field) 82%, transparent);
 }
 
@@ -269,7 +239,7 @@
 .creative-qr {
     position: absolute;
     top: 50%;
-    right: calc((100cqw - var(--ad-panel) - 46cqh) / 2);
+    right: calc(var(--creative-gutter) * 1.4);
     transform: translateY(-50%);
     display: flex;
     flex-direction: column;
@@ -279,9 +249,6 @@
     background: var(--palette-ink-50);
     border-radius: 0.25rem;
     box-shadow: calc(0.5 * var(--u)) calc(0.5 * var(--u)) 0 var(--creative-accent);
-}
-.creative-canvas[data-theme="dark"] .creative-qr {
-    right: calc(var(--creative-gutter) * 1.4);
 }
 .creative-qr-image {
     display: block;
@@ -409,13 +376,10 @@
     .creative-story {
         max-height: 38cqh;
     }
-    .creative-canvas[data-theme="light"] .creative-visual {
-        inset: 46cqh 0 14cqh 0;
-    }
-    .creative-canvas[data-theme] .creative-media {
+    .creative-canvas .creative-media {
         object-position: 70% 50%;
     }
-    .creative-canvas[data-theme] .creative-figure {
+    .creative-canvas .creative-figure {
         top: 46cqh;
         left: 5cqw;
         right: auto;
@@ -423,8 +387,8 @@
         height: 90cqw;
         transform: none;
     }
-    .creative-canvas[data-theme="dark"] .creative-shade,
-    .creative-canvas[data-theme="dark"][data-stage="close"] .creative-shade {
+    .creative-canvas .creative-shade,
+    .creative-canvas[data-stage="close"] .creative-shade {
         background: linear-gradient(
             180deg,
             var(--ad-field) 0%,
@@ -433,13 +397,13 @@
             color-mix(in srgb, var(--ad-field) 85%, transparent) 86%
         );
     }
-    .creative-canvas[data-theme] .creative-qr {
+    .creative-canvas .creative-qr {
         top: 64cqh;
         right: 50%;
         transform: translate(50%, -50%);
         padding: 1.2cqh;
     }
-    .creative-canvas[data-theme] .creative-qr-image,
+    .creative-canvas .creative-qr-image,
     .creative-canvas[data-distance="near"] .creative-qr-image {
         height: min(30cqh, 62cqw);
     }

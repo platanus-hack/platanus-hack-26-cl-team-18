@@ -1,18 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { signaturePath, themeForHour } from "./ad-theme";
-
-describe("themeForHour", () => {
-    it.each([
-        [6, "dark"],
-        [7, "light"],
-        [13, "light"],
-        [19, "light"],
-        [20, "dark"],
-        [23, "dark"],
-    ] as const)("hour %i reads %s", (hour, theme) => {
-        expect(themeForHour(hour)).toBe(theme);
-    });
-});
+import { signaturePath } from "./ad-theme";
 
 describe("signaturePath", () => {
     it("is deterministic per basket and differs between baskets", () => {
