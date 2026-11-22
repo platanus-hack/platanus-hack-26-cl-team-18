@@ -140,6 +140,10 @@
     display: flex;
     gap: 0.25rem;
 }
+/* A toolbar group keeps its buttons together and wraps as a whole, never overlapping the next. */
+.studio-stages {
+    flex-shrink: 0;
+}
 .studio-party-options button,
 .studio-format button,
 .studio-stages button {
@@ -236,6 +240,8 @@
 }
 .studio-preview-bottom {
     display: flex;
+    flex-wrap: wrap;
+    row-gap: 0.6rem;
     align-items: center;
     justify-content: space-between;
     padding: 0.75rem 0;
@@ -324,21 +330,14 @@
         grid-template-columns: 280px minmax(0, 1fr);
         gap: 1rem;
     }
-    .studio-preview-bottom {
-        align-items: flex-start;
-        flex-direction: column;
-    }
-}
-@media (max-width: 720px) {
-    .studio-workspace,
     .studio-starters {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
+/* Phone: one column, the preview first, then the builder. */
 @media (max-width: 720px) {
-    .studio-preview-bottom {
-        flex-wrap: wrap;
-        row-gap: 0.6rem;
+    .studio-workspace {
+        grid-template-columns: minmax(0, 1fr);
     }
     .studio-preview-bottom > span {
         width: 100%;
@@ -346,20 +345,11 @@
     .studio-stages button {
         white-space: nowrap;
     }
-    .studio-starters,
-    .studio-copy {
+    .studio-starters {
         grid-template-columns: 1fr;
-    }
-    .studio-copy li + li {
-        border-left: 0;
-        border-top: 1px solid var(--color-border-subtle);
     }
     .studio-result {
         order: -1;
-    }
-    .studio-preview-bottom {
-        flex-direction: row;
-        align-items: center;
     }
     .studio-brand-photo {
         height: 96px;
@@ -433,6 +423,16 @@
     font-size: var(--text-compact);
     line-height: 1.35;
     color: var(--color-fg);
+}
+/* Phone: the three stage lines stack (after the base rule, so it wins the cascade). */
+@media (max-width: 720px) {
+    .studio-copy {
+        grid-template-columns: 1fr;
+    }
+    .studio-copy li + li {
+        border-left: 0;
+        border-top: 1px solid var(--color-border-subtle);
+    }
 }
 .studio-minor {
     display: flex;
