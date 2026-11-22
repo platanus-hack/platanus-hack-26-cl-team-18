@@ -1,6 +1,12 @@
 # One deployable environment on Render: a Python web service, an optional
-# Postgres database, and an env group that holds secrets Terraform never sees.
-# Without the database the backend keeps its state in memory (DATABASE_URL unset).
+# Postgres database, an env group with its plain config and one with secrets
+# Terraform never sees. Without the database the backend keeps its state in
+# memory (DATABASE_URL unset).
+#
+# Env vars live in env groups, not on the service: render-oss/render 1.9.1 sends
+# maintenance_mode on every service update, which Render rejects for free-plan
+# services ("maintenance mode can only be configured for non-free tier
+# services"). Env groups update fine, so config changes never touch the service.
 
 locals {
   secret_placeholder = "set-in-render-dashboard"
@@ -63,7 +69,18 @@ resource "render_web_service" "app" {
     }
   }
 
-  env_vars = local.service_env_vars
+  # No env_vars on purpose: config lives in render_env_group.config (see the header).
+}
+
+resource "render_env_group" "config" {
+  name           = "${var.name}-config"
+  environment_id = var.environment_id
+  env_vars       = local.service_env_vars
+}
+
+resource "render_env_group_link" "config" {
+  env_group_id = render_env_group.config.id
+  service_ids  = [render_web_service.app.id]
 }
 
 # Secret *containers*, not secret values (same rule as a Secret Manager

@@ -17,12 +17,17 @@ run "database_url_comes_from_the_managed_postgres" {
   assert {
     # The value (internal_connection_string) is computed, so unknown at plan
     # with Terraform 1.8; assert the wiring exists and cannot be overridden.
-    condition     = contains(keys(render_web_service.app.env_vars), "DATABASE_URL")
+    condition     = contains(keys(render_env_group.config.env_vars), "DATABASE_URL")
     error_message = "The service must receive DATABASE_URL from the module's Postgres."
   }
 
   assert {
-    condition     = render_web_service.app.env_vars["APP_ENV"].value == "test"
+    condition     = render_web_service.app.env_vars == null
+    error_message = "Service env vars stay empty: a free-plan service can't be updated (env groups can)."
+  }
+
+  assert {
+    condition     = render_env_group.config.env_vars["APP_ENV"].value == "test"
     error_message = "APP_ENV must equal the environment input."
   }
 
@@ -51,7 +56,7 @@ run "without_a_database_the_service_runs_in_memory" {
   }
 
   assert {
-    condition     = !contains(keys(render_web_service.app.env_vars), "DATABASE_URL")
+    condition     = !contains(keys(render_env_group.config.env_vars), "DATABASE_URL")
     error_message = "No DATABASE_URL without a database (the backend falls back to memory)."
   }
 
@@ -74,7 +79,7 @@ run "secret_names_get_placeholder_values_only" {
   }
 
   assert {
-    condition     = !contains(keys(render_web_service.app.env_vars), "ANTHROPIC_API_KEY")
+    condition     = !contains(keys(render_env_group.config.env_vars), "ANTHROPIC_API_KEY")
     error_message = "Secrets must reach the service through the env group, not plain env_vars."
   }
 }

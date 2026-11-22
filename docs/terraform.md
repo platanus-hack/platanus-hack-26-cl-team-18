@@ -49,10 +49,10 @@ for everything else.
 
 ## First deploy
 
-1. **Personal mirror repo.** Render can only build repos your GitHub account
-   owns (see README, "Deploying & integrations"). Create the mirror, push to it,
-   and install Render's GitHub app on it (Render dashboard → New → connect
-   GitHub). Terraform **cannot** grant Render access to a repo.
+1. **Repo access.** Prod builds the **public** org repo by URL, which needs no
+   GitHub app; Render then gets no push webhooks, so `auto_deploy = false`.
+   For auto-deploys, use a repo you own with Render's GitHub app installed
+   (see README, "Deploying & integrations"); Terraform **cannot** grant that.
 2. **Credentials.** Run `cp .env.render.example .env.render`, then fill in
    `RENDER_API_KEY` (Account settings → API keys) and `RENDER_OWNER_ID`
    (workspace id, `tea-…`/`usr-…`).
@@ -83,10 +83,12 @@ for everything else.
 - With `APP_ENV=prod` the backend disables `/dev`, `/docs` and the
   `DEMO_SIMULATOR` fixtures. The public URL shows live screens only.
 
-After that, **app deploys are just `git push`** to the mirror's `main`.
-`auto_deploy` is on, and `scripts/migrate.py` runs as the pre-deploy command, so
-a failed migration aborts the deploy while the old version keeps serving.
-Terraform is only for infrastructure changes.
+After that, **app deploys are manual** (prod builds the public repo, no
+webhooks): merge to `main`, then press Manual Deploy on each service, or POST
+`/v1/services/<id>/deploys` with `RENDER_API_KEY`. With a Postgres,
+`scripts/migrate.py` runs as the pre-deploy command, so a failed migration
+aborts the deploy while the old version keeps serving. Terraform is only for
+infrastructure changes.
 
 ## Rules
 
@@ -148,10 +150,21 @@ Terraform is only for infrastructure changes.
 
 ## Cost
 
-Defaults: web service `starter` and Postgres `basic_256mb`, both paid plans
-billed against the credits. The static site is free. Check current prices at render.com/pricing. The
-`free` Postgres plan expires after a few weeks and the free web plan sleeps,
-so avoid both for the demo.
+Prod runs **$0** (2026-11-22, no Render credits): web service `free`,
+`create_database = false` (the backend keeps state in memory), static site
+free. The free plan sleeps after 15 min idle; `.github/workflows/keep-warm.yml`
+pings `/health` every 10 min so it never cold-starts or resets its in-memory
+spend in front of judges (one service always on fits 750 free hours/month).
+For `starter` + Postgres (`basic_256mb`, paid), drop `service_plan` and
+`create_database` from `terraform.tfvars`.
+
+**Free-plan caveat.** render-oss/render 1.9.1 sends `maintenance_mode` on
+every web-service update, and Render rejects that for free services. So the
+module keeps every env var in the `<name>-config` env group (env groups update
+fine) and the service itself carries none. A change to the service's own
+attributes (start command, plan, branch) still fails `make tf-apply` on the
+free plan: make it with the Render API or dashboard, then run
+`scripts/tf.sh prod apply -refresh-only -auto-approve` so the plan is clean.
 
 When the hackathon is over, stop the spend: delete the `lifecycle` block on the
 database, then run `scripts/tf.sh prod plan -destroy` and `make tf-apply`.
