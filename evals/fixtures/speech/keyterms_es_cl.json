@@ -321,6 +321,138 @@
    "wanted": [],
    "rejected": [],
    "why": "'plata' (money) alone is not Platanus"
+  },
+  {
+   "text": "una bebida energética",
+   "wanted": [
+    "energía"
+   ],
+   "rejected": [],
+   "why": "an energy drink, not a soda: the longer surface owns the word"
+  },
+  {
+   "text": "me da una energética",
+   "wanted": [
+    "energía"
+   ],
+   "rejected": []
+  },
+  {
+   "text": "estoy cansao",
+   "wanted": [
+    "energía"
+   ],
+   "rejected": [],
+   "why": "Chilean d-elision: -ado sounds and is often transcribed -ao"
+  },
+  {
+   "text": "ando reventao",
+   "wanted": [
+    "energía"
+   ],
+   "rejected": [],
+   "why": "'reventado' is worn out"
+  },
+  {
+   "text": "estoy raja",
+   "wanted": [
+    "energía"
+   ],
+   "rejected": [],
+   "why": "'estar raja' is exhausted in Chile"
+  },
+  {
+   "text": "un helao",
+   "wanted": [
+    "helado"
+   ],
+   "rejected": [],
+   "why": "d-elision"
+  },
+  {
+   "text": "está helao afuera",
+   "wanted": [],
+   "rejected": [],
+   "why": "freezing, not an ice cream (same guard as 'está helado')"
+  },
+  {
+   "text": "está heladito el día",
+   "wanted": [],
+   "rejected": [],
+   "why": "freezing, not an ice cream"
+  },
+  {
+   "text": "pásame una bebía",
+   "wanted": [
+    "bebida"
+   ],
+   "rejected": [],
+   "why": "d-elision"
+  },
+  {
+   "text": "yo bebía harto",
+   "wanted": [],
+   "rejected": [],
+   "why": "'bebía' is also 'I used to drink'"
+  },
+  {
+   "text": "una empanada",
+   "wanted": [
+    "comida"
+   ],
+   "rejected": []
+  },
+  {
+   "text": "un churrasco",
+   "wanted": [
+    "comida"
+   ],
+   "rejected": []
+  },
+  {
+   "text": "un sánguche",
+   "wanted": [
+    "comida"
+   ],
+   "rejected": [],
+   "why": "the Chilean sandwich"
+  },
+  {
+   "text": "una chelita",
+   "wanted": [
+    "cerveza"
+   ],
+   "rejected": [],
+   "why": "beer diminutive (final-only, see PartialGate)"
+  },
+  {
+   "text": "un cortadito",
+   "wanted": [
+    "café"
+   ],
+   "rejected": []
+  },
+  {
+   "text": "una agüita",
+   "wanted": [
+    "sed"
+   ],
+   "rejected": []
+  },
+  {
+   "text": "qué calor",
+   "wanted": [
+    "sed"
+   ],
+   "rejected": []
+  },
+  {
+   "text": "no hace calor",
+   "wanted": [],
+   "rejected": [
+    "sed"
+   ],
+   "why": "negated"
   }
  ]
 }

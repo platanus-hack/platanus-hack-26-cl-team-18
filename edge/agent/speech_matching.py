@@ -55,9 +55,19 @@ _OTHER_SENSE: dict[str, tuple[frozenset[str], frozenset[str], int]] = {
         frozenset({"con", "es", "era", "de"}),
         1,
     ),
-    # "está helado" / "qué helado" is freezing, not an ice cream.
+    # "está helado" / "qué helado" is freezing, not an ice cream ("helao": d-elision).
     "helado": (
-        frozenset({"esta", "estaba", "estoy", "estamos", "muy", "que", "hace", "ta", "tan"}),
+        _FREEZING := frozenset(
+            {"esta", "estaba", "estoy", "estamos", "muy", "que", "hace", "ta", "tan"}
+        ),
+        frozenset(),
+        0,
+    ),
+    "helao": (_FREEZING, frozenset(), 0),
+    "heladito": (_FREEZING, frozenset(), 0),
+    # "bebía" (d-elided "bebida") is also "I/he used to drink".
+    "bebia": (
+        frozenset({"yo", "el", "ella", "se", "lo", "la", "me", "que", "usted"}),
         frozenset(),
         0,
     ),
@@ -208,6 +218,21 @@ class KeytermCatalog:
                     start = len(padded[: match.start()].split())
                     # Longest surface first (index order): it owns its start word.
                     occurrences.setdefault((start, canonical), (len(surface.split()), surface))
+            # A surface inside, or overlapped from the right by, an at-least-as-long
+            # surface of another intent is part of that phrase (Spanish modifiers
+            # follow the noun): "(una) bebida energética" is an energy drink, not a soda.
+            spans = [(s, s + n, c) for (s, c), (n, _) in occurrences.items()]
+            for start, canonical in list(occurrences):
+                end = start + occurrences[(start, canonical)][0]
+                if any(
+                    c != canonical
+                    and s < end
+                    and start < e
+                    and e - s >= end - start
+                    and (e > end or (s < start and e == end))
+                    for s, e, c in spans
+                ):
+                    del occurrences[(start, canonical)]
             for (start, canonical), (length, surface) in sorted(occurrences.items()):
                 prefix = words[:start]
                 prefix_text = " ".join(prefix)
@@ -312,12 +337,23 @@ class PartialHitTracker:
 DEFAULT_KEYTERMS = KeytermCatalog.from_mapping(
     {
         "hambre": ("hambriento", "hambrienta", "bajón", "con bajón", "tengo hambre", "qué hambre"),
-        "comida": ("almorzar", "almuerzo", "comer", "once", "completo", "sopaipilla"),
-        "café": ("cafecito", "un café", "cortado", "capuchino", "espresso"),
+        "comida": (
+            *("almorzar", "almuerzo", "comer", "once", "completo", "sopaipilla"),
+            *("empanada", "empanadas", "churrasco", "sánguche", "sanguchito"),
+        ),
+        "café": ("cafecito", "un café", "cortado", "capuchino", "espresso", "cortadito"),
         "gym": ("gimnasio", "entrenar", "entreno", "post entreno", "crossfit"),
-        "sed": ("tengo sed", "agua", "algo helado"),
-        "cerveza": ("cervezas", "cervecita", "cervecitas", "chela", "chelas", "schop", "shop"),
-        "energía": ("cansado", "cansada", "sueño", "energético", "energizante"),
+        "sed": ("tengo sed", "agua", "algo helado", "agüita", "qué calor", "hace calor"),
+        "cerveza": (
+            *("cervezas", "cervecita", "cervecitas", "chela", "chelas", "schop", "shop"),
+            *("chelita", "chelitas"),
+        ),
+        "energía": (
+            *("cansado", "cansada", "sueño", "energético", "energizante"),
+            # Longer than "bebida", so it owns the word: an energy drink, not a soda.
+            *("bebida energética", "bebidas energéticas", "energética", "energéticas"),
+            *("estoy raja", "ando raja", "reventado", "reventada"),
+        ),
         # The rest of a Chilean convenience store (DEMO_CATALOG=chile maps each to its
         # IAB segment; a catalog without that aisle hears them and bids nothing).
         "helado": ("helados", "heladito", "un helado", "conito"),
@@ -336,13 +372,14 @@ DEFAULT_KEYTERMS = KeytermCatalog.from_mapping(
     misheard={
         "hambre": ("ambre", "hambe", "hanbre", "hungry", "starving"),
         "café": ("acfe", "coffee"),
+        # Chilean d-elision as Scribe writes it ("cansao", "helao", "bebía").
+        "energía": ("cansao", "cansadísimo", "cansadísima", "reventao", "tired", "sleepy"),
         "sed": ("thirsty",),
-        "energía": ("tired", "sleepy"),
-        "helado": ("ice cream",),
+        "helado": ("ice cream", "helao", "helaos", "helaito"),
         "jugo": ("juice",),
         "leche": ("milk",),
         "dulce": ("candy",),
-        "bebida": ("soda",),
+        "bebida": ("soda", "bebía", "bebías"),
         "sin alcohol": ("alcohol free", "non alcoholic"),
         "hackathon": (
             "plátano",
