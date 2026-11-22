@@ -52,6 +52,25 @@ def install_url_redaction() -> None:
             target.addFilter(RedactUrlSecrets())
 
 
+class SkipHealthChecks(logging.Filter):
+    """Drops the access-log line of a successful GET /health. Render's health check and
+    the keep-alive call it every few seconds: it was ~80 % of prod's log, burying the
+    requests that matter. A failing health check (any other status) still logs."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        if isinstance(args, tuple) and len(args) >= 5:
+            return not (args[2] == "/health" and args[4] == 200)
+        return True
+
+
+def quiet_health_checks() -> None:
+    """Idempotent: attach SkipHealthChecks to uvicorn's access logger."""
+    target = logging.getLogger("uvicorn.access")
+    if not any(isinstance(f, SkipHealthChecks) for f in target.filters):
+        target.addFilter(SkipHealthChecks())
+
+
 class _ContextFormatter(logging.Formatter):
     """Appends bound context without mutating the record other handlers see."""
 

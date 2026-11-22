@@ -9,13 +9,17 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
 from app.api import campaigns, demo_controls, dev, health, live, recognition, redeem, speech, ws
+from app.api.static_files import CachedStaticFiles
 from app.bootstrap.container import Container, build_container
 from app.bootstrap.keep_alive import keep_alive
 from app.bootstrap.readiness import exposure_warnings
-from app.config.logging_setup import configure_logging, install_url_redaction
+from app.config.logging_setup import (
+    configure_logging,
+    install_url_redaction,
+    quiet_health_checks,
+)
 from app.config.settings import AppSettings
 from app.modules.creative.infrastructure.campaign_assets import CAMPAIGN_ASSETS
 
@@ -32,6 +36,7 @@ def create_app(
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # uvicorn configured its loggers before importing the app; keys never reach them.
         install_url_redaction()
+        quiet_health_checks()
         if settings.app_env != "test":
             configure_logging(settings.log_level)
             for problem in settings.misconfigurations() + exposure_warnings(settings):
@@ -98,8 +103,12 @@ def create_app(
     if settings.app_env != "prod":
         app.include_router(dev.router)
     settings.media_dir.mkdir(parents=True, exist_ok=True)
-    app.mount("/media", StaticFiles(directory=settings.media_dir), name="media")
-    app.mount("/campaign-assets", StaticFiles(directory=CAMPAIGN_ASSETS), name="campaign-assets")
+    # Cacheable by the browser and Render's CDN (app/api/static_files.py): the player
+    # decodes these before every swap.
+    app.mount("/media", CachedStaticFiles(directory=settings.media_dir), name="media")
+    app.mount(
+        "/campaign-assets", CachedStaticFiles(directory=CAMPAIGN_ASSETS), name="campaign-assets"
+    )
     return app
 
 
