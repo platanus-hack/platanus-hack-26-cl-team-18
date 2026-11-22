@@ -107,6 +107,27 @@ make up            # one command: creates .env, installs deps, bakes models, run
 # open http://localhost:5188/console  (auction, coverage, latency; flip "En vivo")
 ```
 
+### Run the demo
+
+1. `make up` (or `make station` once set up). Add `ARGS="--paid-providers"`
+   for live AI copy and voice.
+2. On the TV (HDMI, Chromium fullscreen/kiosk), open the **screen**:
+   <http://localhost:5188/screen?id=demo-01>
+3. On the laptop facing the audience, open the **console** and flip "En vivo":
+   <http://localhost:5188/console?screen=demo-01>
+4. Optional, demo tools (bidding war, stock, campaigns, QA):
+   `http://localhost:5188/demo/<DEMO_KEY>`, with `DEMO_KEY` from `.env`. Share
+   `/demo/<DEMO_KEY>/advertiser` with judges; never put the key on a slide.
+
+| Page | Local | Public (Render) |
+|---|---|---|
+| Screen (TV) | <http://localhost:5188/screen?id=demo-01> | <https://team18-prod-web.onrender.com/screen?id=demo-01> |
+| Console | <http://localhost:5188/console?screen=demo-01> | <https://team18-prod-web.onrender.com/console?screen=demo-01> |
+
+Both pages default to `demo-01`; change `id` / `screen` together to drive
+another screen. Phones and a second laptop go through `:5188` (never `:8000`);
+for QR codes over a tunnel, see [`docs/demo.md`](docs/demo.md).
+
 Paid AI providers are off by default. Copy `.env.example` to `.env`, add
 your `ANTHROPIC_API_KEY` and `ELEVENLABS_API_KEY`, and run
 `make up ARGS="--paid-providers"`. No camera? `scripts/demo/rehearse.py`
