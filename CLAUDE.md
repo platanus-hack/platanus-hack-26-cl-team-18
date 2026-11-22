@@ -184,6 +184,7 @@ Never patch production code around a missing package.
 
 | File | Purpose |
 |---|---|
+| `docs/README.md` | **Docs index**: reading paths by role and the status of every doc |
 | `docs/product.md` | **What we're building and why**: problem, loop, invariants, metrics, scope |
 | `docs/stack.md` | **Binding stack** (ADR 0006): devices and their settings, every component, what we don't use, day-1 benchmark gate |
 | `docs/architecture.md` | Runtime topology, latency budget, stack rationale, contexts, auction, creative, message contract |
@@ -192,7 +193,7 @@ Never patch production code around a missing package.
 | `docs/creative-generation.md` | **Ad generation**: brief → angle + group offer → stock/AI copy → guard → score; metrics plan and `make eval-creative` |
 | `docs/privacy.md` | **Privacy evidence**: each privacy concern → enforcing code → test, plus open gaps; update it when you touch perception, speech or storage |
 | `CONTEXT.md` | Domain glossary (moment, segment, bundle, attention-second…) |
-| `docs/adr/` | Binding decisions (0001 latency paths, 0002 superseded, 0003 video cold loops + warm upgrades, 0004 YOLO perception agent, 0005 ElevenLabs speech + voice, 0006 committed stack, 0007 remote GPU perception, 0008 demo-critical decisions: vision first, prop markers, tunnel, max 2 brands, coverage headline, CLP/Spanish, two laptops; 0010 the /screen page senses: in-browser pose + Scribe mic) |
+| `docs/adr/` | Binding decisions (0001 latency paths, 0002 superseded, 0003 video cold loops + warm upgrades, 0004 YOLO perception agent, 0005 ElevenLabs speech + voice, 0006 committed stack, 0007 remote GPU perception, 0008 demo-critical decisions: vision first, prop markers, tunnel, max 2 brands, coverage headline, CLP/Spanish, two laptops; 0009 persistent station records, reachable QR, conservative safety; 0010 the /screen page senses: in-browser pose + Scribe mic) |
 | `docs/rules.md` | Architecture rules (§1–7, Security and Queue-consumer rules apply as written) |
 | `docs/common_patterns.md` | How to use the shared kernel: VOs, message bus, UoW, outbox |
 | `docs/folder_structure.md` | Layout of this repo and of a bounded context |

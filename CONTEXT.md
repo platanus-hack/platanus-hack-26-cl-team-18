@@ -71,7 +71,7 @@ Contexts: [`docs/architecture.md` §5](docs/architecture.md#5-bounded-contexts).
 | **Audience coverage** | Share of looking viewers matched by at least one brand on screen. Headline KPI. | Reach. |
 | **Co-brand lift** | (bundle revenue − single-brand counterfactual) / single-brand counterfactual. | n/a |
 | **Glass-to-glass latency** | Audience change at the camera → new creative visible. | Server latency only. |
-| **Hot / warm / cold path** | Latency tiers (see `docs/adr/0001`). Hot never waits on warm or cold. | n/a |
+| **Hot / warm / cold path** | Latency tiers (see [ADR 0001](docs/adr/0001-three-speed-latency-paths.md)). Hot never waits on warm or cold. | n/a |
 
 ## Instants (name the one you mean)
 

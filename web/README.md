@@ -121,7 +121,7 @@ semantic roles → Tailwind utilities (`bg-surface`, `text-muted`, `text-kpi`,
   grounds, `adverse-mark-small-*` below 24 px (favicon). Never redraw or
   recolor the mark.
 - **Never show status by color alone.** `Badge` always carries a label.
-- **Copy follows Relvo's `docs/ui-wording.md`:** Spanish (tú), sentence case,
+- **UI wording (inherited from Relvo's wording guide):** Spanish (tú), sentence case,
   verb-first buttons of 1–3 words, no slogans, no filler intros, no raw enum
   or field names. Numbers use es-CL format (`lib/format.ts`).
 - Numbers use `tabular-nums`. KPIs use the `text-kpi` tier.

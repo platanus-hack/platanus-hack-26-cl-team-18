@@ -90,7 +90,7 @@ through the Vite proxy) and, through the tunnel, only a browser that opened
 `make demo-live ARGS="--start-live"` to skip standby. Tests, evals and
 `scripts/demo/video_replay.py` keep the old always-live default (`LIVE_STARTS_ON`).
 Code: `app/realtime/live_switch.py`, `edge/agent/live.py`,
-`web/src/features/console/LivePanel.tsx`.
+`web/src/features/console/StationBar.tsx` (`web/src/lib/live-api.ts`).
 
 ## 2. Console layout (the "money shot")
 

@@ -213,7 +213,7 @@ math is `Decimal`. Values stay unrounded until pricing (R-P7).
 
 | ID | Pri | Requirement |
 |---|---|---|
-| R-T1 | M | `engine.decide` p95 < 5 ms for 12 bidders × 3 layouts on the demo laptop. `RunAuction` end to end < 30 ms. Measured by `scripts/bench_auction.py`, not a CI timing assertion (flaky). |
+| R-T1 | M | `engine.decide` p95 < 5 ms for 12 bidders × 3 layouts on the demo laptop. `RunAuction` end to end < 30 ms. Not a CI timing assertion (flaky). *Status: there is no per-auction micro-benchmark; server decision time is measured end to end by `scripts/bench/measure_loop.py` and the eval soak (see `docs/latency-feedback-loop.md`).* |
 | R-T2 | M | `cleared_at` is stamped by the handler from the injected `Clock` and copied into `LatencyTrace`. |
 | R-T3 | M | The domain uses no `datetime.now()` or `uuid4()`. `auction_id` comes from `IdGenerator` in the handler. |
 
@@ -315,7 +315,7 @@ These are the demo's credibility, so they never go red.
 | Min ad seconds: winner goes out of stock | swapped immediately |
 | Pending decision superseded during hold | only the latest is released; stale one dropped |
 | Look shorter than 1.0 s | 0 billable AS, explicit zero charge |
-| Golden demo scenes (one per beat) | exact winners, rates, lift and exclusions match `tests/fixtures/demo_book.json` |
+| Golden demo scenes (one per beat) | exact winners, rates, lift and exclusions match the seeded book (landed as `app/bootstrap/demo_catalog*.py` + `evals/scenarios/*.json`, not a single fixture) |
 
 Handler tests use a fake `Clock`, a deterministic `IdGenerator`, the
 in-memory book and log. No Postgres.
@@ -398,7 +398,7 @@ Supporting decisions:
 
 | # | Decision | Value |
 |---|---|---|
-| D11 | **Golden demo book**: one versioned `tests/fixtures/demo_book.json` (≈ 10 brands from `demo.md`, partners, rivals, efficiencies, offers per group-size band) used by the seed, the simulator **and** the tests. | one file |
+| D11 | **Golden demo book** *(landed differently: the seed lives in `app/bootstrap/demo_catalog.py` / `demo_catalog_chile.py`, and golden scenes in `evals/scenarios/`)*: one versioned `tests/fixtures/demo_book.json` (≈ 10 brands from `demo.md`, partners, rivals, efficiencies, offers per group-size band) used by the seed, the simulator **and** the tests. | one file |
 | D12 | **Golden scene tests**: one per beat and backup moment (basket, complete-the-basket, bidding war flip threshold, stock-out, minor-safe, empty → $0), asserting exact winners, rates, exclusions and lift. A red test means the demo changed. | CI |
 | D13 | **Break-even multiplier on the console** (S): for the top loser, show *"Rayo needs ×1.42 to win"*, computed by bisecting the engine off the hot path (≤ 10 runs × < 5 ms). It makes beat 4 legible to the room. | S6 |
 | D14 | **Coverage** (Q3): show the upper-bound estimate labelled "est." for the demo; exact per-tracklet attribution is backlog. | est. |
@@ -423,7 +423,7 @@ reaction.
 | D4b/D6 seed | Done: CLP 8 / 5 / 12 / 6.5 per AS, reserve 1.5, Rayo+Café basket approved so Rayo prices the energy slot | [`bootstrap/demo.py`](../app/bootstrap/demo.py) |
 | R-E1–E3, E5 engine port + adapter + counterfactual | Done | `application/ports/engine.py`, `infrastructure/engines/in_process.py` |
 | D5 minimum ad seconds, D8 hysteresis, R-D4–D7 | Done: `MinAdTimePolicy` (pure) + `AuctionDesk` (latest-wins hold, release token); the simulator releases holds with a timer. Holds are off when `app_env=test` (`auction_swap_holds` setting) | `domain/swap.py`, `application/desk.py` |
-| D9 trace | Done: `LatencyTrace.swap_not_before`; the console excludes the hold from glass-to-glass and server time | `contract/messages.py`, `web/.../metrics.ts` |
+| D9 trace | Done: `LatencyTrace.swap_not_before`; the console excludes the hold from glass-to-glass and server time | `contract/messages.py`, `web/src/features/console/metrics.ts` |
 | §4.9 contract, console | Done: new exclusion reasons with `detail`, revenue fields, `pricing`/`trigger`/`swap` on `console.auction` | `demo_console.py`, `ConsolePage.tsx` |
 | Held-product boost, speech-intent boost, context multipliers | Done in valuation; inputs not wired yet (audience `held_products`, `context.set`) | `valuation.py`, `AdOpportunity` |
 | R-B5 bidding war (S6) | Done: `POST /api/advertiser/bid-multiplier` (`advertiser.bid_multiplier`), idempotent by `(campaign, seq)`: applied / duplicate / stale, 409 on a reused seq with another value, 422 outside ×0.2–5.0. Re-auctions the current moment (`BID_CHANGED`: 2 % hysteresis, 3 s hold). `/advertiser?brand=Rayo` page | `campaigns/application/live_book.py`, `api/demo_controls.py`, `web/src/features/advertiser` |

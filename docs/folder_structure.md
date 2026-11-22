@@ -54,8 +54,8 @@ app/
         <provider>/            #   adapters implementing application ports
       api/
         http/routes.py         #   DTO validation -> bus.handle(command); no business logic
-gpu/                           # planned: stateless YOLO inference service, Docker + TensorRT (ADR 0007)
-edge/                          # perception agent scaffold (ADR 0004)
+gpu/                           # stateless YOLO inference service, Docker + TensorRT (ADR 0007)
+edge/                          # perception agent (ADR 0004)
   agent/capture/               #   camera (OpenCV), mic (sounddevice), VAD
   agent/vision/                #   YOLO + ByteTrack, head pose/looking, face blur, keyframes
   agent/speech/                #   sound scene and opt-in speech recognition (ADR 0005)

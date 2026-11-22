@@ -1,5 +1,25 @@
 # Perception agent
 
+The sensor half of ADverse ([ADR 0004](../docs/adr/0004-python-perception-agent-yolo.md)).
+It turns a webcam and an optional room mic into anonymous facts, such as
+people, who is looking, distance, held objects and opt-in speech topics, and
+streams them to the backend as `audience.snapshot` / `audience.keyframe` /
+`audience.utterance` messages (contract: `app/contract/messages.py`). It
+makes no decisions and stores nothing: no frames, no audio, no transcripts
+([`docs/privacy.md`](../docs/privacy.md)).
+
+| Package | Does |
+|---|---|
+| `agent/vision/` | YOLO26-pose every frame, YOLOE-26 objects at 5 fps, ByteTrack, looking from keypoints, face blur, keyframes. Remote GPU first, local fallback ([ADR 0007](../docs/adr/0007-remote-gpu-perception.md)) |
+| `agent/sound/` | Sound-scene class (no speech recognition) |
+| `agent/speech/` | Silero VAD, ElevenLabs Scribe v2 Realtime, keyterm matching on partial transcripts and an echo guard (speech mode only) |
+| `agent/backend_link.py` | The WebSocket uplink: latest state per message type wins, bounded outbox, reconnects with backoff |
+| `agent/live.py` | Honors the console's "En vivo" switch (standby senses nothing) |
+
+Its own uv project on Python 3.12: `make edge-install`, then `make edge-check`.
+Sections below: [video replay](#local-video-replay-first-slice) ·
+[vision](#vision-implemented) · [speech mode](#speech-mode-implemented).
+
 ## Local video replay (first slice)
 
 With Python 3.12 and uv installed, from `edge/` run:
