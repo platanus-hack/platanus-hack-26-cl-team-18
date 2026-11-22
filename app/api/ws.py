@@ -72,6 +72,12 @@ AgentMessage = (
 )
 _POLICY_VIOLATION = status.WS_1008_POLICY_VIOLATION
 DEV_DISABLED = 4404  # close code: the dev console is off in this environment
+# Close codes for a player socket that may not attach (Container.admit_screen).
+_ADMISSION_CLOSE = {
+    "unauthorized": (_POLICY_VIOLATION, "a new screen needs the screen token"),
+    "full": (status.WS_1013_TRY_AGAIN_LATER, "screen capacity reached"),
+    "invalid": (_POLICY_VIOLATION, "invalid screen id"),
+}
 AGENT_SILENCE = timedelta(seconds=5)  # five missed 1 s heartbeats: the agent is gone
 SILENCE_POLL_S = 0.5
 # The empty reading is dated just after the last real one (no silent attention is
@@ -96,6 +102,17 @@ async def _send_error(
 ) -> None:
     error = ErrorMessage(code=code, message=message[:500], rejected_type=rejected_type)
     await ws.send_text(error.model_dump_json())
+
+
+def _too_large(c: Container, text: str) -> bool:
+    """The cap is in bytes on the wire (UTF-8), not characters."""
+    limit = c.settings.ws_max_frame_bytes
+    return len(text) > limit or len(text.encode()) > limit
+
+
+async def _refuse_binary(ws: WebSocket, message: str) -> None:
+    await _send_error(ws, "frame.binary_unsupported", message)
+    await ws.close(code=status.WS_1003_UNSUPPORTED_DATA, reason="text frames only")
 
 
 def _validation_summary(exc: ValidationError) -> str:
@@ -209,7 +226,7 @@ async def agent_socket(ws: WebSocket) -> None:
                     continue
                 if text is None:
                     continue
-                if len(text) > c.settings.ws_max_frame_bytes:
+                if _too_large(c, text):
                     await _send_error(ws, "frame.too_large", "frame exceeds ws_max_frame_bytes")
                     continue
                 try:
@@ -293,12 +310,25 @@ async def screen_socket(ws: WebSocket, screen_id: str) -> None:
     c = _container(ws)
     # Without the screen token a player only watches: its reports never bill.
     can_report = screen_can_report(c.settings, ws)
+    token_set = c.settings.screen_token is not None
     await ws.accept(subprotocol=accepted_subprotocol(ws))
+    # Each screen id is a full runtime that is never evicted: with SCREEN_TOKEN set only
+    # a token holder may start a new one (viewers attach to running screens), and a
+    # process runs at most MAX_SCREEN_RUNTIMES. Unset token: any player, under the cap.
+    admission = await anyio.to_thread.run_sync(
+        c.admit_screen, screen_id, can_report or not token_set
+    )
+    if admission != "ok":
+        code, reason = _ADMISSION_CLOSE.get(admission, (_POLICY_VIOLATION, "screen refused"))
+        await ws.close(code=code, reason=reason)
+        return
     c.hub.add_player(
         screen_id,
         ws,
         attention=ws.query_params.get("attention") == "1",
         live=ws.query_params.get("live") == "1",
+        # A viewer (token set, not offered) never gets the basket's redemption code.
+        redact_redemption=token_set and not can_report,
     )
     gate = SeqGate()
     try:
@@ -306,11 +336,11 @@ async def screen_socket(ws: WebSocket, screen_id: str) -> None:
         while (frame := await _next_frame(ws)) is not None:
             text = frame.get("text")
             if text is None:
-                await _send_error(
-                    ws, "frame.binary_unsupported", "players send JSON text frames only"
-                )
-                continue
-            if len(text) > c.settings.ws_max_frame_bytes:
+                # Players send JSON text only: a binary frame is not a player. Closed, so
+                # nothing buffers more of it (the player reconnects if it was a glitch).
+                await _refuse_binary(ws, "players send JSON text frames only")
+                return
+            if _too_large(c, text):
                 await _send_error(ws, "frame.too_large", "frame exceeds ws_max_frame_bytes")
                 continue
             if not can_report:
@@ -363,6 +393,9 @@ async def console_socket(ws: WebSocket) -> None:
     try:
         await c.router.console_connected(ws)
         while (frame := await _next_frame(ws)) is not None:
+            if frame.get("bytes") is not None:
+                await _refuse_binary(ws, "the console socket is push-only")
+                return
             if frame.get("text") is not None:
                 await _send_error(
                     ws, "console.read_only", "the console socket is push-only for now"
@@ -391,6 +424,9 @@ async def dev_socket(ws: WebSocket) -> None:
         # Same catch-up as a console: the latest decision, book and live status.
         await c.router.console_connected(ws)
         while (frame := await _next_frame(ws)) is not None:
+            if frame.get("bytes") is not None:
+                await _refuse_binary(ws, "the dev socket is push-only")
+                return
             if frame.get("text") is not None:
                 await _send_error(ws, "dev.read_only", "the dev socket is push-only")
     except WebSocketDisconnect:
