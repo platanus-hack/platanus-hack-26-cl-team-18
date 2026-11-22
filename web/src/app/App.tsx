@@ -97,10 +97,6 @@ function DemoHub({ demo }: { demo: string }) {
                 description="Herramientas para mostrar el producto. No enlaces esta página: la clave va en la URL."
             />
             <ToolList tools={demoTools(demo)} />
-            <p className="text-compact text-muted">
-                Escenas guionadas sin cámara:{" "}
-                <code>uv run python -m scripts.demo.rehearse duo</code> (duo, trio, held, empty).
-            </p>
         </AppShell>
     );
 }
