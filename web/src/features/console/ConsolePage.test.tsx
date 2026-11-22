@@ -160,8 +160,8 @@ it("subscribes as a station console", () => {
     expect(socket.url).toContain("/ws/console?live=1");
 });
 
-it("starts in standby with one calm state and no mic button, then goes live", async () => {
-    expect(host.textContent).toContain("En espera");
+it("starts in standby with no state badge and no mic button, then goes live", async () => {
+    expect(host.textContent).not.toContain("En espera");
     expect(host.textContent).not.toContain("Silenciar micrófono");
     await click("Iniciar en vivo");
     expect(requests[0]).toMatchObject({ path: "/api/live", body: { live: true, mic: null } });
@@ -172,25 +172,36 @@ it("starts in standby with one calm state and no mic button, then goes live", as
     expect(host.textContent).not.toContain("Iniciar en vivo");
 });
 
-it("lists MUT_01… screens, but only MUT_01 is selectable and can go live", () => {
-    const group = host.querySelector('[role="group"][aria-label="Pantallas"]');
-    const buttons = [...(group?.querySelectorAll("button") ?? [])];
-    expect(buttons.map((b) => b.textContent.slice(0, 6))).toEqual([
+it("lists MUT_01… screens in a dropdown, but only MUT_01 is selectable", async () => {
+    const trigger = host.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]');
+    expect(trigger?.textContent).toContain("MUT_01");
+    expect(host.querySelector('[role="listbox"]')).toBeNull();
+    await act(async () => {
+        trigger?.click();
+        await Promise.resolve();
+    });
+    const options = [...host.querySelectorAll('[role="listbox"] [role="option"]')];
+    expect(options.map((o) => o.textContent.slice(0, 6))).toEqual([
         "MUT_01",
         "MUT_02",
         "MUT_03",
         "MUT_04",
     ]);
-    expect(buttons.map((b) => b.disabled)).toEqual([false, true, true, true]);
-    expect(buttons[0]?.getAttribute("aria-pressed")).toBe("true");
-    expect(buttons[1]?.textContent).toContain("En espera");
+    expect(options.map((o) => o.getAttribute("aria-disabled"))).toEqual([
+        "false",
+        "true",
+        "true",
+        "true",
+    ]);
+    expect(options[0]?.getAttribute("aria-selected")).toBe("true");
+    expect(host.textContent).not.toContain("En espera");
 });
 
 it("a failed click keeps the backend's truth and says so", async () => {
     failPost = true;
     await click("Iniciar en vivo");
     expect(host.textContent).toContain("No se aplicó el cambio");
-    expect(host.textContent).toContain("En espera");
+    expect(host.textContent).toContain("Iniciar en vivo");
 });
 
 it("shows every brand from the book, read-only without the demo key", async () => {
