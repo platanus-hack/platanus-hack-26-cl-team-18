@@ -33,17 +33,20 @@ from app.modules.campaigns.application.live_book import (
 )
 
 router = APIRouter(prefix="/api", tags=["demo"], dependencies=[Depends(require_demo_key)])
+# The advertiser self-serve (`/advertisers`: book, profiles, bids, budget) is open
+# to everyone for the demo: judges join as a brand from their own phone, no key.
+advertiser_router = APIRouter(prefix="/api", tags=["advertiser"])
 
 
 def _controls(request: Request) -> DemoControls:
     container: Container = request.app.state.container
-    # The key (require_demo_key) decides who reaches this; prod included (strong key).
+    # The key (require_demo_key) guards the operator routes; the advertiser routes are open.
     if container.demo is None:
         raise HTTPException(status_code=404, detail="the demo market is not running")
     return container.demo
 
 
-@router.get("/book")
+@advertiser_router.get("/book")
 async def book(
     request: Request,
     screen_id: Annotated[str, Query(pattern=r"^[A-Za-z0-9_.:-]{1,64}$")] = "demo-01",
@@ -54,7 +57,7 @@ async def book(
     return await anyio.to_thread.run_sync(controls.book_view)
 
 
-@router.post("/advertiser/bid-multiplier")
+@advertiser_router.post("/advertiser/bid-multiplier")
 async def bid_multiplier(
     request: Request, message: Annotated[AdvertiserBidMultiplier, Body()]
 ) -> dict[str, str]:
@@ -80,7 +83,7 @@ async def clerk_stock(request: Request, message: Annotated[StockSet, Body()]) ->
     return {"changed": changed}
 
 
-@router.post("/advertiser/autobid")
+@advertiser_router.post("/advertiser/autobid")
 async def autobid(
     request: Request, message: Annotated[AdvertiserAutoBid, Body()]
 ) -> dict[str, bool]:
@@ -95,7 +98,7 @@ async def autobid(
     return {"enabled": enabled}
 
 
-@router.get("/advertiser/profiles")
+@advertiser_router.get("/advertiser/profiles")
 async def advertiser_profiles(request: Request) -> AdvertiserProfiles:
     """The self-serve setup (/advertisers): each campaign's audiences, partners and offers."""
     controls = _controls(request)
@@ -104,7 +107,7 @@ async def advertiser_profiles(request: Request) -> AdvertiserProfiles:
     return await anyio.to_thread.run_sync(controls.profiles)
 
 
-@router.post("/advertiser/budget")
+@advertiser_router.post("/advertiser/budget")
 async def advertiser_budget(
     request: Request, message: Annotated[AdvertiserBudgetTopUp, Body()]
 ) -> dict[str, str]:

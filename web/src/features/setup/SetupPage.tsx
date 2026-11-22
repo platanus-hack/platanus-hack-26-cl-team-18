@@ -19,7 +19,6 @@ import {
     ArrowLeft,
     ArrowRight,
     Check,
-    KeyRound,
     ShieldCheck,
     ShoppingBasket,
     Swords,
@@ -42,33 +41,25 @@ import {
 
 type Profiles =
     | { kind: "loading" }
-    | { kind: "locked" }
     | { kind: "failed" }
     | { kind: "ready"; profiles: readonly AdvertiserProfile[] };
 
 function useProfiles(): Profiles {
-    const [state, setState] = useState<Profiles>(() =>
-        demoKey() === null && rememberedDemoKey() === null
-            ? { kind: "locked" }
-            : { kind: "loading" },
-    );
+    // Open to everyone for the demo: no key needed (app/api/demo_controls.py).
+    const [state, setState] = useState<Profiles>({ kind: "loading" });
     useEffect(() => {
-        if (state.kind === "locked") return;
         const controller = new AbortController();
         fetchProfiles(controller.signal)
             .then((data) => {
                 setState({ kind: "ready", profiles: data.profiles });
             })
-            .catch((error: unknown) => {
+            .catch(() => {
                 if (controller.signal.aborted) return;
-                // 404: the key is missing or wrong (the backend hides demo routes).
-                const locked = error instanceof Error && error.message.includes("HTTP 404");
-                setState({ kind: locked ? "locked" : "failed" });
+                setState({ kind: "failed" });
             });
         return () => {
             controller.abort();
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per visit
     }, []);
     return state;
 }
@@ -127,15 +118,7 @@ export function SetupPage() {
                     )
                 }
             />
-            {profiles.kind === "locked" ? (
-                <Card>
-                    <EmptyState
-                        icon={<KeyRound />}
-                        title="Necesitas acceso de anunciante"
-                        description="Abre en este navegador el enlace de acceso que te dio el operador y vuelve aquí."
-                    />
-                </Card>
-            ) : profiles.kind === "failed" ? (
+            {profiles.kind === "failed" ? (
                 <Card>
                     <EmptyState
                         title="No se pudo cargar el catálogo"

@@ -90,6 +90,7 @@ def create_app(
     app.include_router(ws.router)
     app.include_router(recognition.router)
     app.include_router(demo_controls.router)
+    app.include_router(demo_controls.advertiser_router)
     app.include_router(live.router)
     app.include_router(redeem.router)
     app.include_router(speech.router)

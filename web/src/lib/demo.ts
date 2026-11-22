@@ -66,8 +66,8 @@ export function rememberedDemoKey(): string | null {
 
 /**
  * After a visit to `/demo/<key>`: remember the key only once the backend accepts
- * it (a keyed GET of the book). A typo or a backend that is down never replaces
- * the key this browser already uses for the console's demo controls.
+ * it (a keyed GET of the hook results; the book is open to everyone). A typo or a
+ * backend that is down never replaces the key this browser already uses.
  */
 export async function rememberDemoKeyIfAccepted(
     key: string,
@@ -75,7 +75,7 @@ export async function rememberDemoKeyIfAccepted(
         fetch(input, init),
 ): Promise<boolean> {
     try {
-        const response = await fetcher(`${backendHttpUrl}/api/book`, {
+        const response = await fetcher(`${backendHttpUrl}/api/hooks`, {
             headers: { "X-Demo-Key": key },
         });
         if (!response.ok) return false;

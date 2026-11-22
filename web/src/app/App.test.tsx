@@ -59,16 +59,11 @@ it("the home page is the admin console with the live switch", async () => {
     expect(links()).toEqual(["/", "/screen?id=demo-01", "/advertisers"]);
 });
 
-it("the advertiser setup asks for access when this browser has no key", async () => {
+it("the advertiser setup is open: it loads the brands without a key", async () => {
     await open("/advertisers");
-    for (let i = 0; i < 50 && !host.textContent.includes("Necesitas acceso"); i++) {
-        await act(async () => {
-            await new Promise((resolve) => setTimeout(resolve, 20));
-        });
-    }
     expect(host.querySelector("h1")?.textContent).toBe("Anunciantes");
-    expect(host.textContent).toContain("Necesitas acceso de anunciante");
-    expect(fetch).not.toHaveBeenCalledWith(
+    expect(host.textContent).not.toContain("Necesitas acceso");
+    expect(fetch).toHaveBeenCalledWith(
         expect.stringContaining("/api/advertiser/profiles"),
         expect.anything(),
     );
@@ -132,11 +127,11 @@ it.each(["/advertiser", "/clerk", "/campaigns", "/dev", "/demo", "/demo/k3y/admi
 );
 
 it("the hidden hub lists the demo tools and this browser keeps them in the nav", async () => {
-    // The backend accepts this key (a keyed GET of the book), so the browser keeps it.
+    // The backend accepts this key (a keyed GET of the hooks), so the browser keeps it.
     vi.stubGlobal(
         "fetch",
         vi.fn((input: string, init?: RequestInit) =>
-            input.endsWith("/api/book") && new Headers(init?.headers).get("X-Demo-Key") === "k3y"
+            input.endsWith("/api/hooks") && new Headers(init?.headers).get("X-Demo-Key") === "k3y"
                 ? Promise.resolve(new Response("{}"))
                 : Promise.reject(new Error("no backend in this test")),
         ),

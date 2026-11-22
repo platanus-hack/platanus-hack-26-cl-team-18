@@ -13,7 +13,7 @@ from app.config.settings import AppSettings
 from app.main import create_app
 
 KEY = "s3cret-demo-key"
-DEMO_GETS = ["/api/book?screen_id=demo-01", "/api/hooks", "/api/campaigns/catalog"]
+DEMO_GETS = ["/api/hooks", "/api/campaigns/catalog"]
 PUSH = {
     "type": "console.degradation",
     "v": 1,
@@ -51,8 +51,8 @@ def test_writes_and_dev_push_need_the_key_too(tmp_path: Path) -> None:
 
 def test_no_configured_key_means_no_demo_surface(tmp_path: Path) -> None:
     with client(tmp_path) as c:
-        assert c.get("/api/book", headers={"X-Demo-Key": ""}).status_code == 404
-        assert c.get("/api/book", headers={"X-Demo-Key": "anything"}).status_code == 404
+        assert c.get("/api/hooks", headers={"X-Demo-Key": ""}).status_code == 404
+        assert c.get("/api/hooks", headers={"X-Demo-Key": "anything"}).status_code == 404
 
 
 PROD_KEY = "0123456789abcdef0123456789abcdef"
@@ -63,10 +63,6 @@ def test_production_serves_the_market_controls_only_with_a_strong_key(tmp_path: 
         assert c.get("/api/campaigns/catalog").status_code == 404
         assert c.get("/api/campaigns/catalog", headers={"X-Demo-Key": "x"}).status_code == 404
         assert c.get("/api/campaigns/catalog", headers={"X-Demo-Key": PROD_KEY}).status_code == 200
-        assert (
-            c.get("/api/book?screen_id=demo-01", headers={"X-Demo-Key": PROD_KEY}).status_code
-            == 200
-        )
 
 
 def test_production_refuses_a_short_key(tmp_path: Path) -> None:
@@ -119,3 +115,10 @@ def test_hook_results_are_read_off_the_event_loop(tmp_path: Path) -> None:
         assert c.portal is not None
         loop_thread = c.portal.call(lambda: threading.current_thread().name)
     assert threads and threads[0] != loop_thread
+
+
+def test_the_advertiser_self_serve_is_open_to_everyone(tmp_path: Path) -> None:
+    """Demo decision: anyone can open /advertisers and bid, no key."""
+    with client(tmp_path, demo_key=KEY) as c:
+        assert c.get("/api/book?screen_id=demo-01").status_code == 200
+        assert c.get("/api/advertiser/profiles").status_code == 200
