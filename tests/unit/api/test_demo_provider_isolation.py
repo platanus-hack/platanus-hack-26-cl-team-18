@@ -36,9 +36,9 @@ def test_default_station_overrides_credentials_even_when_dotenv_contains_keys(
         )
         assert not settings.voiceover_prewarm
         assert settings.speech_mode_screens == []
-        assert not settings.fal_key.get_secret_value()
-        assert not settings.elevenlabs_api_key.get_secret_value()
-        assert not settings.anthropic_api_key.get_secret_value()
+        assert settings.fal_key is None  # blanked by the station: unset
+        assert settings.elevenlabs_api_key is None  # blanked by the station: unset
+        assert settings.anthropic_api_key is None  # blanked by the station: unset
     finally:
         asyncio.run(container.aclose())
 
