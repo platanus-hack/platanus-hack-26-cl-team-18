@@ -27,11 +27,11 @@
       "video": "rayo-coffee"
     },
     "score": {
-      "photo": "cl-score-guarana",
-      "video": "cl-score-guarana",
+      "photo": "cl-score-gorilla",
+      "video": "cl-score-gorilla",
       "alternates": [
-        "cl-lata-fria",
-        "cl-ruta-amanecer"
+        "cl-score-guarana",
+        "cl-lata-fria"
       ]
     },
     "red-bull": {
@@ -78,7 +78,7 @@
       "photo": "cl-ruta-amanecer",
       "video": "cl-ruta-amanecer",
       "alternates": [
-        "cl-score-guarana",
+        "cl-score-gorilla",
         "cl-cappuccino"
       ]
     },
@@ -220,11 +220,19 @@
     },
     "cachantun+savory": {
       "photo": "cl-helado-playa",
-      "video": "cl-helado-playa"
+      "video": "cl-helado-playa",
+      "alternates": [
+        "cl-helado-palito",
+        "cl-cachantun-botella"
+      ]
     },
     "bresler+cachantun": {
-      "photo": "cl-helado-playa",
-      "video": "cl-helado-playa"
+      "photo": "cl-bresler-pizarra",
+      "video": "cl-bresler-pizarra",
+      "alternates": [
+        "cl-helado-cono",
+        "cl-cachantun-botella"
+      ]
     },
     "cachantun+marco-polo": {
       "photo": "cl-ruta-5",
@@ -321,7 +329,9 @@
     "guinness-0-0": {
       "photo": "cl-guinness-pint",
       "video": "cl-guinness-pint",
-      "alternates": []
+      "alternates": [
+        "cl-guinness-cero"
+      ]
     },
     "coca-cola+domino": {
       "photo": "cl-domino-completos",
@@ -356,6 +366,35 @@
       "video": "cl-monster-ultra",
       "alternates": [
         "cl-monster-ultra-blanca"
+      ]
+    },
+    "lays": {
+      "photo": "cl-lays-bolsas",
+      "video": "cl-lays-bolsas",
+      "alternates": [
+        "cl-papas-rusticas"
+      ]
+    },
+    "marco-polo": {
+      "photo": "cl-papas-rusticas",
+      "video": "cl-papas-rusticas",
+      "alternates": [
+        "cl-papas-cerca"
+      ]
+    },
+    "savory": {
+      "photo": "cl-helado-playa",
+      "video": "cl-helado-playa",
+      "alternates": [
+        "cl-helado-palito"
+      ]
+    },
+    "bresler": {
+      "photo": "cl-bresler-pizarra",
+      "video": "cl-bresler-pizarra",
+      "alternates": [
+        "cl-helado-cono",
+        "cl-helado-playa"
       ]
     }
   }

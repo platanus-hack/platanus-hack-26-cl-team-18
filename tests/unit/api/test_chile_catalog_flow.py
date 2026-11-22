@@ -142,8 +142,12 @@ def test_official_logos_are_used_where_present_and_a_wordmark_elsewhere() -> Non
     for slug in ("powerade", "gatorade", "soprole", "watts", "bresler"):
         brand = BRANDS[slug]
         assert _brand_logo(slug, brand.name, brand.color) == f"/campaign-assets/logos/{slug}.svg"
-    savory = BRANDS["savory"]
-    assert _brand_logo(savory.slug, savory.name, savory.color).startswith("data:image/svg+xml")
+    # Every Chile brand airs its own official mark (assets/campaigns/logos/SOURCES.md):
+    # the drawn wordmark is only a fallback for a brand added without one.
+    for brand in CHILE.brands:
+        assert _brand_logo(brand.slug, brand.name, brand.color).startswith(
+            "/campaign-assets/logos/"
+        ), brand.slug
 
 
 def _snapshot(seq: int, at: datetime, objects: list[DetectedObject]) -> AudienceSnapshot:
@@ -342,10 +346,12 @@ def test_completo_and_a_beer_at_night_airs_guinness_zero_and_a_child_swaps_it_ou
 
 
 def test_a_zero_alcohol_line_gets_its_brand_initial_not_the_abv() -> None:
+    # The fallback wordmark (a brand added without a logo file) reads "G", not "G0".
     import base64
 
-    guinness = BRANDS["guinness-0-0"]
-    logo = _brand_logo(guinness.slug, guinness.name, guinness.color)
+    from app.bootstrap.demo_catalog import wordmark
+
+    logo = wordmark("Guinness 0.0", "#1a1a1a")
     svg = base64.b64decode(logo.removeprefix("data:image/svg+xml;base64,")).decode()
     assert ">G</text>" in svg
 

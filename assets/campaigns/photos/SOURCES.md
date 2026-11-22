@@ -17,6 +17,8 @@ with the brand's own packaging, never edited or redrawn (CLAUDE.md invariant 4).
 `cl-domino-completos` (Dominó), `cl-starbucks-frappuccino` (Starbucks),
 `cl-guinness-pint` (Guinness 0.0), `cl-monster-hielo` (Monster), `cl-score-guarana` (Score's own ad, ALTO EN seal kept) and `cl-vital-picnic`
 (Vital). Trademarks of their owners, used for a hackathon demo without affiliation.
+`cl-score-gorilla`: Score's own product image (scoreenergydrink.com, gorilla.png),
+1536 px, placed as a pack shot on a dark ground; not retouched.
 
 | File | Source | Author | License | Changes |
 |---|---|---|---|---|
@@ -47,4 +49,10 @@ with the brand's own packaging, never edited or redrawn (CLAUDE.md invariant 4).
 | `cl-red-bull-studio.webp` | [Redbull zero 1.jpg](https://commons.wikimedia.org/wiki/File:Redbull_zero_1.jpg) | Connor J Williams | CC BY 2.0 | pack shot: whole, on its own blurred photo, cut from the wider shot |
 | `cl-red-bull-lineup.webp` | [Red Bull energy drinks.jpg](https://commons.wikimedia.org/wiki/File:Red_Bull_energy_drinks.jpg) | Oto Zapletal | CC BY-SA 4.0 | cropped to 16:9 |
 | `cl-lata-fria.webp` | [Drinking can ring-pull tab.jpg](https://commons.wikimedia.org/wiki/File:Drinking_can_ring-pull_tab.jpg) | Marcos André | CC BY 2.0 | cropped to 16:9 |
+| `cl-lays-bolsas.webp` | [Lays.jpg](https://commons.wikimedia.org/wiki/File:Lays.jpg) | Gaurav Dhwaj Khadka | CC BY-SA 4.0 | pack shot: whole, on its own blurred photo |
+| `cl-papas-cerca.webp` | [Lay's Sour Cream and Onion Potato Chips, Canada, 2026-02-15.jpg](https://commons.wikimedia.org/wiki/File:Lay%27s_Sour_Cream_and_Onion_Potato_Chips,_Canada,_2026-02-15.jpg) | Chris Woodrich | CC BY-SA 4.0 | cropped to 16:9 |
+| `cl-helado-palito.webp` | [Chocolate vanilla ice cream bar.jpg](https://commons.wikimedia.org/wiki/File:Chocolate_vanilla_ice_cream_bar.jpg) | Santeri Viinamäki | CC BY-SA 4.0 | cropped to 16:9 |
+| `cl-bresler-pizarra.webp` | [Pizarra Helados Bresler 2022.jpg](https://commons.wikimedia.org/wiki/File:Pizarra_Helados_Bresler_2022.jpg) | User13121989 | CC BY-SA 4.0 | pack shot: whole, on its own blurred photo, cut from the wider shot |
+| `cl-helado-cono.webp` | [Ice cream cone at the beach.jpg](https://commons.wikimedia.org/wiki/File:Ice_cream_cone_at_the_beach.jpg) | AlphaLemur | CC BY-SA 4.0 | cropped to 16:9 |
+| `cl-guinness-cero.webp` | [Flights View Lounge - August 2025 - Sarah Stierch 02.jpg](https://commons.wikimedia.org/wiki/File:Flights_View_Lounge_-_August_2025_-_Sarah_Stierch_02.jpg) | Missvain | CC0 | cropped to 16:9 |
 | `cl-copec-estacion.webp` | [Copec La Reina.jpg](https://commons.wikimedia.org/wiki/File:Copec_La_Reina.jpg) | User13121989 | CC BY-SA 4.0 | cropped to 16:9 |

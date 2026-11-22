@@ -147,6 +147,27 @@ COMMONS: tuple[CommonsPhoto, ...] = (
     ),
     CommonsPhoto(stem="cl-red-bull-lineup", title="File:Red Bull energy drinks.jpg"),
     CommonsPhoto(stem="cl-lata-fria", title="File:Drinking can ring-pull tab.jpg"),
+    # Second photos so no campaign repeats one image: real Lay's bags, a real Bresler
+    # price board (cut to the board), Guinness 0 in a glass, and real category shots.
+    CommonsPhoto(stem="cl-lays-bolsas", title="File:Lays.jpg", pack=True),
+    CommonsPhoto(
+        stem="cl-papas-cerca",
+        title="File:Lay's Sour Cream and Onion Potato Chips, Canada, 2026-02-15.jpg",
+    ),
+    CommonsPhoto(stem="cl-helado-palito", title="File:Chocolate vanilla ice cream bar.jpg"),
+    CommonsPhoto(
+        stem="cl-bresler-pizarra",
+        title="File:Pizarra Helados Bresler 2022.jpg",
+        pack=True,
+        region=(0.40, 0.30, 1.0, 1.0),
+    ),
+    CommonsPhoto(stem="cl-helado-cono", title="File:Ice cream cone at the beach.jpg"),
+    CommonsPhoto(
+        stem="cl-guinness-cero",
+        title="File:Flights View Lounge - August 2025 - Sarah Stierch 02.jpg",
+        focus=(0.5, 0.4),
+        zoom=1.15,
+    ),
     # The venue itself: a real Copec station in La Reina (Pronto Copec's own campaigns).
     CommonsPhoto(stem="cl-copec-estacion", title="File:Copec La Reina.jpg", focus=(0.5, 0.45)),
 )
@@ -184,7 +205,9 @@ TEAM_SUPPLIED = (
     "with the brand's own packaging, never edited or redrawn (CLAUDE.md invariant 4).\n"
     "`cl-domino-completos` (Dominó), `cl-starbucks-frappuccino` (Starbucks),\n"
     "`cl-guinness-pint` (Guinness 0.0), `cl-monster-hielo` (Monster), `cl-score-guarana` (Score's own ad, ALTO EN seal kept) and `cl-vital-picnic`\n"
-    "(Vital). Trademarks of their owners, used for a hackathon demo without affiliation.\n\n"
+    "(Vital). Trademarks of their owners, used for a hackathon demo without affiliation.\n"
+    "`cl-score-gorilla`: Score's own product image (scoreenergydrink.com, gorilla.png),\n"
+    "1536 px, placed as a pack shot on a dark ground; not retouched.\n\n"
 )
 
 
