@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api import campaigns, demo_controls, dev, health, live, recognition, redeem, speech, ws
 from app.bootstrap.container import Container, build_container
+from app.bootstrap.keep_alive import keep_alive
 from app.bootstrap.readiness import exposure_warnings
 from app.config.logging_setup import configure_logging, install_url_redaction
 from app.config.settings import AppSettings
@@ -52,6 +53,12 @@ def create_app(
         startup_tasks: list[asyncio.Future[None]] = [
             asyncio.ensure_future(hook()) for hook in (*built.startup, *built.background)
         ]
+        if settings.keep_alive_url and settings.app_env != "test":
+            startup_tasks.append(
+                asyncio.ensure_future(
+                    keep_alive(settings.keep_alive_url, settings.keep_alive_interval_s)
+                )
+            )
         try:
             yield
         finally:

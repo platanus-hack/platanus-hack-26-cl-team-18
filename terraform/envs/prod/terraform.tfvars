@@ -30,6 +30,9 @@ env_vars = {
   # The /screen page is the sensor (ADR 0010): its mic streams to Scribe only for
   # screens listed here (ADR 0005 opt-in); the chip on the glass discloses it.
   SPEECH_MODE_SCREENS = "[\"demo-01\"]"
+  # Free plan sleeps after 15 min idle: the backend pings its own public /health
+  # every 10 min (app/bootstrap/keep_alive.py); GitHub's keep-warm cron is backup.
+  KEEP_ALIVE_URL = "https://team18-prod.onrender.com/health"
 }
 
 # Values are set in the Render dashboard (<name>-secrets env group). Names

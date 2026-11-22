@@ -233,6 +233,10 @@ class AppSettings(BaseSettings):
     creative_copy_timeout_s: float = Field(default=6.0, gt=0, le=20)
     # Generation spend cap per screen-hour, USD (the ROI rule applies under it).
     creative_hourly_budget_usd: Decimal = Field(default=Decimal(2), gt=0, le=1000)
+    # Render free plan sleeps after 15 min idle: ping this URL (the service's own
+    # public /health) on an interval so it never does (app/bootstrap/keep_alive.py).
+    keep_alive_url: str | None = None
+    keep_alive_interval_s: int = Field(default=600, ge=60, le=840)
     # Speech topics from opted-in screens (ADR 0005: off by default, per screen).
     speech_mode_screens: list[str] = Field(default_factory=list)
     speech_topic_ttl_s: int = Field(default=60, gt=0, le=600)
