@@ -79,6 +79,8 @@ recordings/
 !edge/tests/fixtures/*.raw
 
 # Local media cache (app/config/settings.py media_dir)
+# The pre-generated bundle loops (var/media/loops/<key>.mp4) ARE tracked so
+# Render ships them: add new ones with `git add -f var/media/loops/<key>.mp4`.
 var/
 
 # ---------------------------------------------------------------------------
