@@ -499,10 +499,10 @@ def register_demo(
         (
             BrandKit(
                 brand_id=BrandId.create(ids.new_uuid7()),
-                name="team18",
+                name="advisor",
                 logo_url=market.house_logo_url,
-                stock_copy="team18 · Acércate. Hay una oferta para tu grupo.",
-                accent_color="#c6f26b",
+                stock_copy="advisor · Acércate. Hay una oferta para tu grupo.",
+                accent_color="#d0ff0b",
             ),
         ),
     )
