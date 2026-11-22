@@ -35,6 +35,10 @@ export interface ScreenView {
      * window). Presentation only (ADR 0008 D5); each amount stays a decimal string.
      */
     readonly billed: number;
+    /** Every attention-second measured this session, across every receipt (presentation only). */
+    readonly attentionSeconds: number;
+    /** Oldest first: the share of the group each recent auction's basket reached (0–1). */
+    readonly coverageHistory: readonly number[];
     /** Newest first; QR/promo redemptions credited to every brand in the basket. */
     readonly redemptions: readonly ConsoleRedemption[];
     /**
@@ -62,6 +66,7 @@ export interface StationEvent {
 export const EVENT_WINDOW = 40;
 
 export const RECEIPT_WINDOW = 20;
+export const COVERAGE_WINDOW = 30;
 export const REDEMPTION_WINDOW = 10;
 const COUNTED_WINDOW = 500;
 
@@ -95,6 +100,8 @@ export const emptyScreen: ScreenView = {
     book: null,
     receipts: [],
     billed: 0,
+    attentionSeconds: 0,
+    coverageHistory: [],
     redemptions: [],
     counted: [],
     onAir: null,
@@ -207,7 +214,11 @@ export function consoleReducer(state: ConsoleState, event: ConsoleEvent): Consol
         case "console.moment":
             return update(state, m.screen_id, (v) => ({ ...v, moment: m }));
         case "console.auction":
-            return update(state, m.screen_id, (v) => ({ ...v, auction: m }));
+            return update(state, m.screen_id, (v) => ({
+                ...v,
+                auction: m,
+                coverageHistory: [...v.coverageHistory, m.coverage].slice(-COVERAGE_WINDOW),
+            }));
         case "console.latency":
             return update(state, m.screen_id, (v) =>
                 withTrace({ ...v, lastCreativeId: m.creative_id }, m.trace),
@@ -238,6 +249,7 @@ export function consoleReducer(state: ConsoleState, event: ConsoleEvent): Consol
                 ...v,
                 receipts: [m, ...v.receipts].slice(0, RECEIPT_WINDOW),
                 billed: v.billed + (Number(m.total.amount) || 0),
+                attentionSeconds: v.attentionSeconds + (Number(m.attention_seconds) || 0),
             }));
         case "console.redemption":
             return update(state, m.screen_id, (v) => ({

@@ -3,11 +3,12 @@ import { decimalCl, moneyCl } from "@/lib/format";
 import type { ReactNode } from "react";
 import { BrandLogo } from "./BrandLogo";
 import type { ScreenView } from "./console-state";
-import { ms } from "./labels";
-import { percentile } from "./metrics";
-import { pct } from "./panels";
+import { runningTotals } from "./metrics";
 
-/** A console pane: one mono label, an optional aside, the content. */
+/**
+ * One column of the console's live stage: a plain title, an optional aside, the
+ * content. No box of its own; the stage draws the hairlines between columns.
+ */
 export function Pane({
     label,
     aside,
@@ -25,15 +26,13 @@ export function Pane({
         <section
             aria-label={ariaLabel ?? label}
             className={cn(
-                "flex min-w-0 flex-col gap-3 rounded-container border border-border bg-surface p-4",
+                "flex min-w-0 flex-col gap-4 py-6 lg:px-7 lg:first:pl-0 lg:last:pr-0",
                 className,
             )}
         >
-            <div className="flex items-center justify-between gap-3">
-                <span className="eyebrow">{label}</span>
-                {aside && (
-                    <span className="font-mono text-metadata text-muted tabular-nums">{aside}</span>
-                )}
+            <div className="flex items-baseline justify-between gap-3">
+                <h2 className="text-compact font-medium text-muted">{label}</h2>
+                {aside && <span className="text-metadata text-subtle tabular-nums">{aside}</span>}
             </div>
             {children}
         </section>
@@ -44,73 +43,13 @@ export function Pane({
 const perSecond = (amount: string) => `$${decimalCl(amount, 2)}/s`;
 
 /** A brand's real logo from the book, looked up by its name (nothing when the book hasn't arrived). */
-function LogoFor({
-    view,
-    brand,
-    size = "sm",
-    highlight = false,
-}: {
-    view: ScreenView;
-    brand: string;
-    size?: "sm" | "md";
-    highlight?: boolean;
-}) {
+function LogoFor({ view, brand }: { view: ScreenView; brand: string }) {
     const line = view.book?.lines.find((l) => l.brand_name === brand);
     if (!line) return null;
-    return (
-        <BrandLogo
-            src={line.logo_url}
-            accent={line.accent_color ?? null}
-            size={size}
-            highlight={highlight}
-        />
-    );
+    return <BrandLogo src={line.logo_url} accent={line.accent_color ?? null} size="sm" />;
 }
 
-/** "Gana": who holds the screen and what each second of attention is worth. */
-export function WinnerPanel({ view }: { view: ScreenView }) {
-    const auction = view.auction;
-    const won = auction !== null && auction.winners.length > 0;
-    return (
-        <Pane label="Gana" ariaLabel="Ganador">
-            {won ? (
-                <div className="flex flex-1 flex-col gap-3">
-                    <div className="flex flex-col gap-1">
-                        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-section font-semibold tracking-tight">
-                            {auction.winners.map((w, i) => (
-                                <span
-                                    key={w.campaign_id}
-                                    className="inline-flex items-center gap-2"
-                                >
-                                    {i > 0 && <span className="text-muted">+</span>}
-                                    <LogoFor view={view} brand={w.brand_name} size="md" />
-                                    {w.brand_name}
-                                </span>
-                            ))}
-                        </p>
-                        {auction.offer && (
-                            <p className="text-compact text-muted">
-                                {auction.offer.label} · {moneyCl(auction.offer.price.amount)}
-                            </p>
-                        )}
-                    </div>
-                    <div className="mt-auto flex flex-col gap-0.5">
-                        <span className="text-kpi font-semibold tracking-tight tabular-nums">
-                            ${decimalCl(auction.bundle_value.amount, 2)}
-                        </span>
-                        <span className="text-compact text-muted">por segundo de atención</span>
-                    </div>
-                </div>
-            ) : (
-                <p className="flex flex-1 items-center text-compact text-muted">
-                    {auction ? "Aviso de la casa" : "Nadie mira"}
-                </p>
-            )}
-        </Pane>
-    );
-}
-
-/** "Subasta": every basket the auction weighed, as bars that ease to each new result. */
+/** "Subasta": every basket the auction weighed, ranked, the winner first. */
 export function AuctionRace({ view }: { view: ScreenView }) {
     const auction = view.auction;
     const options = auction?.alternatives ?? [];
@@ -129,34 +68,33 @@ export function AuctionRace({ view }: { view: ScreenView }) {
                         return (
                             <li
                                 key={name}
-                                className="grid grid-cols-[minmax(0,14rem)_minmax(0,1fr)_5.5rem] items-center gap-4 border-b border-border-subtle py-2.5 last:border-b-0 max-sm:grid-cols-[minmax(0,1fr)_5.5rem] max-sm:gap-y-1.5"
+                                className="flex items-center gap-3 border-b border-border-subtle py-3.5 last:border-b-0"
                             >
-                                <span
-                                    className={cn(
-                                        "flex min-w-0 items-center gap-2 text-compact",
-                                        isWin && "font-semibold",
-                                    )}
-                                >
-                                    <span className="flex shrink-0 items-center gap-1">
-                                        {option.brands.map((brand) => (
-                                            <LogoFor key={brand} view={view} brand={brand} />
-                                        ))}
+                                <span className="flex shrink-0 items-center gap-1">
+                                    {option.brands.map((brand) => (
+                                        <LogoFor key={brand} view={view} brand={brand} />
+                                    ))}
+                                </span>
+                                <span className="flex min-w-0 flex-1 flex-col gap-2">
+                                    <span className={cn("truncate", isWin && "font-semibold")}>
+                                        {name}
                                     </span>
-                                    <span className="truncate">{name}</span>
-                                </span>
-                                <span className="relative h-1.5 overflow-hidden rounded-full bg-surface-sunken max-sm:col-span-2 max-sm:row-start-2">
-                                    <span
-                                        className={cn(
-                                            "absolute inset-y-0 left-0 rounded-full transition-[width] duration-500 ease-out motion-reduce:transition-none",
-                                            isWin ? "bg-accent" : "bg-border-strong",
-                                        )}
-                                        style={{ width: `${((value / max) * 100).toFixed(1)}%` }}
-                                    />
+                                    <span className="h-1 overflow-hidden rounded-full bg-border-subtle">
+                                        <span
+                                            className={cn(
+                                                "block h-full rounded-full transition-[width] duration-500 ease-out motion-reduce:transition-none",
+                                                isWin ? "bg-moment" : "bg-border-strong",
+                                            )}
+                                            style={{
+                                                width: `${((value / max) * 100).toFixed(1)}%`,
+                                            }}
+                                        />
+                                    </span>
                                 </span>
                                 <span
                                     className={cn(
-                                        "text-right font-mono text-compact tabular-nums",
-                                        isWin && "text-accent",
+                                        "shrink-0 font-mono tabular-nums",
+                                        isWin ? "text-moment" : "text-muted",
                                     )}
                                 >
                                     {perSecond(option.value.amount)}
@@ -170,36 +108,87 @@ export function AuctionRace({ view }: { view: ScreenView }) {
     );
 }
 
-/** Three numbers: who the ad reached, what was billed, how fast the screen reacted. */
+/** A KPI's trend: one thin line, scaled to its own range, no axes. */
+function Sparkline({ points }: { points: readonly number[] }) {
+    if (points.length < 2) return <span aria-hidden className="block h-6" />;
+    const min = Math.min(...points);
+    const span = Math.max(...points) - min || 1;
+    const d = points
+        .map((p, i) => {
+            const x = (i / (points.length - 1)) * 100;
+            const y = 22 - ((p - min) / span) * 20;
+            return `${i === 0 ? "M" : "L"}${x.toFixed(2)} ${y.toFixed(2)}`;
+        })
+        .join(" ");
+    return (
+        <svg
+            aria-hidden
+            viewBox="0 0 100 24"
+            preserveAspectRatio="none"
+            className="block h-6 w-full overflow-visible text-moment"
+        >
+            <path
+                d={d}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.5}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                vectorEffect="non-scaling-stroke"
+            />
+        </svg>
+    );
+}
+
+/** Seconds as a short count: "48 s", then minutes once it passes one. */
+function duration(seconds: number): { value: string; unit: string } {
+    if (seconds < 60) return { value: String(Math.round(seconds)), unit: "s" };
+    return { value: decimalCl((seconds / 60).toFixed(1), 1), unit: "min" };
+}
+
+/** Three numbers anyone can read: time looked, who it fit, what brands paid. */
 export function Meters({ view }: { view: ScreenView }) {
-    const p50 = percentile(view.glassToGlassMs, 50);
+    const looked = duration(view.attentionSeconds);
+    const coverage = view.auction?.coverage;
     const items = [
-        { label: "Alcance", value: view.auction ? pct(view.auction.coverage) : "—", accent: true },
-        { label: "Cobrado", value: moneyCl(String(view.billed)), accent: false },
-        { label: "Reacción", value: p50 === null ? "—" : ms(p50), accent: false },
+        {
+            label: "Tiempo mirando",
+            value: looked.value,
+            unit: looked.unit,
+            points: runningTotals(view.receipts, view.attentionSeconds, (r) =>
+                Number(r.attention_seconds),
+            ),
+        },
+        {
+            label: "Interesados",
+            value: coverage === undefined ? "—" : String(Math.round(coverage * 100)),
+            unit: coverage === undefined ? null : "%",
+            points: view.coverageHistory,
+        },
+        {
+            label: "Pagado por las marcas",
+            value: moneyCl(String(view.billed)),
+            unit: "CLP",
+            points: runningTotals(view.receipts, view.billed, (r) => Number(r.total.amount)),
+        },
     ];
     return (
-        <section
-            aria-label="Sesión"
-            className="grid grid-cols-3 overflow-hidden rounded-container border border-border bg-surface"
-        >
-            {items.map((item, index) => (
+        <section aria-label="Sesión" className="grid gap-6 sm:grid-cols-3 sm:gap-0">
+            {items.map((item) => (
                 <div
                     key={item.label}
-                    className={cn(
-                        "flex min-w-0 flex-col gap-1.5 p-4",
-                        index > 0 && "border-l border-border",
-                    )}
+                    className="flex min-w-0 flex-col gap-2 sm:border-l sm:border-border sm:px-7 sm:first:border-l-0 sm:first:pl-0 sm:last:pr-0"
                 >
-                    <span className="eyebrow">{item.label}</span>
-                    <span
-                        className={cn(
-                            "truncate text-title font-semibold tracking-tight tabular-nums sm:text-kpi",
-                            item.accent && "text-accent",
+                    <span className="text-compact text-muted">{item.label}</span>
+                    <span className="flex items-baseline gap-1 font-mono text-kpi font-medium tracking-tight tabular-nums">
+                        <span className="truncate">{item.value}</span>
+                        {item.unit && (
+                            <span className="font-sans text-compact font-normal tracking-normal text-subtle">
+                                {item.unit}
+                            </span>
                         )}
-                    >
-                        {item.value}
                     </span>
+                    <Sparkline points={item.points} />
                 </div>
             ))}
         </section>

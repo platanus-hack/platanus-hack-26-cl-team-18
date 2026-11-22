@@ -1,5 +1,6 @@
 import type { DevBox } from "@/contract";
 import { CreativeView } from "@/features/screen";
+import { cn } from "@/lib/cn";
 import { demoKey, rememberedDemoKey } from "@/lib/demo";
 import { decimalCl, moneyCl } from "@/lib/format";
 import { setBidMultiplier, setStock } from "@/lib/market-api";
@@ -8,10 +9,11 @@ import { Button } from "@/shared/ui/button";
 import { Card } from "@/shared/ui/card";
 import { Camera, Minus, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
-import { BrandLogo } from "./BrandLogo";
 import { bidRows, splitRows, stepMultiplier, type BidRow } from "./bids";
+import { BrandLogo } from "./BrandLogo";
 import type { ScreenView } from "./console-state";
 import { categoryLabel, money, SOURCE } from "./labels";
+import { Pane } from "./live";
 import { DEMO_BRANDS } from "./panels";
 import { baskets, explain } from "./why";
 
@@ -34,33 +36,6 @@ function useNow(intervalMs: number): number {
     return now;
 }
 
-function Section({
-    title,
-    aside,
-    children,
-    label,
-}: {
-    title: string;
-    aside?: string | null | undefined;
-    children: React.ReactNode;
-    label?: string;
-}) {
-    return (
-        <section
-            aria-label={label ?? title}
-            className="flex min-w-0 flex-col gap-3 rounded-container border border-border bg-surface p-4"
-        >
-            <div className="flex items-center justify-between gap-3">
-                <h2 className="eyebrow">{title}</h2>
-                {aside && (
-                    <span className="font-mono text-metadata text-muted tabular-nums">{aside}</span>
-                )}
-            </div>
-            {children}
-        </section>
-    );
-}
-
 function boxStyle(box: DevBox): React.CSSProperties {
     return {
         left: `${box.x1 * 100}%`,
@@ -70,27 +45,21 @@ function boxStyle(box: DevBox): React.CSSProperties {
     };
 }
 
-/** "Lo que ve la cámara": the detector's boxes, never an image (nothing is stored). */
+/** "Lo que ve la cámara": the detector's boxes over a blurred preview, never stored. */
 export function CameraPanel({ view }: { view: ScreenView }) {
     const now = useNow(1000);
     const fresh =
         view.perception && now - view.perception.at < PERCEPTION_FRESH_MS
             ? view.perception.message
             : null;
-    const looking = fresh?.people.filter((p) => p.looking).length ?? view.moment?.looking ?? 0;
     const people = fresh?.people.length ?? view.moment?.people ?? 0;
     return (
-        <Section
-            title="Cámara"
-            label="Lo que ve la cámara"
-            aside={people > 0 ? `${looking} mirando` : null}
-        >
+        <Pane label="Cámara" ariaLabel="Lo que ve la cámara">
             <div
-                className={
-                    fresh
-                        ? "relative overflow-hidden rounded-container bg-ink"
-                        : "relative overflow-hidden rounded-container bg-surface-raised"
-                }
+                className={cn(
+                    "relative overflow-hidden rounded-container",
+                    fresh ? "bg-ink" : "bg-surface-raised",
+                )}
                 style={{
                     aspectRatio: fresh ? `${fresh.frame_w} / ${fresh.frame_h}` : "16 / 9",
                 }}
@@ -107,76 +76,102 @@ export function CameraPanel({ view }: { view: ScreenView }) {
                             />
                         )}
                         {fresh.people.map((person, index) => (
-                            <div
+                            <Detection
                                 key={person.track_id}
-                                className="absolute rounded-sm border-2 border-(--palette-salvia)"
-                                style={boxStyle(person.box)}
-                            >
-                                <span className="absolute -top-5 left-[-2px] rounded-sm bg-(--palette-salvia) px-1.5 text-metadata font-semibold whitespace-nowrap text-ink">
-                                    persona {index + 1} · {person.looking ? "mirando" : "no mira"}
-                                </span>
-                            </div>
+                                box={person.box}
+                                tone="person"
+                                label={`Persona ${String(index + 1)} · ${person.looking ? "mirando" : "no mira"}`}
+                            />
                         ))}
                         {fresh.objects.map((object, index) => (
-                            <div
-                                key={`${object.label}:${index}`}
-                                className="absolute rounded-sm border-2 border-(--palette-lavanda)"
-                                style={boxStyle(object.box)}
-                            >
-                                <span className="absolute -bottom-5 left-[-2px] rounded-sm bg-(--palette-lavanda) px-1.5 text-metadata font-semibold whitespace-nowrap text-ink">
-                                    {object.label}
-                                </span>
-                            </div>
+                            <Detection
+                                key={`${object.label}:${String(index)}`}
+                                box={object.box}
+                                tone="object"
+                                label={object.label}
+                            />
                         ))}
                         {fresh.markers.map((marker) => (
-                            <div
+                            <Detection
                                 key={marker.marker_id}
-                                className="absolute rounded-sm border-2 border-(--palette-ambar)"
-                                style={boxStyle(marker.box)}
-                            >
-                                <span className="absolute -bottom-5 left-[-2px] rounded-sm bg-(--palette-ambar) px-1.5 text-metadata font-semibold whitespace-nowrap text-ink">
-                                    {(marker.brand_ref && DEMO_BRANDS[marker.brand_ref]) ??
-                                        marker.brand_ref ??
-                                        "producto"}
-                                </span>
-                            </div>
+                                box={marker.box}
+                                tone="object"
+                                label={
+                                    (marker.brand_ref && DEMO_BRANDS[marker.brand_ref]) ??
+                                    marker.brand_ref ??
+                                    "producto"
+                                }
+                            />
                         ))}
-                        <span className="absolute top-3 right-3 rounded-full bg-ink/80 px-2.5 py-1 text-metadata text-white">
-                            {/* Phones get the short form so it never covers the boxes' labels. */}
-                            <span className="hidden sm:inline">
-                                {fresh.preview_jpeg_base64
-                                    ? "Vista demo · rostros difuminados · "
-                                    : "Solo cajas · "}
-                            </span>
-                            nada se guarda
-                        </span>
                     </>
                 ) : (
                     <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
                         <Camera className="size-6 text-muted" aria-hidden />
                         <p className="text-compact text-muted">
                             {people > 0
-                                ? `${people} ${people === 1 ? "persona" : "personas"}`
+                                ? `${String(people)} ${people === 1 ? "persona" : "personas"}`
                                 : "Nadie frente a la pantalla"}
                         </p>
                     </div>
                 )}
             </div>
-        </Section>
+        </Pane>
     );
 }
 
-/** "Lo que ve la gente": the ad on air and, while a swap waits, the next one. */
+/** One detector box: people in white, products in the moment color (what drove the ad). */
+function Detection({
+    box,
+    label,
+    tone,
+}: {
+    box: DevBox;
+    label: string;
+    tone: "person" | "object";
+}) {
+    const person = tone === "person";
+    return (
+        <div
+            className={cn(
+                "absolute rounded-control border-2",
+                person ? "border-white/85" : "border-moment",
+            )}
+            style={boxStyle(box)}
+        >
+            <span
+                className={cn(
+                    "absolute rounded-control px-1.5 py-0.5 text-metadata font-medium whitespace-nowrap",
+                    person
+                        ? "top-1 left-1 bg-white text-ink"
+                        : "-bottom-6 left-[-2px] bg-moment text-on-primary",
+                )}
+            >
+                {label}
+            </span>
+        </div>
+    );
+}
+
+/** How far the on-air ad has played, 0–1, counted from when this console first saw it. */
+function usePlayed(id: string | null, durationMs: number, now: number): number {
+    const [start, setStart] = useState<{ id: string | null; at: number }>({ id, at: now });
+    if (start.id !== id) setStart({ id, at: now });
+    return Math.min(1, Math.max(0, (now - start.at) / durationMs));
+}
+
+/** "Lo que ve la gente": the ad on air, its offer, and, while a swap waits, the next one. */
 export function PeopleScreen({ view }: { view: ScreenView }) {
     const now = useNow(250);
     const onAir = view.onAir;
     const next = view.next;
+    const played = usePlayed(onAir?.creative_id ?? null, onAir?.spec.duration_ms ?? 1, now);
     const waiting = next ? new Date(next.not_before).getTime() - now : null;
     const showNext = next !== null && waiting !== null && waiting > -2000;
+    const offer = onAir?.spec.offer ?? null;
     return (
-        <Section title="En pantalla" label="Lo que ve la gente">
+        <Pane label="En pantalla" ariaLabel="Lo que ve la gente">
             <div
-                className="relative aspect-video overflow-hidden rounded-container border border-border bg-ink shadow-resting"
+                className="relative aspect-video overflow-hidden rounded-container bg-ink"
                 aria-label="Aviso al aire"
             >
                 {onAir ? (
@@ -187,19 +182,52 @@ export function PeopleScreen({ view }: { view: ScreenView }) {
                     </p>
                 )}
             </div>
+            {onAir && (
+                <div className="flex flex-col gap-3">
+                    <div className="flex items-baseline justify-between gap-3">
+                        <span className="min-w-0 truncate font-medium">
+                            {onAir.auction_id === null
+                                ? "Sin avisos"
+                                : onAir.spec.slots.map((s) => s.brand_name).join(" + ")}
+                            {offer && <span className="text-muted"> · {offer.label}</span>}
+                        </span>
+                        {offer && (
+                            <span className="shrink-0 font-mono font-medium tabular-nums">
+                                {moneyCl(offer.price.amount)}
+                            </span>
+                        )}
+                    </div>
+                    <span
+                        className="h-1 overflow-hidden rounded-full bg-border-subtle"
+                        role="progressbar"
+                        aria-label="Tiempo al aire"
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-valuenow={Math.round(played * 100)}
+                    >
+                        <span
+                            className="block h-full rounded-full bg-moment transition-[width] duration-(--duration-base) ease-linear"
+                            style={{ width: `${(played * 100).toFixed(1)}%` }}
+                        />
+                    </span>
+                </div>
+            )}
             {showNext ? (
-                <Card className="flex items-center gap-4 p-3" aria-label="Siguiente aviso">
-                    <div className="relative aspect-video w-48 shrink-0 overflow-hidden rounded-control border border-border bg-ink">
+                <div
+                    className="flex items-center gap-3 border-t border-border-subtle pt-4"
+                    aria-label="Siguiente aviso"
+                >
+                    <div className="relative aspect-video w-28 shrink-0 overflow-hidden rounded-control bg-ink">
                         <CreativeView spec={next.spec} playKey={`next:${next.not_before}`} />
                     </div>
-                    <div className="flex min-w-0 flex-1 flex-col gap-1">
-                        <span className="font-mono text-metadata tracking-wider text-accent uppercase">
+                    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <span className="text-metadata text-subtle tabular-nums">
                             Siguiente ·{" "}
                             {waiting > 0
                                 ? `entra en ${decimalCl(String(waiting / 1000), 1)} s`
                                 : "entrando"}
                         </span>
-                        <span className="font-semibold">
+                        <span className="truncate text-compact font-medium">
                             {next.auction_id === null
                                 ? "Sin avisos"
                                 : next.spec.slots.map((s) => s.brand_name).join(" + ")}
@@ -207,9 +235,9 @@ export function PeopleScreen({ view }: { view: ScreenView }) {
                                 ` · ${next.spec.offer.label} ${moneyCl(next.spec.offer.price.amount)}`}
                         </span>
                     </div>
-                </Card>
+                </div>
             ) : null}
-        </Section>
+        </Pane>
     );
 }
 

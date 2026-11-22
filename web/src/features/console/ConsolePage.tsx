@@ -9,7 +9,7 @@ import { AppShell } from "@/shared/ui/page";
 import { useEffect, useState } from "react";
 import { consoleReducer, emptyScreen, initialConsoleState } from "./console-state";
 import { DEGRADATION } from "./labels";
-import { AuctionRace, Meters, WinnerPanel } from "./live";
+import { AuctionRace, Meters } from "./live";
 import { CameraPanel, PeopleScreen } from "./station-d";
 import { StationBar } from "./StationBar";
 
@@ -78,20 +78,21 @@ export function ConsolePage() {
                     ))}
                 </div>
             )}
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {/* The live loop, left to right: what the camera sees, who wins, what airs. */}
+            <section
+                aria-label="Ciclo en vivo"
+                className="grid divide-y divide-border border-y border-border lg:grid-cols-[1.25fr_1fr_1.1fr] lg:divide-x lg:divide-y-0"
+            >
                 <ErrorBoundary label="camera">
                     <CameraPanel view={view} />
                 </ErrorBoundary>
-                <ErrorBoundary label="winner">
-                    <WinnerPanel view={view} />
+                <ErrorBoundary label="race">
+                    <AuctionRace view={view} />
                 </ErrorBoundary>
                 <ErrorBoundary label="people">
                     <PeopleScreen view={view} />
                 </ErrorBoundary>
-            </div>
-            <ErrorBoundary label="race">
-                <AuctionRace view={view} />
-            </ErrorBoundary>
+            </section>
             <ErrorBoundary label="meters">
                 <Meters view={view} />
             </ErrorBoundary>

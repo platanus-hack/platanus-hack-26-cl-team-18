@@ -8,6 +8,24 @@ export function percentile(samples: readonly number[], p: number): number | null
     return sorted[rank] ?? null;
 }
 
+/**
+ * A session total at each of the last items, oldest first, ending at `total`: the
+ * points of a sparkline when only a window of the items is kept (`newestFirst`).
+ */
+export function runningTotals<T>(
+    newestFirst: readonly T[],
+    total: number,
+    amount: (item: T) => number,
+): number[] {
+    const points = [total];
+    let before = total;
+    for (const item of newestFirst) {
+        before -= amount(item) || 0;
+        points.unshift(before);
+    }
+    return points;
+}
+
 const ms = (iso: string | null): number | null => (iso === null ? null : Date.parse(iso));
 
 /**

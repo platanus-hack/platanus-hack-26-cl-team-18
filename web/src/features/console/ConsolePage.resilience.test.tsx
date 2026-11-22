@@ -22,7 +22,7 @@ vi.mock("@/lib/ws/typed-socket", () => ({
 // A render-time bug in one section (the session meters).
 vi.mock("./metrics", async (original) => ({
     ...(await original<typeof MetricsModule>()),
-    percentile: () => {
+    runningTotals: () => {
         throw new Error("render bug");
     },
 }));

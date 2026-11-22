@@ -4,7 +4,7 @@ import { useLive } from "@/lib/live-api";
 import type { ConnectionState } from "@/lib/ws/typed-socket";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
-import { Check, ChevronDown, Mic, MicOff, MonitorDot, Play } from "lucide-react";
+import { Check, ChevronDown, Mic, MicOff, Play } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { InputHealthSchema, type InputHealth } from "./input-status";
 import { CONNECTION } from "./labels";
@@ -223,27 +223,19 @@ function ScreenPicker({ screen }: { screen: string }) {
                     }
                 }}
                 className={cn(
-                    "group inline-flex h-9 items-center gap-2.5 rounded-control border border-border bg-surface-sunken pr-2 pl-3",
-                    "font-mono text-compact tracking-tight text-fg shadow-resting",
-                    "transition-colors duration-(--duration-fast) hover:border-border-strong hover:bg-surface-hover",
+                    "group -ml-2 inline-flex h-8 items-center gap-2 rounded-control px-2",
+                    "text-compact font-medium tracking-tight text-fg",
+                    "transition-colors duration-(--duration-fast) hover:bg-surface-hover",
                     "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-                    open && "border-border-strong bg-surface-hover",
+                    open && "bg-surface-hover",
                 )}
             >
-                <MonitorDot aria-hidden className="size-4 text-muted" />
-                <span className="font-medium">{current.label}</span>
-                <span
-                    aria-hidden
-                    className="size-1.5 rounded-full bg-success shadow-[0_0_0_3px_var(--color-success-soft)]"
-                />
-                <span className="h-4 w-px bg-border" aria-hidden />
-                <span className="text-metadata text-subtle">
-                    {available}/{screens.length}
-                </span>
+                <span aria-hidden className="size-1.5 rounded-full bg-success" />
+                <span>{current.label}</span>
                 <ChevronDown
                     aria-hidden
                     className={cn(
-                        "size-4 text-muted transition-transform duration-(--duration-base)",
+                        "size-3.5 text-subtle transition-transform duration-(--duration-base)",
                         open && "rotate-180",
                     )}
                 />
