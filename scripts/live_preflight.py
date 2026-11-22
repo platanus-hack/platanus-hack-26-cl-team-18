@@ -3,7 +3,8 @@
 Besides providers and media, it names what silently breaks a demo: a campaign a
 rehearsal drained (budgets persist in Postgres), records that fell back to memory,
 a QR origin phones can't open, a skewed agent clock and missing campaign photos.
-Those print as WARNING lines and fail any `--require-*` gate.
+Those print as WARNING lines and fail any `--require-*` gate. Device tokens left
+unset on a tunnel/LAN URL also print a WARNING, but never fail a gate.
 """
 
 import argparse
@@ -16,7 +17,7 @@ from urllib.request import Request, urlopen
 
 from app.api.demo_access import DEMO_KEY_HEADER
 from app.bootstrap.container import build_container
-from app.bootstrap.readiness import live_readiness, records_status
+from app.bootstrap.readiness import exposure_warnings, live_readiness, records_status
 from app.config.settings import AppSettings
 
 # A 3-minute demo spends well under this per brand: the soak measured ~280 CLP per
@@ -117,6 +118,8 @@ def main() -> int:
     if (args.require_inputs or args.require_speech) and not args.server:
         parser.error("--require-inputs/--require-speech needs --server (the actual player origin)")
     settings = AppSettings()
+    # Printed, never gated: open device sockets on a tunnel are risky, not a broken demo.
+    _warn(exposure_warnings(settings))
     if args.server:
         url = urlsplit(args.server)
         if url.scheme not in {"http", "https"} or not url.netloc:

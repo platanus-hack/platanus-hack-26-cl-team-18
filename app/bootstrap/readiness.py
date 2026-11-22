@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import shutil
 from typing import TYPE_CHECKING, TypedDict
+from urllib.parse import urlsplit
 
+from app.config.settings import AppSettings, _is_loopback
 from app.modules.creative.infrastructure.campaign_assets import missing_campaign_photos
 
 if TYPE_CHECKING:
@@ -15,6 +17,34 @@ class ProviderStatus(TypedDict):
     enabled: bool
     configured: bool
     missing: list[str]
+
+
+def exposure_warnings(settings: AppSettings, public_base_url: str | None = None) -> list[str]:
+    """Open device sockets on a station reachable from outside (a tunnel or the LAN).
+
+    Outside prod an unset AGENT_TOKEN/SCREEN_TOKEN leaves its socket open (device_auth.py),
+    which is fine on localhost but lets anyone on the tunnel feed the loop or bill. A
+    warning only, never a failure: the demo must still start. Names only, never values.
+    """
+    if settings.app_env == "prod":
+        return []  # prod refuses unset tokens on its own
+    host = urlsplit(public_base_url or settings.public_base_url).hostname or ""
+    if not host or _is_loopback(host):
+        return []
+    unset = [
+        name
+        for name, secret in (
+            ("AGENT_TOKEN", settings.agent_token),
+            ("SCREEN_TOKEN", settings.screen_token),
+        )
+        if not (secret and secret.get_secret_value())
+    ]
+    if not unset:
+        return []
+    return [
+        f"{' and '.join(unset)} unset while PUBLIC_BASE_URL is {host}: anyone who reaches "
+        "it can feed the camera loop or bill plays; set them in .env (openssl rand -hex 16)"
+    ]
 
 
 def records_status(container: Container) -> dict[str, object]:

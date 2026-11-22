@@ -23,6 +23,7 @@ from typing import BinaryIO
 from urllib.parse import quote, urlsplit
 from urllib.request import urlopen
 
+from app.bootstrap.readiness import exposure_warnings
 from app.config.settings import AppSettings
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -328,7 +329,7 @@ def main() -> int:
     print(f"QR codes open {public_base_url}/r/<code>", flush=True)
     for problem in settings.model_copy(
         update={"public_base_url": public_base_url}
-    ).misconfigurations():
+    ).misconfigurations() + exposure_warnings(settings, public_base_url):
         print(f"WARNING: {problem}", flush=True)
     if settings.demo_key and settings.demo_key.get_secret_value():
         print(f"Demo tools (private): {origin}/demo/<DEMO_KEY from .env>", flush=True)
@@ -338,6 +339,12 @@ def main() -> int:
     if settings.screen_token and settings.screen_token.get_secret_value():
         player_url += f"&token={quote(settings.screen_token.get_secret_value())}"
         print("Player gets SCREEN_TOKEN from .env (opened for you)", flush=True)
+    if settings.console_token and settings.console_token.get_secret_value():
+        # Never printed: the console keeps it after one `?token=` load (web/src/lib/device.ts).
+        print(
+            "Console needs CONSOLE_TOKEN: open /console?token=<CONSOLE_TOKEN from .env> once",
+            flush=True,
+        )
     if not args.start_live:
         print(
             "STANDBY: camera, mic and ad generation wait for 'Iniciar en vivo' on the console",
