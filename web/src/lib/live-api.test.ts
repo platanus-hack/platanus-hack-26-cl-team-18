@@ -17,7 +17,9 @@ const STATUS = {
 };
 
 function stubFetch() {
-    const fetcher = vi.fn(async () => new Response(JSON.stringify(STATUS), { status: 200 }));
+    const fetcher = vi.fn(() =>
+        Promise.resolve(new Response(JSON.stringify(STATUS), { status: 200 })),
+    );
     vi.stubGlobal("fetch", fetcher);
     return fetcher;
 }
