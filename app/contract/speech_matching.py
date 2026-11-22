@@ -132,12 +132,23 @@ class KeytermCatalog:
     # Recognizer slips and other languages: matched, but never sent as keyterm
     # prompts, so the recognizer is not biased toward writing them.
     misheard: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    # Surfaces the recognizer must be told about first, right after the intents: words it
+    # does not know or mishears without a hint (a proper noun like "Platanus", slang like
+    # "chela"). The round-robin over variants would cut them at Scribe's 50-term budget.
+    hints: tuple[str, ...] = ()
     _index: tuple[tuple[str, str], ...] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         index: dict[str, str] = {}
         if unknown := set(self.misheard) - set(self.variants):
             raise ValueError(f"misheard forms for unknown keyterms: {sorted(unknown)}")
+        known = {
+            normalize(surface)
+            for canonical, surfaces in self.variants.items()
+            for surface in (canonical, *surfaces)
+        }
+        if unknown_hints := [h for h in self.hints if normalize(h) not in known]:
+            raise ValueError(f"hints that are no keyterm variant: {unknown_hints}")
         for canonical, surfaces in self.variants.items():
             if not canonical.strip():
                 raise ValueError("empty canonical keyterm")
@@ -160,10 +171,12 @@ class KeytermCatalog:
         cls,
         mapping: Mapping[str, Iterable[str]],
         misheard: Mapping[str, Iterable[str]] | None = None,
+        hints: Iterable[str] = (),
     ) -> KeytermCatalog:
         return cls(
             {canonical: tuple(v) for canonical, v in mapping.items()},
             {canonical: tuple(v) for canonical, v in (misheard or {}).items()},
+            tuple(hints),
         )
 
     def match(self, text: str) -> tuple[str, ...]:
@@ -254,10 +267,12 @@ class KeytermCatalog:
     def prompt_terms(self, limit: int = 50, max_chars: int = 1000) -> tuple[str, ...]:
         """Surface forms to bias the recognizer with (Scribe realtime: ≤50 terms, ≤1000 chars).
 
-        Canonicals go first, then variants round-robin, so a tight budget still
-        covers every intent before it spends terms on extra variants.
+        Canonicals go first, then the hints (words the recognizer can't get unaided),
+        then variants round-robin, so a tight budget still covers every intent and every
+        hard word before it spends terms on extra variants.
         """
         ordered: dict[str, None] = dict.fromkeys(self.variants)
+        ordered.update(dict.fromkeys(self.hints))
         depth = max((len(v) for v in self.variants.values()), default=0)
         for i in range(depth):
             for surfaces in self.variants.values():
@@ -328,6 +343,23 @@ DEFAULT_KEYTERMS = KeytermCatalog.from_mapping(
         "dulce": ("candy",),
         "bebida": ("soda",),
         "sin alcohol": ("alcohol free", "non alcoholic"),
-        "hackathon": ("plátano", "plátanos", "platanos", "plátanus", "jacatón", "hack"),
+        "hackathon": (
+            "plátano",
+            "plátanos",
+            "platanos",
+            "plátanus",
+            "platanu",
+            "plata nos",
+            "plata nus",
+            "jacatón",
+            "jakatón",
+            "jakaton",
+            "hacatón",
+            "hakatón",
+            "hack",
+        ),
     },
+    # Proper nouns and slang Scribe gets wrong without a hint (measured: "Platanus" was
+    # cut from the prompt and came back as "plátanos", "plata nos").
+    hints=("platanus", "platanus hack", "hackatón", "chela", "completo", "cortado"),
 )

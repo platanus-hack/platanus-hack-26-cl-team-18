@@ -110,6 +110,16 @@ COMMONS: tuple[CommonsPhoto, ...] = (
         pack=True,
     ),
     CommonsPhoto(stem="cl-monster-lineup", title="File:Monster Energy drinks 04.jpg"),
+    # The hackathon promo is Monster Ultra, zero sugar: the Latin American can that reads
+    # "CERO AZÚCAR", and the white Ultra.
+    CommonsPhoto(
+        stem="cl-monster-ultra", title="File:Monster Energy Ultra Strawberry Dreams.jpg", pack=True
+    ),
+    CommonsPhoto(
+        stem="cl-monster-ultra-blanca",
+        title="File:Monster Energy Zero Ultra (China Version) 330ml 20260628130320.jpg",
+        pack=True,
+    ),
     # The hackathon promo's six-pack: six whole cans (3 x 2) from a stacked lineup.
     CommonsPhoto(
         stem="cl-monster-sixpack",

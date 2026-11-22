@@ -41,3 +41,11 @@ def test_every_word_with_a_second_meaning_has_a_phrase_proving_it_is_ignored() -
     quiet = [normalize(case["text"]).split() for case in CASES if not case["wanted"]]
     for surface in _OTHER_SENSE:
         assert any(surface in words for words in quiet), surface
+
+
+def test_the_recognizer_is_told_the_hard_words_first() -> None:
+    # "Platanus" was cut from Scribe's 50-term prompt and came back as "plata nos".
+    terms = DEFAULT_KEYTERMS.prompt_terms()
+    assert {"platanus", "platanus hack", "chela", "completo"} <= set(terms)
+    assert set(DEFAULT_KEYTERMS.variants) <= set(terms)
+    assert len(terms) <= 50 and sum(map(len, terms)) <= 1000

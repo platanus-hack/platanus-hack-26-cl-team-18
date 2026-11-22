@@ -1,0 +1,47 @@
+{
+  "name": "hackathon-hard-cases",
+  "beat": "The hackathon moment survives what broke it live: an uncertain minor reading, a speaker not counted as looking, and recognizer slips",
+  "description": "Chile catalog. The browser sensor reports minor_likely uncertain with a cropped body, which blocks restricted categories: the promo is Monster Ultra (zero sugar, no ALTO EN seal), so it still airs. A person in frame who speaks counts as one viewer even when the pose model says nobody looks; an empty frame still sells nothing. 'plata nos' and 'jakaton' are how Scribe heard Platanus and hackathon.",
+  "catalog": "chile",
+  "kpis": false,
+  "steps": [
+    {
+      "scene": {
+        "people": 1,
+        "looking": 1,
+        "uncertain": true
+      },
+      "expect": {
+        "no_bid": [
+          "Monster Energy"
+        ]
+      },
+      "note": "the browser sensor: one person, safety uncertain"
+    },
+    {
+      "speech": [
+        "hackathon"
+      ],
+      "speech_text": "esto es plata nos",
+      "expect": {
+        "brands": [
+          "Monster Energy"
+        ],
+        "copy_contains": "¿No duermes? 6x Monster por $1.990"
+      },
+      "note": "Scribe's 'plata nos' for Platanus, with an uncertain minor reading"
+    },
+    {
+      "scene": {
+        "people": 1,
+        "looking": 0
+      },
+      "expect": {
+        "brands": [
+          "Monster Energy"
+        ]
+      },
+      "note": "the speaker turns to the mic: still the promo while the request is fresh"
+    }
+  ]
+}

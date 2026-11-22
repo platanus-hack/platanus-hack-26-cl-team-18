@@ -96,7 +96,6 @@ def test_alto_en_products_are_never_shown_to_a_group_with_a_child() -> None:
         "score",
         "red-bull",
         "monster",
-        "monster-energy",
         "guinness-0-0",
         "lays",
         "marco-polo",

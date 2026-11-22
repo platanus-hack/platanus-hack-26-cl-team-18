@@ -299,6 +299,28 @@
     "helado"
    ],
    "rejected": []
+  },
+  {
+   "text": "esto es plata nos",
+   "wanted": [
+    "hackathon"
+   ],
+   "rejected": [],
+   "why": "how the recognizer split 'Platanus' without a hint"
+  },
+  {
+   "text": "la jakaton",
+   "wanted": [
+    "hackathon"
+   ],
+   "rejected": [],
+   "why": "a recognizer slip"
+  },
+  {
+   "text": "no tengo plata",
+   "wanted": [],
+   "rejected": [],
+   "why": "'plata' (money) alone is not Platanus"
   }
  ]
 }

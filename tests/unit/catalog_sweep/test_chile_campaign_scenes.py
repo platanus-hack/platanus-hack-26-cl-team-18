@@ -328,13 +328,15 @@ def test_the_hackathon_promo_is_reached_by_speech_or_its_marker_never_by_a_lapto
     assert [other.slug for other in CHILE.brands if segment in other.segments] == [promo.slug]
 
 
-def test_the_hackathon_promo_airs_the_six_pack_photo_and_its_own_loop() -> None:
+def test_the_hackathon_promo_airs_its_zero_sugar_can_and_its_own_loop() -> None:
     found = media_for(load_campaign_media(), (("monster-energy", "energy_pack"),))
     assert found is not None
-    assert found[1].photo_urls[0].endswith("/cl-monster-sixpack.webp")
+    assert found[1].photo_urls[0].endswith("/cl-monster-ultra.webp")  # "CERO AZÚCAR"
     assert (ROOT / "var" / "media" / "loops" / "monster-energy.mp4").is_file()
     offer = next(b for b in CHILE.baskets if b.slugs == frozenset({"monster-energy"}))
-    assert offer.tiers == ((1, "6x Monster", " six pack", 1990),)
+    assert offer.tiers == ((1, "6x Monster Ultra", " Ultra six pack", 1990),)
+    # Zero sugar, no "ALTO EN" seal: an uncertain minor reading never blocks the moment.
+    assert not BRANDS["monster-energy"].age_restricted
 
 
 def test_spoken_intents_mean_what_the_screen_answers() -> None:

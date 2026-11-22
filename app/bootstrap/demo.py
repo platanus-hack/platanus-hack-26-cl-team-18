@@ -766,14 +766,21 @@ def register_demo(
                     )
                 )
             classification = classifier.classify(snapshot, at=received.received_at)
+            heard_at = UtcTimestamp.create(received.received_at)
+            # Someone in frame who just asked for a product is watching, even when the
+            # pose model does not count them as looking (turned to the mic or a laptop):
+            # they count as one viewer. An empty frame still sells nothing, and billing
+            # still charges only measured looking time (delivery.attention).
+            looking = (
+                1
+                if snapshot.looking == 0 and snapshot.people > 0 and speech.active(heard_at).topics
+                else snapshot.looking
+            )
             segments = group_default.apply(
                 segments=merge_speech(
-                    classification.segments,
-                    speech,
-                    at=UtcTimestamp.create(received.received_at),
-                    looking=snapshot.looking,
+                    classification.segments, speech, at=heard_at, looking=looking
                 ),
-                looking=snapshot.looking,
+                looking=looking,
             )
             minor_likely = classification.minor_likely
             held = classification.held_products
@@ -782,7 +789,9 @@ def register_demo(
             # Only while someone looks: with nobody looking the window drains 3 → 0, and
             # re-auctioning on each step would re-arm the walk-away grace forever.
             party_now = (
-                addressed_party(looking_samples, now=measured_at.value) if snapshot.looking else 0
+                addressed_party(looking_samples, now=measured_at.value)
+                if snapshot.looking
+                else looking  # the speaker alone, or nobody
             )
             moment = AudienceMomentSnapshot.create(
                 screen_id=screen_id,
@@ -791,13 +800,13 @@ def register_demo(
                 received_at=UtcTimestamp.create(received.received_at),
                 moment_changed_at=UtcTimestamp.create(max(clock.now_utc(), received.received_at)),
                 people=snapshot.people,
-                looking=snapshot.looking,
+                looking=looking,
                 segments=segments,
                 minor_likely=minor_likely,
                 held_products=held,
             )
             if (
-                snapshot.looking >= group_default.min_looking
+                looking >= group_default.min_looking
                 and segments
                 and not any(segment.segment_id == coffee for segment in segments)
             ):
@@ -810,12 +819,12 @@ def register_demo(
                     # must never prevent it from taking an unsafe creative down.
                     has_bid = True
                 segments = group_default.apply(
-                    segments=segments, looking=snapshot.looking, has_eligible_bid=has_bid
+                    segments=segments, looking=looking, has_eligible_bid=has_bid
                 )
                 moment = replace(moment, segments=segments)
             if current_moment is not None and (
                 snapshot.people,
-                snapshot.looking,
+                looking,
                 segments,
                 minor_likely,
                 held,

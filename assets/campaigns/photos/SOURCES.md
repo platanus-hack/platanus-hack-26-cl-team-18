@@ -37,6 +37,8 @@ with the brand's own packaging, never edited or redrawn (CLAUDE.md invariant 4).
 | `cl-dulces.webp` | [HardCandy.jpg](https://commons.wikimedia.org/wiki/File:HardCandy.jpg) | Adam Zivner | CC BY-SA 3.0 | cropped to 16:9 |
 | `cl-monster-mega.webp` | [Monster Energy Mega can.jpg](https://commons.wikimedia.org/wiki/File:Monster_Energy_Mega_can.jpg) | DYVER | CC BY-SA 4.0 | pack shot: whole, on its own blurred photo |
 | `cl-monster-lineup.webp` | [Monster Energy drinks 04.jpg](https://commons.wikimedia.org/wiki/File:Monster_Energy_drinks_04.jpg) | Oto Zapletal | CC BY-SA 4.0 | cropped to 16:9 |
+| `cl-monster-ultra.webp` | [Monster Energy Ultra Strawberry Dreams.jpg](https://commons.wikimedia.org/wiki/File:Monster_Energy_Ultra_Strawberry_Dreams.jpg) | AhmedMX in | CC0 | pack shot: whole, on its own blurred photo |
+| `cl-monster-ultra-blanca.webp` | [Monster Energy Zero Ultra (China Version) 330ml 20260628130320.jpg](https://commons.wikimedia.org/wiki/File:Monster_Energy_Zero_Ultra_(China_Version)_330ml_20260628130320.jpg) | TurnOnTheNight | CC0 | pack shot: whole, on its own blurred photo |
 | `cl-monster-sixpack.webp` | [Monster Energy drinks 11.jpg](https://commons.wikimedia.org/wiki/File:Monster_Energy_drinks_11.jpg) | Oto Zapletal | CC BY-SA 4.0 | pack shot: whole, on its own blurred photo, cut from the wider shot |
 | `cl-coca-cola-zero.webp` | [Coca Cola Zero 1L Sense Sucre Cara A.jpg](https://commons.wikimedia.org/wiki/File:Coca_Cola_Zero_1L_Sense_Sucre_Cara_A.jpg) | DigitalCompas | CC BY 4.0 | pack shot: whole, on its own blurred photo |
 | `cl-pepsi-max.webp` | [Pepsi Max can.jpg](https://commons.wikimedia.org/wiki/File:Pepsi_Max_can.jpg) | Ramolito | Public domain | pack shot: whole, on its own blurred photo |

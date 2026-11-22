@@ -421,21 +421,23 @@ BRANDS: tuple[DemoBrand, ...] = (
         product="beer_zero",
     ),
     # The demo's own moment (Platanus Hack): say "hackathon" or "Platanus" and Monster's
-    # six-pack promo takes the screen. Its own aisle (energy_pack) and one audience no
+    # six-pack promo takes the screen. It is Monster Ultra, zero sugar: with no "ALTO EN"
+    # seal it is not age-restricted, so an uncertain minor reading (the browser sensor's
+    # usual state with a cropped body) never blocks the demo's own moment. Its own aisle (energy_pack) and one audience no
     # camera label reaches, programming, so laptops on the demo table never trigger it:
     # only speech, or the promo's printed marker as demo insurance.
     DemoBrand(
         slug="monster-energy",
         name="Monster Energy",
         category="energy_pack",
-        age_restricted=True,  # sugared energy drink: "ALTO EN AZÚCARES"
+        age_restricted=False,  # Monster Ultra, zero sugar: no "ALTO EN" seal (see above)
         segments=(PROGRAMMING,),
         # Saying it must always win the screen: above any basket the camera can build
         # (the hero Score + Juan Valdez peaks at ~17.5 with the night boost). Exact match
         # on an audience only speech or its marker reach, so it never outbids elsewhere.
         rate_clp_per_as="25",
         color="#000000",
-        stock_copy="Monster Energy · Six pack 473 ml para la noche de código.",
+        stock_copy="Monster Energy · Six pack Ultra Zero Azúcar para la noche de código.",
         voice=("directo", "nocturno"),
         broad_match=False,  # exact match only: the promo never leaks into other moments
         product="energy_drink",
@@ -839,7 +841,7 @@ BASKETS: tuple[DemoBasket, ...] = (
     DemoBasket(
         slugs=frozenset({"monster-energy"}),
         names="Monster Energy",
-        tiers=((1, "6x Monster", " six pack", 1990),),
+        tiers=((1, "6x Monster Ultra", " Ultra six pack", 1990),),
     ),
     DemoBasket(
         slugs=frozenset({"starbucks"}),

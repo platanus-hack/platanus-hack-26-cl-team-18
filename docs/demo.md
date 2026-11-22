@@ -176,11 +176,18 @@ cansado" Score, "tengo hambre" Pronto (`tests/unit/api/test_chile_speech.py`). T
 meanings ("está helado afuera", "mis papás", "qué dulce eres") sell nothing, and beer is
 heard but answered with Guinness 0.0 (Ley 21.363), never to a group with a child.
 
-**The hackathon moment:** say "hackathon", "hackatón" or "Platanus" (Scribe often
-writes it "plátanos"; both count) in speech mode and Monster's six-pack promo takes the
-screen: "¿No duermes? 6x Monster por $1.990." It bids only the Programming audience
-(IAB 702), which no camera label reaches, so the laptops on the demo table never trigger
-it. Demo insurance: hold the Monster Energy marker (id 27) on the sheet.
+**The hackathon moment:** say "hackathon", "hackatón" or "Platanus" in speech mode and
+Monster's six-pack promo takes the screen: "¿No duermes? 6x Monster por $1.990". It is
+Monster Ultra (zero sugar, no "ALTO EN" seal), so it is not age-restricted: the browser
+sensor's usual "minor uncertain" reading (a cropped body at a desk) never blocks it,
+while the sugared energy drinks stay blocked near a possible child. It bids only the
+Programming audience (IAB 702), which no camera label reaches, so the laptops on the demo
+table never trigger it. The recognizer is told "platanus", "chela", "completo" and
+"cortado" first (they were cut from its 50-term prompt), and the matcher also reads its
+usual slips ("plátanos", "plata nos", "jakaton"). A person in frame who says it counts as
+one viewer even if the pose model says nobody looks; an empty frame sells nothing.
+Demo insurance: hold the Monster Energy marker (id 27). Evals:
+`14_hackathon_moment`, `15_platanus_moment`, `16_hackathon_hard_cases`.
 
 **Wow moments from the team's references** (Dominó, Starbucks, Vital, Guinness 0.0):
 
