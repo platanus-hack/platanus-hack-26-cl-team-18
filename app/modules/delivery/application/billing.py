@@ -117,13 +117,54 @@ class DeliveryDesk:
         self._unwritten: set[str] = set()
         # Per creative, the end of the last billed window: a play second bills once.
         self._billed_until: dict[str, datetime] = {}
+        # Per creative, the server instant it left the screen: no later second bills.
+        self._off_air: dict[str, datetime] = {}
         self.attention = AttentionLog()
 
     def aired(self, play: PlayRecord) -> None:
         with self._lock:
+            self._end_plays(play.screen_id, play.aired_at)
             self._plays[play.creative_id] = play
             while len(self._plays) > MAX_PLAYS_REMEMBERED:
-                self._plays.pop(next(iter(self._plays)))
+                evicted = self._plays.pop(next(iter(self._plays)))
+                self._off_air.pop(evicted.creative_id, None)
+
+    def off_air(self, screen_id: str, *, at: datetime) -> None:
+        """Whatever paid play was on `screen_id` left it at `at` (another creative aired).
+
+        The player reports a window only when a play ends, from its own clock: a late
+        or clock-ahead report must not bill seconds the next creative was on air.
+        """
+        with self._lock:
+            self._end_plays(screen_id, at)
+
+    def _release_unbillable(self, screen_id: str, creative_id: str) -> None:
+        """A report that bills nothing for a play already off air still ends its hold.
+
+        Otherwise the worst-case hold outlives the play and shrinks the brand's
+        budget until some later reservation happens to sweep it.
+        """
+        play = self._plays.get(creative_id)
+        if (
+            self._budgets is None
+            or play is None
+            or play.screen_id != screen_id
+            or creative_id not in self._off_air
+        ):
+            return
+        # Settling with $0 drops the hold and books nothing (no ledger row).
+        self._budgets.charge_many(
+            creative_id,
+            {
+                slot.campaign_id: Money.zero(currency=slot.price_per_as.currency)
+                for slot in play.slots
+            },
+        )
+
+    def _end_plays(self, screen_id: str, at: datetime) -> None:
+        for creative_id, play in self._plays.items():
+            if play.screen_id == screen_id and creative_id not in self._off_air:
+                self._off_air[creative_id] = max(at, play.aired_at)
 
     def record_playback(
         self,
@@ -137,7 +178,10 @@ class DeliveryDesk:
     ) -> Receipt | None:
         """Bill one finished play window. None for an unpaid creative (house ad) or unknown."""
         if ended_at < started_at or ended_at - started_at > MAX_PLAY:
-            return None  # not a plausible window: bill nothing rather than guess
+            # Not a plausible window: bill nothing rather than guess.
+            with self._lock:
+                self._release_unbillable(screen_id, creative_id)
+            return None
         key = f"{screen_id}:{creative_id}:{seq}"
         fingerprint = hashlib.sha256(
             f"{started_at.isoformat()}|{ended_at.isoformat()}".encode()
@@ -158,9 +202,13 @@ class DeliveryDesk:
             if play is None or play.screen_id != screen_id:
                 return None
             # Bill only time this creative was on air and not already billed: a window
-            # from before it aired, or re-sent under a new seq, never bills twice.
+            # from before it aired, after it was replaced, or re-sent under a new seq,
+            # never bills twice.
+            if (left_at := self._off_air.get(creative_id)) is not None:
+                ended_at = min(ended_at, left_at)
             start = max(started_at, play.aired_at, self._billed_until.get(creative_id, started_at))
             if start >= ended_at:
+                self._release_unbillable(screen_id, creative_id)
                 return None
             # Invalid-attention filtering runs before any money is computed.
             attention = validate_attention(

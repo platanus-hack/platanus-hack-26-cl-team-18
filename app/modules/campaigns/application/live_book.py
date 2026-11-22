@@ -198,6 +198,11 @@ class LiveCampaignBook:
             for campaign_id in list(self._entries):
                 self._update(campaign_id, lambda account: account.release(key))
 
+    def expire(self, *, at: datetime) -> None:
+        """Free the holds of plays that never reported (player closed, report lost)."""
+        with self._lock:
+            self._expire(at)
+
     def _expire(self, now: datetime) -> None:
         for campaign_id in list(self._entries):
             self._update(campaign_id, lambda account: account.expire(before=now - RESERVATION_TTL))

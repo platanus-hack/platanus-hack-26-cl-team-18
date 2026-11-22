@@ -300,3 +300,77 @@ def test_a_brand_never_pays_past_its_budget() -> None:
     assert (first.amount.amount, first.reason) == (27, ChargeReason.BUDGET_CAP)  # 300 − 273
     spent = {b.campaign_id: b.budget_remaining for b in book.snapshot()}
     assert spent[SLOTS[0].campaign_id] == Money.create(currency="CLP", amount=0)
+
+
+def test_a_replaced_creative_never_bills_time_after_it_left_the_screen() -> None:
+    # Money audit: the player's clock ran ahead (or its report was late), so the
+    # window of a creative replaced at T+5 ended at T+60. Those 55 s belong to the
+    # next creative's attention: billing them here charged the same seconds twice.
+    billing, ledger = desk()
+    billing.attention.record("demo-01", at(-1), ["a"])
+    billing.attention.record("demo-01", at(4), ["a"])
+    billing.attention.record("demo-01", at(9), ["a"])
+    billing.off_air("demo-01", at=at(5))
+    receipt = billing.record_playback(
+        screen_id="demo-01",
+        creative_id="c1",
+        seq=1,
+        started_at=at(0),
+        ended_at=at(60),
+        recorded_at=at(60),
+    )
+    assert receipt is not None and receipt.attention.attention_seconds == 5
+    assert {c.played_to for c in ledger.charges()} == {at(5)}
+
+
+def test_a_report_for_a_creative_replaced_before_it_aired_bills_nothing() -> None:
+    billing, ledger = desk()
+    billing.off_air("demo-01", at=at(0))
+    billing.attention.record("demo-01", at(0), ["a"])
+    assert report(billing, end=8) is None
+    assert ledger.charges() == ()
+
+
+def test_a_report_that_bills_nothing_for_a_play_off_air_still_frees_its_hold() -> None:
+    # Money audit: a play replaced the instant it aired (or a report clamped to an
+    # empty window) returned None before settling, so its worst-case hold kept
+    # shrinking the brand's budget until some unrelated reservation swept it.
+    from app.modules.audience.domain.value_objects.segment import SegmentId
+    from app.modules.campaigns.application.live_book import LiveCampaignBook
+    from app.modules.campaigns.domain.book import Bidder, SegmentBid
+
+    book = LiveCampaignBook(
+        [
+            Bidder(
+                campaign_id=slot.campaign_id,
+                brand_id=slot.brand_id,
+                category=f"c{index}",
+                age_restricted=False,
+                segment_bids=(
+                    SegmentBid(segment_id=SegmentId.create("S"), rate=slot.price_per_as),
+                ),
+                budget_remaining=Money.create(currency="CLP", amount=300),
+            )
+            for index, slot in enumerate(SLOTS)
+        ]
+    )
+    billing = DeliveryDesk(ledger=InMemoryChargeLedger(), ids=IdGenerator(), budgets=book)
+    billing.aired(
+        PlayRecord(
+            creative_id="c1",
+            auction_id="a",
+            screen_id="demo-01",
+            people=1,
+            looking=1,
+            slots=SLOTS,
+            aired_at=at(0),
+        )
+    )
+    hold = Money.create(currency="CLP", amount=50)
+    book.reserve("c1", {slot.campaign_id: hold for slot in SLOTS}, at=at(0))
+    billing.off_air("demo-01", at=at(0))  # replaced in the same instant
+    assert report(billing, end=0) is None
+    for entry in book.entries():
+        assert entry.account is not None
+        assert entry.account.reserved.amount == 0
+        assert entry.account.spent.amount == 0

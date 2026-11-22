@@ -88,6 +88,7 @@ from app.modules.audience.domain.value_objects.segment import SegmentId, Segment
 from app.modules.audience.infrastructure.catalog.loader import load_catalog
 from app.modules.campaigns.application.autobidder import AutoBidder
 from app.modules.campaigns.application.live_book import (
+    RESERVATION_TTL,
     LiveCampaignBook,
     MultiplierOutcome,
     UnknownCampaign,
@@ -943,6 +944,8 @@ def register_demo(
         )
         # The player shows it after preload; ready_at is our best server-side stand-in.
         desk.aired(result, displayed_at=ready_at)
+        # The play it replaces stops billing here, whatever its report later claims.
+        delivery.off_air(wire_screen_id, at=ready_at)
         if paid:
             # Bill what this creative's own auction cleared, and hold its worst case.
             delivery.aired(
@@ -1045,10 +1048,16 @@ def register_demo(
         down at once (budget is an on-air-unsafe reason), and its charge is capped.
         """
 
+        def expire_later() -> None:
+            # The play's report settles its hold; if that report never comes (player
+            # closed, lost), the hold expires after the TTL instead of leaking.
+            scheduler(RESERVATION_TTL.total_seconds() + 1, lambda: book.expire(at=clock.now_utc()))
+
         def renew() -> None:
             with lock:
                 if current_creative.creative_id != creative_id:
-                    return  # replaced: its charge settles the hold
+                    expire_later()  # replaced
+                    return
                 short = book.extend_hold(
                     creative_id, lease_holds(result, looking, lease + 1), at=clock.now_utc()
                 )
@@ -1056,6 +1065,7 @@ def register_demo(
                     set_lease(creative_id, result, looking, lease + 1)
                     schedule_lease(creative_id, result, looking, lease + 1)
             if short:
+                expire_later()  # its last lease: the play comes down now
                 reauction(Trigger.BUDGET_CHANGED, out_of_budget=short)
 
         scheduler(float(MAX_PLAY_SECONDS), renew)
