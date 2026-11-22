@@ -361,3 +361,16 @@ def test_busy_gpu_rejects_other_clients_without_queuing_frames() -> None:
         assert json.loads(first.receive_text())["seq"] == 1
         second.send_bytes(frame(3))
         assert "error" not in json.loads(second.receive_text())
+
+
+def test_a_short_token_on_a_reachable_bind_warns_but_still_starts(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(logging.WARNING, logger="gpu.service"):
+        check_exposure("0.0.0.0", "short")
+    assert "GPU_TOKEN has 5 chars" in caplog.text
+    caplog.clear()
+    with caplog.at_level(logging.WARNING, logger="gpu.service"):
+        check_exposure("0.0.0.0", "0123456789abcdef0123456789abcdef")
+        check_exposure("127.0.0.1", "short")  # loopback: nobody else reaches it
+    assert "GPU_TOKEN" not in caplog.text

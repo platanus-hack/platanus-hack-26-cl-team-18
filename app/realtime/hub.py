@@ -62,6 +62,16 @@ SEND_TIMEOUT_S = 1.0
 MAX_PENDING_BATCHES = 32
 
 
+def _without_redemption(
+    message: CreativeReady | CreativeUpgraded,
+) -> CreativeReady | CreativeUpgraded:
+    """The creative a view-only player gets: everything but the code a phone redeems."""
+    spec = message.spec.model_copy(
+        update={"redemption_code": None, "redeem_url": None, "qr_url": None}
+    )
+    return message.model_copy(update={"spec": spec})
+
+
 class Sink(Protocol):
     async def send_text(self, data: str) -> None: ...
 
@@ -102,16 +112,31 @@ class ConnectionHub:
         self.stats = HubStats()
         # Worker threads ask "is anyone watching?" while the event loop mutates the sets
         # above; they read these counts (kept under a lock) instead of the live sets.
+        # Players without the screen token while SCREEN_TOKEN is set: they watch, but
+        # never get a basket's redemption code (only the billing screen shows the QR).
+        self._redacted: set[Sink] = set()
         self._counts_lock = threading.Lock()
         self._station_count = 0
         self._dev_count = 0
+        self._station_sinks: frozenset[Sink] = frozenset()
+        self._screens_snapshot: tuple[str, ...] = ()
+        self._agent_roles_snapshot: dict[str, tuple[AgentRole, ...]] = {}
 
     def _recount(self) -> None:
-        """Call after any change to consoles, devs or live (event loop thread)."""
-        station = len(self._consoles & self._live)
+        """Call after any change to consoles, devs, live, players or agents (event loop
+        thread). Worker threads read these snapshots, never the live sets."""
+        station = frozenset(self._consoles & self._live)
         devs = len(self._devs)
+        screens = tuple(sorted(self._players))
+        roles = {
+            screen_id: tuple(sorted(set(sinks.values())))
+            for screen_id, sinks in self._agents.items()
+        }
         with self._counts_lock:
-            self._station_count, self._dev_count = station, devs
+            self._station_count, self._dev_count = len(station), devs
+            self._station_sinks = station
+            self._screens_snapshot = screens
+            self._agent_roles_snapshot = roles
 
     def bind_loop(self, loop: asyncio.AbstractEventLoop) -> None:
         self._loop = loop
@@ -119,7 +144,13 @@ class ConnectionHub:
     # ----------------------------------------------------------- registration
 
     def add_player(
-        self, screen_id: str, sink: Sink, *, attention: bool = False, live: bool = False
+        self,
+        screen_id: str,
+        sink: Sink,
+        *,
+        attention: bool = False,
+        live: bool = False,
+        redact_redemption: bool = False,
     ) -> None:
         self._send_states.setdefault(sink, _SendState())
         self._players[screen_id].add(sink)
@@ -127,17 +158,20 @@ class ConnectionHub:
             self._attention.add(sink)
         if live:
             self._live.add(sink)
-            self._recount()
+        if redact_redemption:
+            self._redacted.add(sink)
+        self._recount()
 
     def remove_player(self, screen_id: str, sink: Sink) -> None:
         self._attention.discard(sink)
         self._live.discard(sink)
-        self._recount()
+        self._redacted.discard(sink)
         sinks = self._players.get(screen_id)
         if sinks is not None:
             sinks.discard(sink)
             if not sinks:
                 del self._players[screen_id]
+        self._recount()
         self._retire_if_unused(sink)
 
     def add_console(self, sink: Sink, *, live: bool = False) -> None:
@@ -172,6 +206,7 @@ class ConnectionHub:
     def add_agent(self, screen_id: str, role: AgentRole, sink: Sink) -> None:
         self._send_states.setdefault(sink, _SendState())
         self._agents[screen_id][sink] = role
+        self._recount()
 
     def remove_agent(self, sink: Sink) -> list[str]:
         """Forget `sink` on every screen; returns the screens it served."""
@@ -180,14 +215,19 @@ class ConnectionHub:
             del self._agents[screen][sink]
             if not self._agents[screen]:
                 del self._agents[screen]
+        self._recount()
         self._retire_if_unused(sink)
         return served
 
     def agent_roles(self, screen_id: str) -> list[AgentRole]:
-        return sorted(set(self._agents.get(screen_id, {}).values()))
+        """Safe from worker threads (a snapshot, not the loop-owned dict)."""
+        with self._counts_lock:
+            return list(self._agent_roles_snapshot.get(screen_id, ()))
 
     def connected_screens(self) -> list[str]:
-        return sorted(self._players)
+        """Safe from worker threads (a snapshot, not the loop-owned dict)."""
+        with self._counts_lock:
+            return list(self._screens_snapshot)
 
     def console_count(self) -> int:
         return len(self._consoles)
@@ -210,6 +250,15 @@ class ConnectionHub:
         elif isinstance(message, LiveStatus):
             subscribers = {s for s in subscribers if s in self._live}
         recipients = subscribers if sink is None else (sink,) if sink in subscribers else ()
+        if isinstance(message, CreativeReady | CreativeUpgraded) and self._redacted:
+            viewers = [s for s in recipients if s in self._redacted]
+            if viewers:
+                billing = [s for s in recipients if s not in self._redacted]
+                await asyncio.gather(
+                    self._fan_out(billing, (message.model_dump_json(),)),
+                    self._fan_out(viewers, (_without_redemption(message).model_dump_json(),)),
+                )
+                return
         await self._fan_out(recipients, (message.model_dump_json(),))
 
     async def broadcast_console(self, *messages: ConsoleMessage, sink: Sink | None = None) -> None:
@@ -239,8 +288,10 @@ class ConnectionHub:
             return bool(self._station_count or self._dev_count)
 
     def is_station_console(self, sink: Sink) -> bool:
-        """A console that subscribed with ?live=1 (the station page), not a raw reader."""
-        return sink in self._consoles and sink in self._live
+        """A console that subscribed with ?live=1 (the station page), not a raw reader.
+        Safe from worker threads (a snapshot, not the loop-owned sets)."""
+        with self._counts_lock:
+            return sink in self._station_sinks
 
     async def broadcast_station(
         self, *messages: ConsoleMessage | LiveStatus | ConsoleNext, sink: Sink | None = None
@@ -288,7 +339,7 @@ class ConnectionHub:
         self._schedule(self.broadcast_console(*messages, sink=sink))
 
     def broadcast_dev_threadsafe(self, *messages: DevMessage, sink: Sink | None = None) -> None:
-        if not self._devs:
+        if not self.dev_count():
             return
         self._schedule(self.broadcast_dev(*messages, sink=sink))
 
@@ -325,9 +376,12 @@ class ConnectionHub:
         self._devs.discard(sink)
         for screen_id in list(self._players):
             self.remove_player(screen_id, sink)
-        for group in self._agents.values():
-            group.pop(sink, None)
+        for screen_id in list(self._agents):
+            self._agents[screen_id].pop(sink, None)
+            if not self._agents[screen_id]:
+                del self._agents[screen_id]
         self._live.discard(sink)
+        self._redacted.discard(sink)
         self._recount()
         self._retire_if_unused(sink)
 

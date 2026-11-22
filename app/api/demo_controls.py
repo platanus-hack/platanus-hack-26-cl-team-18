@@ -125,6 +125,8 @@ async def advertiser_budget(
 @router.get("/hooks")
 async def hooks(request: Request) -> list[dict[str, object]]:
     """Hook testing: each approved hook option with its plays, attention and scans."""
+    # Each runtime's hook lab takes its own lock: read it off the event loop.
+    results = await anyio.to_thread.run_sync(_controls(request).hook_results)
     return [
         {
             "brief": result.key,
@@ -135,5 +137,5 @@ async def hooks(request: Request) -> list[dict[str, object]]:
             "scans": result.stats.scans,
             "reward_per_play": format(result.stats.mean_reward().quantize(Decimal("0.01")), "f"),
         }
-        for result in _controls(request).hook_results()
+        for result in results
     ]

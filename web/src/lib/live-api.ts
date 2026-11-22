@@ -1,6 +1,7 @@
 import { LiveStatusSchema, type LiveSet, type LiveStatus } from "@/contract";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { backendHttpUrl } from "./config";
+import { demoHeaders } from "./demo";
 
 /**
  * The console's "En vivo" switch (app/realtime/live_switch.py) over plain HTTP,
@@ -19,7 +20,11 @@ export async function fetchLive(screenId: string, signal?: AbortSignal): Promise
 
 export type LiveChange = Partial<Pick<LiveSet, "live" | "mic">>;
 
-/** Absolute values: a retried or double-clicked request is harmless (the last click wins). */
+/**
+ * Absolute values: a retried or double-clicked request is harmless (the last click wins).
+ * Carries the demo key this browser remembered (if any): with DEMO_KEY set the backend
+ * accepts the switch from the station itself, or with the key through the tunnel.
+ */
 export async function setLive(screenId: string, change: LiveChange): Promise<LiveStatus> {
     // null keeps that axis as it is: the master switch and the mic are independent.
     const message: LiveSet = {
@@ -31,7 +36,7 @@ export async function setLive(screenId: string, change: LiveChange): Promise<Liv
     };
     const response = await fetch(`${backendHttpUrl}/api/live`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...demoHeaders() },
         body: JSON.stringify(message),
     });
     if (!response.ok) throw new Error(`live: HTTP ${response.status}`);

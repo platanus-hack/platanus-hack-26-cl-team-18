@@ -6,7 +6,9 @@
 repo_url = "https://github.com/platanus-hack/platanus-hack-26-cl-team-18"
 
 # app/main.py (FastAPI). Must bind $PORT.
-start_command = "uv run --frozen uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+# --ws-max-size: uvicorn buffers a whole frame before the app sees it; 4 MiB covers
+# the largest keyframe (ws_max_frame_bytes, 2 MB) instead of the 16 MiB default.
+start_command = "uv run --frozen uvicorn app.main:app --host 0.0.0.0 --port $PORT --ws-max-size 4194304"
 
 health_check_path = "/health"
 
@@ -25,7 +27,8 @@ secret_names = [
   "FAL_KEY", # fal media generation (ImageGenerator / VideoGenerator); unset = no hosted media
   # Device tokens (app/api/device_auth.py), 24+ chars each (openssl rand -hex 16).
   # Unset in prod means closed: no agent connects, no player bills.
-  "AGENT_TOKEN",  # the edge agent's bearer token on /ws/agent
-  "SCREEN_TOKEN", # the kiosk player: open /screen?token=... once; without it, view-only
-  "DEMO_KEY",     # 24+ chars (openssl rand -hex 16): bids, stock and campaigns in prod
+  "AGENT_TOKEN",   # the edge agent's bearer token on /ws/agent
+  "SCREEN_TOKEN",  # the kiosk player: open /screen?token=... once; without it, view-only
+  "DEMO_KEY",      # 24+ chars (openssl rand -hex 16): bids, stock and campaigns in prod
+  "CONSOLE_TOKEN", # /ws/console (every bid, charge, budget); unset = open, so set it
 ]

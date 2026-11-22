@@ -8,6 +8,7 @@ from datetime import timedelta
 
 import pytest
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from app.bootstrap.container import Container, build_container
 from app.config.settings import AppSettings
@@ -121,11 +122,32 @@ def test_a_hostile_player_frame_is_answered_and_the_next_report_still_routes(
     with client.websocket_connect("/ws/screen/mall-01") as ws:
         ws.send_text(frame)
         assert ws.receive_json()["type"] == "system.error"
-        ws.send_bytes(b"\x00\x01")
-        assert ws.receive_json()["code"] == "frame.binary_unsupported"
         ws.send_text(report_json(2))
         ((msg, _),) = rec.wait_for(1)
     assert isinstance(msg, PlaybackReport) and msg.seq == 2
+
+
+def test_a_binary_player_frame_closes_the_socket(client: TestClient) -> None:
+    # Players send JSON text only; a binary frame is not a player, so nothing buffers more.
+    with client.websocket_connect("/ws/screen/mall-01") as ws:
+        ws.send_bytes(b"\x00\x01")
+        assert ws.receive_json()["code"] == "frame.binary_unsupported"
+        with pytest.raises(WebSocketDisconnect) as closed:
+            ws.receive_json()
+    assert closed.value.code == 1003
+
+
+@pytest.mark.parametrize("path", ["/ws/console"])
+def test_a_binary_frame_closes_a_push_only_socket(client: TestClient, path: str) -> None:
+    with client.websocket_connect(path) as ws:
+        ws.send_bytes(b"\x00\x01")
+        while (message := ws.receive_json())["type"] != "system.error":
+            pass  # catch-up messages first
+        assert message["code"] == "frame.binary_unsupported"
+        with pytest.raises(WebSocketDisconnect) as closed:
+            while True:
+                ws.receive_json()
+    assert closed.value.code == 1003
 
 
 def test_a_handler_that_raises_does_not_close_the_agent_socket(
@@ -144,3 +166,11 @@ def test_a_handler_that_raises_does_not_close_the_agent_socket(
         ws.send_text(snapshot_json(2))
         items = rec.wait_for(2)
     assert [m.seq for m, _ in items] == [1, 2]  # type: ignore[attr-defined]
+
+
+def test_the_frame_cap_counts_utf8_bytes_not_characters(client: TestClient) -> None:
+    frame = json.dumps({"type": "playback.report", "pad": "é" * 2_100}, ensure_ascii=False)
+    assert len(frame) < 4096 < len(frame.encode())
+    with client.websocket_connect("/ws/screen/mall-01") as ws:
+        ws.send_text(frame)
+        assert ws.receive_json()["code"] == "frame.too_large"

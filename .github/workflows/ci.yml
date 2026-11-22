@@ -135,4 +135,4 @@ jobs:
           enable-cache: true
       - run: uv sync --extra dev --locked --python 3.14
       - run: cd edge && uv sync --extra dev --locked --python 3.12
-      - run: uv run pytest -m sandbox -o addopts="" -v tests/integration/test_sandbox_e2e.py
+      - run: uv run pytest -m sandbox -o addopts="" -p tests._hermetic_env -v tests/integration/test_sandbox_e2e.py

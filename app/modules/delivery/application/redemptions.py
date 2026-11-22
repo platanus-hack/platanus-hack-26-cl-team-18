@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from datetime import datetime
 from threading import Lock
@@ -23,6 +24,8 @@ from app.modules.delivery.domain.redemption import (
 )
 
 MAX_OFFERS_REMEMBERED = 2_000
+
+logger = logging.getLogger(__name__)
 
 
 class RedemptionLedger(Protocol):
@@ -80,9 +83,25 @@ class RedemptionDesk:
         )
         with self._lock:
             self._offers[offer.code] = offer
-            while len(self._offers) > MAX_OFFERS_REMEMBERED:
-                self._forget(next(iter(self._offers)))
+            if len(self._offers) > MAX_OFFERS_REMEMBERED:
+                self._evict(at)
         return offer
+
+    def _evict(self, at: datetime) -> None:
+        """Over the cap: forget expired offers first, so a QR still on a phone keeps
+        working; only if every remembered offer is still open, forget the oldest."""
+        for code in [code for code, offer in self._offers.items() if at >= offer.expires_at]:
+            self._forget(code)
+        evicted = 0
+        while len(self._offers) > MAX_OFFERS_REMEMBERED:
+            self._forget(next(iter(self._offers)))
+            evicted += 1
+        if evicted:
+            logger.warning(
+                "redemption offers over the cap (%d): forgot %d still-valid code(s)",
+                MAX_OFFERS_REMEMBERED,
+                evicted,
+            )
 
     def _forget(self, code: str) -> None:
         self._offers.pop(code, None)
