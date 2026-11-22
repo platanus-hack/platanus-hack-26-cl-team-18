@@ -20,8 +20,8 @@ export interface Dot {
 export interface StationView {
     readonly state: StationState;
     readonly headline: string;
+    /** The start button's label; live has no stop button (a round ends when people leave). */
     readonly toggleLabel: string;
-    readonly toggleTo: boolean;
     /** Only while live on a speech-opted-in screen: the mic does nothing otherwise. */
     readonly mic: { readonly label: string; readonly pressed: boolean } | null;
     readonly dots: readonly Dot[];
@@ -81,8 +81,7 @@ export function stationView(status: LiveStatus, health: InputHealth | null): Sta
             : degraded
               ? "En vivo"
               : `En vivo desde ${since(status.changed_at)}`,
-        toggleLabel: status.live ? "Detener" : "Iniciar en vivo",
-        toggleTo: !status.live,
+        toggleLabel: "Iniciar en vivo",
         mic:
             status.live && status.speech_opt_in
                 ? {
@@ -93,4 +92,27 @@ export function stationView(status: LiveStatus, health: InputHealth | null): Sta
         dots: [camera, mic, screen, ai],
         warnings,
     };
+}
+
+/** One entry in the console's screen selector. */
+export interface StationScreen {
+    /** What the console shows ("MUT_01"). */
+    readonly label: string;
+    /** The real screen id behind it; null for a display-only screen that never goes live. */
+    readonly id: string | null;
+}
+
+/** How many screens the selector shows. */
+export const STATION_SCREEN_COUNT = 4;
+
+/**
+ * The selector's screens: MUT_01 is the one real, live-capable screen (`realId`, e.g.
+ * demo-01); MUT_02… are display-only, so the console reads as a multi-screen network
+ * while exactly one screen can ever be live.
+ */
+export function stationScreens(realId: string): readonly StationScreen[] {
+    return Array.from({ length: STATION_SCREEN_COUNT }, (_, index) => ({
+        label: `MUT_${String(index + 1).padStart(2, "0")}`,
+        id: index === 0 ? realId : null,
+    }));
 }

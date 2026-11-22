@@ -4,11 +4,11 @@ import type { ConnectionState } from "@/lib/ws/typed-socket";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import { Card } from "@/shared/ui/card";
-import { Mic, MicOff, Play, Square } from "lucide-react";
+import { Mic, MicOff, Play } from "lucide-react";
 import { useEffect, useState } from "react";
 import { InputHealthSchema, type InputHealth } from "./input-status";
 import { CONNECTION } from "./labels";
-import { stationView } from "./station";
+import { stationScreens, stationView } from "./station";
 
 /** Poll `/health` (inputs and provider keys): devices change on their own. */
 function useHealth(intervalMs = 2000): InputHealth | null {
@@ -50,11 +50,9 @@ const STATE_TONE = { standby: "neutral", live: "success", degraded: "warning" } 
  */
 export function StationBar({
     screen,
-    screens,
     connection,
 }: {
     screen: string;
-    screens: readonly string[];
     connection: ConnectionState;
 }) {
     const { status, unreachable, failed, pending, apply } = useLive(screen);
@@ -68,24 +66,7 @@ export function StationBar({
         >
             <div className="flex flex-wrap items-center justify-between gap-4">
                 <div className="flex flex-wrap items-center gap-3">
-                    <label className="flex items-center gap-2 text-compact text-muted">
-                        Estación
-                        <select
-                            className="rounded-control border border-control-edge bg-surface px-2 py-1 font-mono text-fg"
-                            value={screen}
-                            onChange={(event) => {
-                                const url = new URL(window.location.href);
-                                url.searchParams.set("screen", event.target.value);
-                                window.location.assign(url.toString());
-                            }}
-                        >
-                            {[...new Set([screen, ...screens])].map((id) => (
-                                <option key={id} value={id}>
-                                    {id}
-                                </option>
-                            ))}
-                        </select>
-                    </label>
+                    <ScreenPicker screen={screen} />
                     {status === null ? (
                         <Badge tone={unreachable ? "danger" : "neutral"} appearance="soft">
                             {unreachable ? "Sin conexión con el backend" : "Cargando…"}
@@ -164,19 +145,20 @@ function Controls({
                     {view.mic.label}
                 </Button>
             )}
-            <Button
-                size="lg"
-                variant={status.live ? "destructive" : "primary"}
-                aria-pressed={status.live}
-                disabled={unreachable}
-                loading={pending}
-                onClick={() => {
-                    apply({ live: view.toggleTo });
-                }}
-            >
-                {status.live ? <Square aria-hidden /> : <Play aria-hidden />}
-                {view.toggleLabel}
-            </Button>
+            {!status.live && (
+                <Button
+                    size="lg"
+                    variant="primary"
+                    disabled={unreachable}
+                    loading={pending}
+                    onClick={() => {
+                        apply({ live: true });
+                    }}
+                >
+                    <Play aria-hidden />
+                    {view.toggleLabel}
+                </Button>
+            )}
         </>
     );
 }
@@ -210,6 +192,42 @@ function Dots({ view }: { view: ReturnType<typeof stationView> }) {
                     )}
                 </p>
             ))}
+        </div>
+    );
+}
+
+/**
+ * The screen selector: MUT_01 is the real screen and stays selected; MUT_02… are
+ * display-only (disabled, "En espera") so only one screen can ever be live.
+ */
+function ScreenPicker({ screen }: { screen: string }) {
+    return (
+        <div role="group" aria-label="Pantallas" className="flex flex-wrap items-center gap-1">
+            {stationScreens(screen).map((entry) =>
+                entry.id !== null ? (
+                    <Button
+                        key={entry.label}
+                        size="sm"
+                        variant="primary"
+                        aria-pressed
+                        title={`Pantalla ${entry.label}`}
+                    >
+                        <span className="font-mono">{entry.label}</span>
+                    </Button>
+                ) : (
+                    <Button
+                        key={entry.label}
+                        size="sm"
+                        variant="outline"
+                        aria-pressed={false}
+                        disabled
+                        title={`${entry.label} · En espera`}
+                    >
+                        <span className="font-mono">{entry.label}</span>
+                        <span className="text-metadata text-muted">En espera</span>
+                    </Button>
+                ),
+            )}
         </div>
     );
 }

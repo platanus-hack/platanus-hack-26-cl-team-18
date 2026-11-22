@@ -1,7 +1,7 @@
 import type { LiveStatus } from "@/contract";
 import { describe, expect, it } from "vitest";
 import type { InputHealth } from "./input-status";
-import { stationView } from "./station";
+import { stationScreens, stationView } from "./station";
 
 function status(overrides: Partial<LiveStatus> = {}): LiveStatus {
     const live = overrides.live ?? false;
@@ -90,5 +90,13 @@ describe("stationView", () => {
         const view = stationView(status({ live: true, speech_opt_in: false }), health());
         expect(view.mic).toBeNull();
         expect(dot(view, "mic").label).toBe("Voz no habilitada");
+    });
+});
+
+describe("stationScreens", () => {
+    it("shows MUT_01… but only MUT_01 is a real, live-capable screen", () => {
+        const screens = stationScreens("demo-01");
+        expect(screens.map((s) => s.label)).toEqual(["MUT_01", "MUT_02", "MUT_03", "MUT_04"]);
+        expect(screens.filter((s) => s.id !== null)).toEqual([{ label: "MUT_01", id: "demo-01" }]);
     });
 });

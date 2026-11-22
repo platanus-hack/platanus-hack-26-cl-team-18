@@ -62,11 +62,7 @@ export function ConsolePage() {
     return (
         <AppShell>
             <ErrorBoundary label="station">
-                <StationBar
-                    screen={screen}
-                    screens={Object.keys(screens)}
-                    connection={connection}
-                />
+                <StationBar screen={screen} connection={connection} />
             </ErrorBoundary>
             {(lastError || shownDegradation.length > 0) && (
                 <div className="flex flex-wrap gap-2">

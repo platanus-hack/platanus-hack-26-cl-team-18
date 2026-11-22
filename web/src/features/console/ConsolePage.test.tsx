@@ -169,8 +169,23 @@ it("starts in standby with one calm state and no mic button, then goes live", as
     expect(host.textContent).toContain("Cámara analizando");
     await click("Silenciar micrófono");
     expect(requests.at(-1)?.body).toMatchObject({ live: null, mic: false });
-    await click("Detener");
-    expect(host.textContent).toContain("En espera");
+    // Live has no stop button on the console: a round ends by people walking away.
+    expect(host.textContent).not.toContain("Detener");
+    expect(host.textContent).not.toContain("Iniciar en vivo");
+});
+
+it("lists MUT_01… screens, but only MUT_01 is selectable and can go live", () => {
+    const group = host.querySelector('[role="group"][aria-label="Pantallas"]');
+    const buttons = [...(group?.querySelectorAll("button") ?? [])];
+    expect(buttons.map((b) => b.textContent.slice(0, 6))).toEqual([
+        "MUT_01",
+        "MUT_02",
+        "MUT_03",
+        "MUT_04",
+    ]);
+    expect(buttons.map((b) => b.disabled)).toEqual([false, true, true, true]);
+    expect(buttons[0]?.getAttribute("aria-pressed")).toBe("true");
+    expect(buttons[1]?.textContent).toContain("En espera");
 });
 
 it("a failed click keeps the backend's truth and says so", async () => {
