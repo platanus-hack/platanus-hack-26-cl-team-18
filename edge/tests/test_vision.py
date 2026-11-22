@@ -13,6 +13,7 @@ import pytest
 
 from agent.contract import AGENT_INBOUND, AudienceKeyframe, AudienceSnapshot, DistanceBand
 from agent.vision.adapters import _objects, _persons
+from agent.vision.capture import RedactedKeyframe
 from agent.vision.detector import (
     CompositeDetector,
     DetectorUnavailable,
@@ -22,7 +23,7 @@ from agent.vision.detector import (
 from agent.vision.geometry import distance_band, head_box, is_looking
 from agent.vision.held import HELD_LABEL_PREFIX, HeldProductTracker, MarkerCatalog
 from agent.vision.minor import MinorVote
-from agent.vision.pipeline import JsonlRecorder, VisionPipeline
+from agent.vision.pipeline import JsonlRecorder, VisionPipeline, keyframe_regions
 from agent.vision.snapshot import SnapshotBuilder, SnapshotConfig
 from agent.vision.tracking import PersonTracker, TrackerConfig
 from agent.vision.types import (
@@ -699,9 +700,12 @@ def _pipeline(link: RecordingLink, **kwargs: Any) -> VisionPipeline:
     return VisionPipeline(**(defaults | kwargs))
 
 
-def test_pipeline_sends_snapshots_and_throttled_blurred_keyframes() -> None:
+def test_pipeline_sends_snapshots_and_throttled_redacted_keyframes() -> None:
     link = RecordingLink()
-    pipeline = _pipeline(link, keyframes=lambda _frame, _detections: b"\xff\xd8jpeg")
+    region = (0.1, 0.1, 0.4, 0.9)
+    pipeline = _pipeline(
+        link, keyframes=lambda _f, _d: RedactedKeyframe(b"\xff\xd8jpeg", (region,), (region,))
+    )
     for i in range(20):
         people = [person(400), person(800)][: 1 if i < 10 else 2]
         pipeline.process(object(), frame(ms(150 * i), *people))
@@ -712,13 +716,25 @@ def test_pipeline_sends_snapshots_and_throttled_blurred_keyframes() -> None:
     assert 1 <= len(keyframes) <= 3  # 2.85 s of frames, ≤ 1 keyframe per 1.5 s
     header, body = keyframes[0]
     assert body == b"\xff\xd8jpeg" and header.byte_length == len(body)
+    assert header.redaction == "allowlist"  # the backend drops a scene keyframe without it
+    assert [(b.x1, b.y1, b.x2, b.y2) for b in header.kept] == [region]
+    assert [(b.x1, b.y1, b.x2, b.y2) for b in header.heads] == [region]
     assert [k.seq for k, _ in keyframes] == list(range(len(keyframes)))
     assert pipeline.stats.frames == 20 and pipeline.stats.keyframes == len(keyframes)
 
 
+def test_keyframe_keeps_people_and_padded_objects_and_masks_every_head() -> None:
+    cup = ObjectDetection("cup", 0.9, Box(600, 300, 700, 400))
+    someone = person(400)
+    kept, heads = keyframe_regions(frame(T0, someone, objects=(cup,)))
+    assert kept[0] == someone.box
+    assert kept[1] == Box(590, 290, 710, 410)  # 10 % padding keeps the label readable
+    assert heads == [head_box(someone)]
+
+
 def test_pipeline_sends_no_keyframe_for_an_empty_scene() -> None:
     link = RecordingLink()
-    pipeline = _pipeline(link, keyframes=lambda _f, _d: b"x")
+    pipeline = _pipeline(link, keyframes=lambda _f, _d: RedactedKeyframe(b"x", (), ()))
     pipeline.process(object(), frame(T0))
     assert not any(isinstance(m, AudienceKeyframe) for m, _ in link.sent)
 
@@ -726,7 +742,7 @@ def test_pipeline_sends_no_keyframe_for_an_empty_scene() -> None:
 def test_pipeline_survives_a_failing_keyframe_encoder() -> None:
     link = RecordingLink()
 
-    def broken(_f: object, _d: FrameDetections) -> bytes:
+    def broken(_f: object, _d: FrameDetections) -> RedactedKeyframe:
         raise RuntimeError("encoder")
 
     pipeline = _pipeline(link, keyframes=broken)

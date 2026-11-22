@@ -16,8 +16,12 @@ import { holdScreenAwake } from "./wake-lock";
 
 const CROSSFADE_MS = 250; // matches --duration-crossfade
 
-/** Only `listening` matters on the glass: the ADR 0005 indicator while the mic is open. */
-const latestListening = (_listening: boolean, next: boolean) => next;
+/**
+ * What the glass discloses while it senses (docs/privacy.md G4): the camera chip
+ * while the live switch has sensing on, and the ADR 0005 mic chip while the mic is open.
+ */
+type Sensing = { camera: boolean; mic: boolean };
+const latestSensing = (_sensing: Sensing, next: Sensing) => next;
 
 const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -74,7 +78,7 @@ function ScreenPlayer() {
     );
     // Attention drives the dwell stage; it lives beside the player machine, not in it.
     const [attention] = useState(() => createStore(latestAttention, null));
-    const [listening] = useState(() => createStore(latestListening, false));
+    const [sensing] = useState(() => createStore(latestSensing, { camera: false, mic: false }));
     const [socket] = useState(
         () =>
             new TypedSocket<PlayerOutbound, PlayerInbound>({
@@ -91,7 +95,7 @@ function ScreenPlayer() {
                     }
                     if (message.screen_id !== screenId) return;
                     if (message.type === "live.status") {
-                        listening.dispatch(message.listening);
+                        sensing.dispatch({ camera: message.sensing, mic: message.listening });
                         return;
                     }
                     if (message.type === "screen.attention") {
@@ -123,7 +127,7 @@ function ScreenPlayer() {
         });
     });
     const state = useStore(store, (s) => s);
-    const micOpen = useStore(listening, (s) => s);
+    const { camera: cameraOn, mic: micOpen } = useStore(sensing, (s) => s);
 
     useEffect(() => {
         socket.start();
@@ -286,11 +290,21 @@ function ScreenPlayer() {
                     </div>
                 );
             })}
-            {micOpen && (
+            {(cameraOn || micOpen) && (
                 // Title-safe and sized to the glass (creative.css): legible on 4K, never overscanned.
-                <div className="screen-mic-indicator" role="status" data-listening="on">
-                    <span className="screen-mic-indicator-dot" aria-hidden />
-                    Micrófono activo · solo temas, nada se graba
+                <div className="screen-sensing">
+                    {cameraOn && (
+                        <div className="screen-camera-indicator" role="status" data-camera="on">
+                            <span className="screen-camera-indicator-dot" aria-hidden />
+                            Cámara activa · grupos anónimos, nada se graba
+                        </div>
+                    )}
+                    {micOpen && (
+                        <div className="screen-mic-indicator" role="status" data-listening="on">
+                            <span className="screen-mic-indicator-dot" aria-hidden />
+                            Micrófono activo · solo temas, nada se graba
+                        </div>
+                    )}
                 </div>
             )}
         </main>

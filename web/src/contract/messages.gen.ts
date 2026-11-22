@@ -107,7 +107,22 @@ export const AgentHelloSchema = z.strictObject({
 });
 export type AgentHello = z.infer<typeof AgentHelloSchema>;
 
-// Header for a face-blurred JPEG; the bytes follow as the next binary WS frame.
+// Normalized [0, 1] corners in the keyframe image.
+export const RedactionBoxSchema = z.strictObject({
+  x1: z.number().gte(0.0).lte(1.0),
+  y1: z.number().gte(0.0).lte(1.0),
+  x2: z.number().gte(0.0).lte(1.0),
+  y2: z.number().gte(0.0).lte(1.0),
+});
+export type RedactionBox = z.infer<typeof RedactionBoxSchema>;
+
+// Header for a redacted JPEG; the bytes follow as the next binary WS frame.
+// 
+// A scene keyframe (no `session_id`) is `redaction="allowlist"` (docs/privacy.md
+// G1): black everywhere except the `kept` regions (detected people and objects),
+// with every `heads` region black too. The backend checks the pixels against
+// these boxes and drops the frame on any mismatch, so a face the detector
+// missed is never sent to the VLM.
 export const AudienceKeyframeSchema = z.strictObject({
   v: z.literal(1),
   type: z.literal("audience.keyframe"),
@@ -119,6 +134,9 @@ export const AudienceKeyframeSchema = z.strictObject({
   session_id: z.string().min(1).max(64).nullable(),
   track_id: z.string().min(1).max(32).nullable(),
   video_time_s: z.number().gte(0).nullable(),
+  redaction: z.literal("allowlist").nullable(),
+  kept: z.array(RedactionBoxSchema).max(64),
+  heads: z.array(RedactionBoxSchema).max(64),
 });
 export type AudienceKeyframe = z.infer<typeof AudienceKeyframeSchema>;
 

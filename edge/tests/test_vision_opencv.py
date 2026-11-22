@@ -21,6 +21,11 @@ T0 = datetime(2026, 11, 21, 15, tzinfo=UTC)
 W, H = 1280, 720
 
 
+def _black(region: np.ndarray) -> bool:
+    """Black up to JPEG ringing at the box edges (the source pixels are 0)."""
+    return float(region.mean()) < 3 and int(region.max()) <= 40
+
+
 def _marker_frame(marker_id: int, at: tuple[int, int] = (600, 300), size: int = 120) -> np.ndarray:
     aruco = cv2.aruco
     image = aruco.generateImageMarker(
@@ -53,25 +58,48 @@ def test_aruco_detector_finds_a_small_marker_and_ignores_a_blank_frame() -> None
     assert detector.detect(blank, T0).markers == ()
 
 
-def test_blur_hides_the_head_region_and_downscales() -> None:
-    from agent.vision.capture import blurred_keyframe
+def test_preview_blacks_out_the_head_region_and_downscales() -> None:
+    from agent.vision.capture import head_masked_frame
 
     noisy = np.random.default_rng(0).integers(0, 255, (H, W, 3), dtype=np.uint8)
-    jpeg = blurred_keyframe(noisy, [Box(100, 100, 400, 400)], long_side=W)
+    jpeg = head_masked_frame(noisy, [Box(100, 100, 400, 400)], long_side=W)
     decoded = cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_COLOR)
     assert decoded.shape == (H, W, 3)
-    blurred = decoded[150:350, 150:350].astype(float).std()
-    untouched = decoded[150:350, 700:900].astype(float).std()
-    assert blurred < untouched / 3
-    small = cv2.imdecode(np.frombuffer(blurred_keyframe(noisy, []), np.uint8), cv2.IMREAD_COLOR)
+    assert _black(decoded[110:390, 110:390])  # opaque, not a reversible blur
+    assert decoded[150:350, 700:900].astype(float).std() > 30
+    small = cv2.imdecode(np.frombuffer(head_masked_frame(noisy, []), np.uint8), cv2.IMREAD_COLOR)
     assert max(small.shape[:2]) == 512
 
 
-def test_blur_clips_boxes_outside_the_frame() -> None:
-    from agent.vision.capture import blurred_keyframe
+def test_preview_clips_boxes_outside_the_frame() -> None:
+    from agent.vision.capture import head_masked_frame
 
     frame = np.zeros((100, 100, 3), np.uint8)
-    assert blurred_keyframe(frame, [Box(-50, -50, 20, 20), Box(90, 90, 500, 500)])
+    assert head_masked_frame(frame, [Box(-50, -50, 20, 20), Box(90, 90, 500, 500)])
+
+
+def test_allowlist_keyframe_hides_a_person_the_detector_missed() -> None:
+    """docs/privacy.md G1: only regions the detector vouched for leave the device."""
+    from agent.vision.capture import allowlist_keyframe
+
+    noisy = np.random.default_rng(1).integers(40, 255, (H, W, 3), dtype=np.uint8)
+    body, head = Box(100, 100, 400, 700), Box(150, 100, 350, 300)
+    keyframe = allowlist_keyframe(noisy, [body], [head], long_side=W)
+    decoded = cv2.imdecode(np.frombuffer(keyframe.jpeg, np.uint8), cv2.IMREAD_COLOR)
+    assert _black(decoded[110:290, 160:340])  # the detected head
+    assert decoded[350:650, 120:380].astype(float).std() > 30  # the body (held product): kept
+    assert _black(decoded[100:700, 700:1200])  # a missed face over here
+    assert keyframe.kept == (pytest.approx((100 / W, 100 / H, 401 / W, 701 / H)),)
+    assert keyframe.heads == (pytest.approx((150 / W, 100 / H, 351 / W, 301 / H)),)
+
+
+def test_allowlist_keyframe_of_nothing_is_all_black() -> None:
+    from agent.vision.capture import allowlist_keyframe
+
+    noisy = np.random.default_rng(2).integers(0, 255, (H, W, 3), dtype=np.uint8)
+    keyframe = allowlist_keyframe(noisy, [], [Box(-5, -5, -1, -1)])
+    decoded = cv2.imdecode(np.frombuffer(keyframe.jpeg, np.uint8), cv2.IMREAD_COLOR)
+    assert _black(decoded) and keyframe.kept == () and keyframe.heads == ()
 
 
 def test_clip_source_samples_on_clip_time_and_finishes(tmp_path: Path) -> None:

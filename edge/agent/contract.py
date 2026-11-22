@@ -311,8 +311,24 @@ class RecognitionSnapshot(_Message):
     latency: RecognitionLatency
 
 
+class RedactionBox(_Model):
+    """Normalized [0, 1] corners in the keyframe image."""
+
+    x1: Score
+    y1: Score
+    x2: Score
+    y2: Score
+
+
 class AudienceKeyframe(_Message):
-    """Header for a face-blurred JPEG; the bytes follow as the next binary WS frame."""
+    """Header for a redacted JPEG; the bytes follow as the next binary WS frame.
+
+    A scene keyframe (no `session_id`) is `redaction="allowlist"` (docs/privacy.md
+    G1): black everywhere except the `kept` regions (detected people and objects),
+    with every `heads` region black too. The backend checks the pixels against
+    these boxes and drops the frame on any mismatch, so a face the detector
+    missed is never sent to the VLM.
+    """
 
     type: Literal["audience.keyframe"] = "audience.keyframe"
     screen_id: ScreenId
@@ -323,6 +339,9 @@ class AudienceKeyframe(_Message):
     session_id: EntityId | None = None
     track_id: Annotated[str, Field(min_length=1, max_length=32)] | None = None
     video_time_s: Annotated[float, Field(ge=0)] | None = None
+    redaction: Literal["allowlist"] | None = None
+    kept: list[RedactionBox] = Field(default_factory=list, max_length=64)
+    heads: list[RedactionBox] = Field(default_factory=list, max_length=64)
 
 
 class AudienceUtterance(_Message):

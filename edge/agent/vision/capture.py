@@ -1,4 +1,4 @@
-"""Camera capture with a single latest-frame slot, a video-file replay source, and face blur.
+"""Camera capture with a single latest-frame slot, a video-file replay source, and face redaction.
 
 Frames are never queued: the capture thread overwrites the slot, so inference
 always gets the newest frame and a slow detector drops frames instead of
@@ -12,6 +12,7 @@ import math
 import threading
 import time
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -218,22 +219,78 @@ class ClipSource:
         self._cap.release()
 
 
-def blurred_keyframe(
+def _clip(box: Box, width: int, height: int) -> tuple[int, int, int, int] | None:
+    x1, y1 = max(0, math.floor(box.x1)), max(0, math.floor(box.y1))
+    x2, y2 = min(width, math.ceil(box.x2) + 1), min(height, math.ceil(box.y2) + 1)
+    return (x1, y1, x2, y2) if x2 > x1 and y2 > y1 else None
+
+
+def head_masked_frame(
     frame: Any, heads: Sequence[Box], *, long_side: int = 512, quality: int = 80
 ) -> bytes:
-    """Blur every head box, downscale and JPEG-encode: the only frame a third party sees."""
-    import cv2
+    """Black out every head box (opaque, not a reversible blur), downscale, JPEG-encode.
 
+    First party only (the console's camera preview). A third party gets
+    `allowlist_keyframe`, which also hides a person the detector missed.
+    """
     out = frame.copy()
     height, width = out.shape[:2]
     for box in heads:
-        x1, y1 = max(0, int(box.x1)), max(0, int(box.y1))
-        x2, y2 = min(width, int(box.x2) + 1), min(height, int(box.y2) + 1)
-        if x2 <= x1 or y2 <= y1:
-            continue
-        region = out[y1:y2, x1:x2]
-        k = max(15, (max(x2 - x1, y2 - y1) // 3) | 1)
-        out[y1:y2, x1:x2] = cv2.GaussianBlur(region, (k, k), 0)
+        if (clipped := _clip(box, width, height)) is not None:
+            x1, y1, x2, y2 = clipped
+            out[y1:y2, x1:x2] = 0
+    return _encode(out, long_side=long_side, quality=quality)
+
+
+@dataclass(frozen=True, slots=True)
+class RedactedKeyframe:
+    """An allow-list keyframe and the regions it declares, normalized to [0, 1]."""
+
+    jpeg: bytes
+    kept: tuple[tuple[float, float, float, float], ...]
+    heads: tuple[tuple[float, float, float, float], ...]
+
+
+def allowlist_keyframe(
+    frame: Any,
+    kept: Sequence[Box],
+    heads: Sequence[Box],
+    *,
+    long_side: int = 512,
+    quality: int = 80,
+) -> RedactedKeyframe:
+    """The only frame a third party sees (docs/privacy.md G1).
+
+    Starts from black and copies only the `kept` regions (detected people and
+    objects), then blacks out every head. Pixels the detector didn't vouch
+    for, including a person it missed, are never sent.
+    """
+    import numpy as np
+
+    height, width = frame.shape[:2]
+    out = np.zeros_like(frame)
+    kept_px = [c for box in kept if (c := _clip(box, width, height)) is not None]
+    heads_px = [c for box in heads if (c := _clip(box, width, height)) is not None]
+    for x1, y1, x2, y2 in kept_px:
+        out[y1:y2, x1:x2] = frame[y1:y2, x1:x2]
+    for x1, y1, x2, y2 in heads_px:
+        out[y1:y2, x1:x2] = 0
+
+    def norm(c: tuple[int, int, int, int]) -> tuple[float, float, float, float]:
+        x1, y1, x2, y2 = c
+        return (x1 / width, y1 / height, x2 / width, y2 / height)
+
+    return RedactedKeyframe(
+        jpeg=_encode(out, long_side=long_side, quality=quality),
+        kept=tuple(norm(c) for c in kept_px),
+        heads=tuple(norm(c) for c in heads_px),
+    )
+
+
+def _encode(out: Any, *, long_side: int, quality: int) -> bytes:
+    import cv2
+
+    height, width = out.shape[:2]
     scale = long_side / max(height, width)
     if scale < 1:
         out = cv2.resize(

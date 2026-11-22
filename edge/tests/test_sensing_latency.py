@@ -8,6 +8,7 @@ import pytest
 
 from agent.backend_link import BackendLink
 from agent.contract import AudienceKeyframe, AudienceSnapshot
+from agent.vision.capture import RedactedKeyframe
 from agent.vision.minor import MinorReading
 from agent.vision.snapshot import SnapshotBuilder
 from agent.vision.tracking import PersonTracker
@@ -59,7 +60,7 @@ def test_looking_change_is_not_debounced_twice():
 
 def test_keyframes_follow_deadline_without_a_snapshot_heartbeat():
     link = RecordingLink()
-    pipeline = _pipeline(link, keyframes=lambda *_: b"blurred")
+    pipeline = _pipeline(link, keyframes=lambda *_: RedactedKeyframe(b"blurred", (), ()))
     for t in range(0, 3101, 100):
         pipeline.process(object(), frame(ms(t), person()))
     headers = [m for m, _ in link.sent if isinstance(m, AudienceKeyframe)]
@@ -79,7 +80,7 @@ async def test_slow_encoder_does_not_block_sensor_link_or_queue_frames():
     def encode(*_):
         started.set()
         release.wait(2)
-        return b"blurred"
+        return RedactedKeyframe(b"blurred", (), ())
 
     pipeline = _pipeline(link, keyframes=encode)
     from tests.test_vision import ListSource, ScriptedDetector
@@ -291,7 +292,7 @@ async def test_async_keyframe_delivers_only_the_encoder_output_with_matching_hea
     from tests.test_backend_link import wait_for
 
     link = RecordingLink()
-    pipeline = _pipeline(link, keyframes=lambda *_: b"redacted")
+    pipeline = _pipeline(link, keyframes=lambda *_: RedactedKeyframe(b"redacted", (), ()))
     pipeline.process(object(), frame(ms(0), person()))
     await wait_for(lambda: pipeline.stats.keyframes == 1)
     [(header, binary)] = [(m, b) for m, b in link.sent if isinstance(m, AudienceKeyframe)]

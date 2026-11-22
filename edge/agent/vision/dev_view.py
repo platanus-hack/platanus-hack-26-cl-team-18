@@ -6,7 +6,7 @@ pixels, no keypoints, no identity; track ids stay anonymous and session-local.
 Opt-in on the agent (`--dev-stream` / EDGE_DEV_STREAM=1).
 
 Demo only: with a `preview` encoder (`--camera-preview` / EDGE_CAMERA_PREVIEW=1)
-the view also carries the same frame as a face-blurred, downscaled JPEG, so the
+the view also carries the same frame as a head-masked, downscaled JPEG, so the
 console can draw the boxes over what the camera saw. Never stored; the backend
 strips it in prod.
 """

@@ -92,6 +92,7 @@ from app.modules.audience.domain.speech_evidence import (
 from app.modules.audience.domain.value_objects.ids import MomentId
 from app.modules.audience.domain.value_objects.segment import SegmentId, SegmentSource
 from app.modules.audience.infrastructure.catalog.loader import load_catalog
+from app.modules.audience.infrastructure.keyframe_redaction import allowlist_redaction_holds
 from app.modules.campaigns.application.autobidder import AutoBidder
 from app.modules.campaigns.application.live_book import (
     RESERVATION_TTL,
@@ -617,6 +618,7 @@ def register_demo(
         on_findings=vlm_findings_landed,
         on_degraded=vlm_degradation,
         on_tags=dev_tags,
+        redaction_check=allowlist_redaction_holds,
     )
     # The on-air play's exposure lease: (creative_id, result, looking, leases held).
     lease: tuple[str, AuctionResult, int, int] | None = None
@@ -1936,25 +1938,28 @@ def register_demo(
                 )
 
     def receive_keyframe(keyframe: AudienceKeyframe, received: Received) -> None:
-        # Face-blurred JPEG, in memory only (never stored or logged); tagged on the warm path.
-        # Recognition-stream crops (session_id set) belong to RecognitionVlm.
+        # Allow-list redacted JPEG, in memory only (never stored or logged); tagged on the
+        # warm path. Recognition-stream crops (session_id set) belong to RecognitionVlm.
         if (
-            keyframe.screen_id == wire_screen_id
-            and keyframe.session_id is None
-            and received.payload is not None
+            keyframe.screen_id != wire_screen_id
+            or keyframe.session_id is not None
+            or received.payload is None
         ):
-            classifier.observe_keyframe(
-                keyframe, jpeg=received.payload, received_at=received.received_at
-            )
-            if dev_keyframe_preview and hub.dev_count():
-                # Opt-in, local-only: the same face-blurred JPEG the VLM gets, in memory.
-                hub.broadcast_dev_threadsafe(
-                    DevKeyframe(
-                        screen_id=wire_screen_id,
-                        measured_at=keyframe.measured_at,
-                        jpeg_base64=b64encode(received.payload).decode("ascii"),
-                    )
+            return
+        # Checks the redaction first (docs/privacy.md G2): a failing frame stops here.
+        if not classifier.observe_keyframe(
+            keyframe, jpeg=received.payload, received_at=received.received_at
+        ):
+            return
+        if dev_keyframe_preview and hub.dev_count():
+            # Opt-in, local-only: the same redacted JPEG the VLM gets, in memory.
+            hub.broadcast_dev_threadsafe(
+                DevKeyframe(
+                    screen_id=wire_screen_id,
+                    measured_at=keyframe.measured_at,
+                    jpeg_base64=b64encode(received.payload).decode("ascii"),
                 )
+            )
 
     def reset_speech() -> tuple[AudienceSnapshot, Received] | None:
         """Forget every spoken topic; a later warm extraction for them is discarded."""

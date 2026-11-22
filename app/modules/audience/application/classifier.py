@@ -6,8 +6,10 @@ goes to the `AudienceTagger` on the `WarmScheduler`, never awaited; its
 findings are kept per screen for a few seconds and `on_findings` asks the
 caller to re-decide with them.
 
-Privacy: keyframe bytes live only in the closure of their warm job and are
-never stored or logged. Held products describe objects, never people.
+Privacy: a keyframe reaches the tagger only if `redaction_check` confirms its
+allow-list redaction (fail closed by default). Its bytes live only in the
+closure of their warm job and are never stored or logged. Held products
+describe objects, never people.
 """
 
 from __future__ import annotations
@@ -26,10 +28,12 @@ import anyio
 from app.contract.messages import AudienceKeyframe, AudienceSnapshot
 from app.modules.audience.application.ports import (
     AudienceTagger,
+    KeyframeRedactionCheck,
     KeyframeTags,
     TaggedProduct,
     TaggedSegment,
     WarmScheduler,
+    reject_every_keyframe,
 )
 from app.modules.audience.domain.catalog import SegmentCatalog
 from app.modules.audience.domain.classification import (
@@ -130,11 +134,15 @@ class AudienceClassifier:
         on_degraded: DegradationListener | None = None,
         on_tags: TagsListener | None = None,
         keyframe_gate: KeyframeGate | None = None,
+        redaction_check: KeyframeRedactionCheck = reject_every_keyframe,
     ) -> None:
         self.catalog = catalog
         # The VLM as a tie-breaker (keyframe_gate.py); counters show what it saved.
         self._gate = keyframe_gate or KeyframeGate()
         self.keyframes_skipped = 0
+        # Scene keyframes that failed the allow-list redaction check (docs/privacy.md G2).
+        self._redaction_check = redaction_check
+        self.keyframes_rejected = 0
         self.keyframes_tagged: dict[str, int] = {}
         self._settings = settings or ClassifierSettings()
         self._ttl = ttl or EvidenceTtl()
@@ -206,11 +214,22 @@ class AudienceClassifier:
 
     def observe_keyframe(
         self, keyframe: AudienceKeyframe, *, jpeg: bytes, received_at: datetime
-    ) -> None:
+    ) -> bool:
+        """Queue a VLM tag if useful. False when the redaction check refused the frame."""
         wire_id = keyframe.screen_id
+        if not self._redaction_check(keyframe, jpeg):
+            # Never sent to the VLM. Counted, and logged without the image.
+            self.keyframes_rejected += 1
+            if self.keyframes_rejected % 100 == 1:
+                logger.warning(
+                    "dropped %d scene keyframe(s) failing the redaction check (screen %s)",
+                    self.keyframes_rejected,
+                    wire_id,
+                )
+            return False
         if self._tagger is None or self._warm is None:
             self._degraded(wire_id, True)
-            return
+            return True
         screen = self._screen(wire_id)
         with screen.lock:
             reason = self._gate.should_tag(
@@ -222,7 +241,7 @@ class AudienceClassifier:
             )
             if reason is None:
                 self.keyframes_skipped += 1  # the hot path already has the answer
-                return
+                return True
             screen.last_tagged_at = received_at
         self.keyframes_tagged[reason] = self.keyframes_tagged.get(reason, 0) + 1
         tagger, looking = self._tagger, screen.looking
@@ -247,6 +266,7 @@ class AudienceClassifier:
 
         # One tagging call in flight per screen; keyframes arriving meanwhile are dropped.
         self._warm.submit_threadsafe("vlm", f"tag:{wire_id}", tag)
+        return True
 
     def _apply_tags(self, wire_id: str, taken_at: UtcTimestamp, tags: KeyframeTags) -> None:
         expires = UtcTimestamp.create(taken_at.value + self._ttl.vlm)

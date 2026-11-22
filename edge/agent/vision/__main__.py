@@ -49,7 +49,8 @@ from agent.vision.pipeline import (
     Link,
     VisionConfig,
     VisionPipeline,
-    blur_encoder,
+    preview_encoder,
+    redacted_encoder,
 )
 from agent.vision.remote import RemoteGpuDetector
 from agent.vision.snapshot import SnapshotBuilder, SnapshotConfig
@@ -110,7 +111,7 @@ async def run(args: argparse.Namespace) -> int:
         # Keyframes leave the process (VLM): redact with a high-recall pass too.
         redaction = HighRecallPeople(args.pose_model, device=args.device)
         await asyncio.to_thread(redaction.warmup)
-        keyframes = blur_encoder(more_people=redaction)
+        keyframes = redacted_encoder(more_people=redaction)
     remote: RemoteGpuDetector | None = None
     catalog = MarkerCatalog.from_file(Path(args.markers)) if args.markers else None
     main_detector: Detector = local
@@ -199,8 +200,8 @@ async def run(args: argparse.Namespace) -> int:
         dev_view=DevViewBuilder(
             args.screen,
             brand_for=catalog.brand_for if catalog else None,
-            # Demo only: a face-blurred, small camera view under the console's boxes.
-            preview=blur_encoder(long_side=480, quality=60) if camera_preview_on(args) else None,
+            # Demo only: a head-masked, small camera view under the console's boxes.
+            preview=preview_encoder() if camera_preview_on(args) else None,
         )
         if dev_stream_on(args)
         else None,
@@ -269,7 +270,7 @@ def dev_stream_on(args: argparse.Namespace) -> bool:
 
 
 def camera_preview_on(args: argparse.Namespace) -> bool:
-    """Demo only: a face-blurred camera view rides along with the boxes."""
+    """Demo only: a head-masked camera view rides along with the boxes."""
     if not dev_stream_on(args):
         return False
     return bool(args.camera_preview) or os.environ.get("EDGE_CAMERA_PREVIEW", "") in {"1", "true"}
@@ -338,7 +339,7 @@ def argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--camera-preview",
         action="store_true",
-        help="demo: attach a face-blurred camera view to the boxes (default: env EDGE_CAMERA_PREVIEW)",
+        help="demo: attach a head-masked camera view to the boxes (default: env EDGE_CAMERA_PREVIEW)",
     )
     parser.add_argument("--gpu-url", help="remote GPU service, e.g. wss://host/infer (ADR 0007)")
     parser.add_argument("--gpu-token", default=None, help="bearer token (default: env GPU_TOKEN)")

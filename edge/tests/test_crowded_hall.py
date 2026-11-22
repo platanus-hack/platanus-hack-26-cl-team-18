@@ -126,38 +126,46 @@ def test_a_detector_without_pose_keeps_the_box_rule() -> None:
     assert held_labels(no_pose, markers=(marker(1, 610, 520),)) == {"cafe-patio"}
 
 
-# ------------------------------------------------- privacy: every face in a crowd is blurred
+# ------------------------------------------------- privacy: no face in a crowd reaches the VLM
 
 
-def test_keyframe_blurs_faces_the_hot_path_detector_missed() -> None:
+def test_keyframe_hides_faces_the_hot_path_detector_missed() -> None:
     # In a crowd the hot-path pose pass (conf 0.35, 640 px) misses 25-75 % of the faces a
-    # high-recall pass finds (measured on hall/market/queue stock footage); the VLM keyframe
-    # must blur those too (invariant 3), so the encoder takes a second, high-recall source.
+    # high-recall pass finds (measured on hall/market/queue stock footage). The allow-list
+    # keyframe (docs/privacy.md G1) is black outside what the hot path found, so a missed
+    # face in the background is hidden with no second pass. One standing *behind* a found
+    # person sits inside a kept region; the high-recall pass blacks out its head (G9).
     np = pytest.importorskip("numpy")
     cv2 = pytest.importorskip("cv2", reason="needs `uv sync --extra vision`")
-    from agent.vision.pipeline import blur_encoder
+    from agent.vision.pipeline import redacted_encoder
 
     rng = np.random.default_rng(3)
-    frame = rng.integers(0, 255, (H, W, 3), dtype=np.uint8)  # high-frequency "face" texture
-    seen = standing(100)  # found by the hot path
-    missed = standing(900, top=200, bottom=600, width=120)  # a background face it missed
+    frame = rng.integers(40, 255, (H, W, 3), dtype=np.uint8)  # high-frequency "face" texture
+    seen = standing(100, width=300)  # found by the hot path
+    behind = standing(280, top=60, bottom=500, width=160)  # missed, inside seen's box
+    far = standing(900, top=200, bottom=600, width=120)  # missed, in the background
     detections = FrameDetections(T0, W, H, persons=(seen,), detector="local")
 
     def decode(jpeg: bytes) -> object:
         return cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_COLOR)
 
-    plain = decode(blur_encoder()(frame, detections))
-    redacted = decode(blur_encoder(more_people=lambda _frame: [missed])(frame, detections))
+    plain = decode(redacted_encoder()(frame, detections).jpeg)
+    both = decode(
+        redacted_encoder(more_people=lambda _frame: [behind, far])(frame, detections).jpeg
+    )
 
-    def sharpness(image: object, point: Keypoint) -> float:
+    def face(image: object, person: PersonDetection) -> object:
         s = 512 / W  # keyframes are downscaled to 512 px
-        x, y = int(point.x * s), int(point.y * s)
-        patch = image[y - 6 : y + 6, x - 6 : x + 6]  # type: ignore[index]
-        return float(cv2.Laplacian(cv2.cvtColor(patch, cv2.COLOR_BGR2GRAY), cv2.CV_64F).var())
+        x, y = int(person.keypoints[0].x * s), int(person.keypoints[0].y * s)
+        return image[y - 6 : y + 6, x - 6 : x + 6]  # type: ignore[index]
 
-    nose_missed, nose_seen = missed.keypoints[0], seen.keypoints[0]
-    assert sharpness(redacted, nose_missed) < sharpness(plain, nose_missed) / 10
-    assert sharpness(redacted, nose_seen) == pytest.approx(sharpness(plain, nose_seen))
+    def black(patch: object) -> bool:
+        return float(patch.mean()) < 6  # type: ignore[attr-defined]
+
+    assert black(face(plain, seen)) and black(face(both, seen))
+    assert black(face(plain, far)) and black(face(both, far))  # allow-list alone hides it
+    assert not black(face(plain, behind))  # inside a kept region: the hot path alone shows it
+    assert black(face(both, behind))  # the high-recall heads close that gap
 
 
 # ------------------------------------------------- people on other screens and rollup banners

@@ -190,6 +190,7 @@ Never patch production code around a missing package.
 | `docs/demo.md` | Demo script, console layout, demo insurance, pitch and judge Q&A |
 | `docs/evals.md` | **Product feedback loop**: live-loop scenario evals, gates vs ratchets, real-video perception, rehearsal scoring |
 | `docs/creative-generation.md` | **Ad generation**: brief → angle + group offer → stock/AI copy → guard → score; metrics plan and `make eval-creative` |
+| `docs/privacy.md` | **Privacy evidence**: each privacy concern → enforcing code → test, plus open gaps; update it when you touch perception, speech or storage |
 | `CONTEXT.md` | Domain glossary (moment, segment, bundle, attention-second…) |
 | `docs/adr/` | Binding decisions (0001 latency paths, 0002 superseded, 0003 video cold loops + warm upgrades, 0004 YOLO perception agent, 0005 ElevenLabs speech + voice, 0006 committed stack, 0007 remote GPU perception, 0008 demo-critical decisions: vision first, prop markers, tunnel, max 2 brands, coverage headline, CLP/Spanish, two laptops) |
 | `docs/rules.md` | Architecture rules (§1–7, Security and Queue-consumer rules apply as written) |

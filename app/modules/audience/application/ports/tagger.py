@@ -11,6 +11,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Protocol
 
+from app.contract.messages import AudienceKeyframe
 from app.modules.audience.domain.value_objects.segment import SegmentId
 
 
@@ -40,8 +41,18 @@ class KeyframeTags:
 
 class AudienceTagger(Protocol):
     async def tag(self, *, jpeg: bytes, looking: int) -> KeyframeTags:
-        """Tag a face-blurred keyframe. The bytes stay in memory."""
+        """Tag a redacted keyframe. The bytes stay in memory."""
         ...
+
+
+# Whether a scene keyframe's pixels match its declared allow-list redaction
+# (docs/privacy.md G2). The adapter is `keyframe_redaction.allowlist_redaction_holds`.
+type KeyframeRedactionCheck = Callable[[AudienceKeyframe, bytes], bool]
+
+
+def reject_every_keyframe(_header: AudienceKeyframe, _jpeg: bytes) -> bool:
+    """The fail-closed default: without a check wired in, nothing reaches the VLM."""
+    return False
 
 
 class WarmScheduler(Protocol):

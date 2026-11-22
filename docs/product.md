@@ -205,6 +205,8 @@ This is the first question every judge and buyer will ask. Answer it by design:
   and restricts emotion recognition. The design above (no identification, no
   sensitive or emotion inference, no storage, aggregation) is the defensible
   position. Get legal review before a real deployment.
+- **Evidence and open gaps:** [`privacy.md`](privacy.md) maps each promise
+  above to the code that enforces it and the test that proves it.
 
 Pitch vocabulary: say **"presence and attention sensing"**, never "facial
 recognition" or "we track people".

@@ -75,6 +75,7 @@ class CollectingWarm:
 def classifier(**kwargs) -> tuple[AudienceClassifier, list, list]:
     findings: list[str] = []
     degraded: list[tuple[DegradedSignal, bool]] = []
+    kwargs.setdefault("redaction_check", lambda _header, _jpeg: True)
     built = AudienceClassifier(
         catalog=LOADED.catalog,
         reliability=LOADED.reliability,
@@ -181,6 +182,33 @@ def test_provider_failure_degrades_and_keeps_payloads_out_of_logs(caplog) -> Non
     assert "leaked model text" not in caplog.text and "RuntimeError" in caplog.text
     (dogs,) = c.classify(snapshot(objects=[("dog", 1.0)]), at=T0).segments
     assert dogs.segment_id == DOGS
+
+
+def test_a_keyframe_failing_the_redaction_check_never_reaches_the_tagger(caplog) -> None:
+    """docs/privacy.md G2: the backend, not the agent, decides what the VLM sees."""
+    warm, tagger = CollectingWarm(), FakeTagger(RuntimeError("must not be called"))
+    seen: list[bytes] = []
+
+    def refuse(_header: AudienceKeyframe, jpeg: bytes) -> bool:
+        seen.append(jpeg)
+        return False
+
+    c, _, degraded = classifier(tagger=tagger, warm=warm, redaction_check=refuse)
+    with caplog.at_level("WARNING"):
+        accepted = c.observe_keyframe(keyframe(), jpeg=b"\xff\xd8raw", received_at=T0)
+    warm.run()
+    assert not accepted and seen == [b"\xff\xd8raw"]
+    assert tagger.calls == [] and degraded == [] and c.keyframes_rejected == 1
+    assert "raw" not in caplog.text and "redaction check" in caplog.text
+
+
+def test_without_a_redaction_check_every_keyframe_is_refused() -> None:
+    """Fail closed: a classifier built without the check never tags anything."""
+    warm, tagger = CollectingWarm(), FakeTagger(RuntimeError("must not be called"))
+    c = AudienceClassifier(catalog=LOADED.catalog, tagger=tagger, warm=warm)
+    assert not c.observe_keyframe(keyframe(), jpeg=b"\xff\xd8..", received_at=T0)
+    warm.run()
+    assert tagger.calls == [] and c.keyframes_rejected == 1
 
 
 def test_without_a_tagger_keyframes_flag_the_vlm_as_degraded() -> None:

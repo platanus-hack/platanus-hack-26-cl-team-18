@@ -20,9 +20,10 @@ from typing import Any, Protocol
 
 from pydantic import BaseModel
 
-from agent.contract import AudienceKeyframe, AudienceSnapshot, PerceptionTiming
+from agent.contract import AudienceKeyframe, AudienceSnapshot, PerceptionTiming, RedactionBox
 from agent.live import LiveGate
 from agent.sound.sources import SoundSceneSource
+from agent.vision.capture import RedactedKeyframe
 from agent.vision.detector import Detector, Frame
 from agent.vision.dev_view import DevViewBuilder
 from agent.vision.geometry import head_box
@@ -30,7 +31,7 @@ from agent.vision.held import HeldProductTracker
 from agent.vision.minor import ChildPropVote, MinorVote, strongest
 from agent.vision.snapshot import SnapshotBuilder
 from agent.vision.tracking import PersonTracker
-from agent.vision.types import FrameDetections, PersonDetection
+from agent.vision.types import Box, FrameDetections, PersonDetection
 from agent.vision.vocabulary import CHILD_PROP_LABELS
 
 logger = logging.getLogger(__name__)
@@ -44,7 +45,7 @@ class Link(Protocol):
     def send(self, message: BaseModel, *, binary: bytes | None = None) -> None: ...
 
 
-type KeyframeEncoder = Callable[[Frame, FrameDetections], bytes]
+type KeyframeEncoder = Callable[[Frame, FrameDetections], RedactedKeyframe]
 
 
 @dataclass(frozen=True, slots=True)
@@ -294,7 +295,7 @@ class VisionPipeline:
     ) -> None:
         assert self._keyframes is not None
         try:
-            jpeg = await asyncio.to_thread(self._keyframes, frame, detections)
+            keyframe = await asyncio.to_thread(self._keyframes, frame, detections)
         except Exception:
             logger.exception("keyframe encoding failed")
             return
@@ -303,52 +304,99 @@ class VisionPipeline:
             and self._latest_at is not None
             and self._latest_at - detections.measured_at <= self._config.keyframe_interval
         ):
-            self._deliver_keyframe(jpeg, detections.measured_at)
+            self._deliver_keyframe(keyframe, detections.measured_at)
 
     def _send_keyframe(self, frame: Frame, detections: FrameDetections, at: datetime) -> None:
         assert self._keyframes is not None
         try:
-            jpeg = self._keyframes(frame, detections)
+            keyframe = self._keyframes(frame, detections)
         except Exception:
             logger.exception("keyframe encoding failed")
             return
-        self._deliver_keyframe(jpeg, at)
+        self._deliver_keyframe(keyframe, at)
 
-    def _deliver_keyframe(self, jpeg: bytes, at: datetime) -> None:
+    def _deliver_keyframe(self, keyframe: RedactedKeyframe, at: datetime) -> None:
+        def boxes(regions: tuple[tuple[float, float, float, float], ...]) -> list[RedactionBox]:
+            return [RedactionBox(x1=a, y1=b, x2=c, y2=d) for a, b, c, d in regions]
+
         header = AudienceKeyframe(
             screen_id=self._screen_id,
             seq=self._keyframe_seq,
             measured_at=at,
-            byte_length=len(jpeg),
+            byte_length=len(keyframe.jpeg),
+            redaction="allowlist",
+            kept=boxes(keyframe.kept),
+            heads=boxes(keyframe.heads),
         )
-        self._link.send(header, binary=jpeg)
+        self._link.send(header, binary=keyframe.jpeg)
         self._keyframe_seq += 1
         self.stats.keyframes += 1
 
 
-def blur_encoder(
+OBJECT_PADDING = 0.1  # of the object box, so a held product's label stays readable
+MAX_KEPT_REGIONS = 64  # the contract's cap on `kept` / `heads`
+
+
+def keyframe_regions(
+    detections: FrameDetections, more_people: Sequence[PersonDetection] = ()
+) -> tuple[list[Box], list[Box]]:
+    """What a scene keyframe may show: people and objects; and the heads to black out.
+
+    Only the hot-path detections are kept. Heads from `more_people` (the
+    high-recall pass) are blacked out too, so a face the hot path missed is
+    hidden even where it overlaps a kept region (docs/privacy.md G9).
+    """
+    w, h = detections.width, detections.height
+    kept = [person.box for person in detections.persons]
+    boxes = [o.box for o in detections.objects] + [m.box for m in detections.markers]
+    for b in boxes:
+        pad_x, pad_y = b.width * OBJECT_PADDING, b.height * OBJECT_PADDING
+        kept.append(
+            Box(
+                max(0, b.x1 - pad_x),
+                max(0, b.y1 - pad_y),
+                min(w, b.x2 + pad_x),
+                min(h, b.y2 + pad_y),
+            )
+        )
+    heads = [head_box(person) for person in (*detections.persons, *more_people)]
+    return kept[:MAX_KEPT_REGIONS], heads[:MAX_KEPT_REGIONS]
+
+
+def redacted_encoder(
     long_side: int = 512,
     quality: int = 80,
     *,
     more_people: Callable[[Frame], Sequence[PersonDetection]] | None = None,
 ) -> KeyframeEncoder:
-    """Keyframe encoder that blurs every detected head before encoding (needs OpenCV).
+    """The VLM's keyframe: allow-list redaction (docs/privacy.md G1). Needs OpenCV.
 
     `more_people` is a second, high-recall person source run on the frame being
     encoded (`adapters.HighRecallPeople`). The hot-path detections are tuned for
-    counting, not redaction: in a crowd they miss most background faces, which
-    would then reach the VLM unblurred (invariant 3). Its heads are blurred too.
-    It runs inside the encoder (a worker thread, one keyframe at most every 1.5 s),
-    never in the hot path.
+    counting, not redaction: in a crowd they miss most background faces. Those
+    are black anyway (outside every kept region); this also blacks out their
+    heads where they overlap a kept one. It runs inside the encoder (a worker
+    thread, one keyframe at most every 1.5 s), never in the hot path.
     """
-    from agent.vision.capture import blurred_keyframe
+    from agent.vision.capture import allowlist_keyframe
+
+    def encode(frame: Frame, detections: FrameDetections) -> RedactedKeyframe:
+        extra = more_people(frame) if more_people is not None else ()
+        kept, heads = keyframe_regions(detections, extra)
+        return allowlist_keyframe(frame, kept, heads, long_side=long_side, quality=quality)
+
+    return encode
+
+
+def preview_encoder(
+    long_side: int = 480, quality: int = 60
+) -> Callable[[Frame, FrameDetections], bytes]:
+    """The console's camera preview (first party): the whole frame, heads blacked out."""
+    from agent.vision.capture import head_masked_frame
 
     def encode(frame: Frame, detections: FrameDetections) -> bytes:
-        people = list(detections.persons)
-        if more_people is not None:
-            people += more_people(frame)
-        heads = [head_box(person) for person in people]
-        return blurred_keyframe(frame, heads, long_side=long_side, quality=quality)
+        heads = [head_box(person) for person in detections.persons]
+        return head_masked_frame(frame, heads, long_side=long_side, quality=quality)
 
     return encode
 

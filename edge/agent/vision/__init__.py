@@ -1,1 +1,1 @@
-"""Camera perception and face-blurred keyframes."""
+"""Camera perception and redacted keyframes."""
