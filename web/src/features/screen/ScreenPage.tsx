@@ -17,13 +17,6 @@ import { holdScreenAwake } from "./wake-lock";
 
 const CROSSFADE_MS = 250; // matches --duration-crossfade
 
-/**
- * What the glass discloses while it senses (docs/privacy.md G4): the camera chip
- * while the live switch has sensing on, and the ADR 0005 mic chip while the mic is open.
- */
-type Sensing = { camera: boolean; mic: boolean };
-const latestSensing = (_sensing: Sensing, next: Sensing) => next;
-
 const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 function toPlayable(
@@ -79,7 +72,6 @@ function ScreenPlayer() {
     );
     // Attention drives the dwell stage; it lives beside the player machine, not in it.
     const [attention] = useState(() => createStore(latestAttention, null));
-    const [sensing] = useState(() => createStore(latestSensing, { camera: false, mic: false }));
     const [socket] = useState(
         () =>
             new TypedSocket<PlayerOutbound, PlayerInbound>({
@@ -95,10 +87,7 @@ function ScreenPlayer() {
                         return;
                     }
                     if (message.screen_id !== screenId) return;
-                    if (message.type === "live.status") {
-                        sensing.dispatch({ camera: message.sensing, mic: message.listening });
-                        return;
-                    }
+                    if (message.type === "live.status") return;
                     if (message.type === "screen.attention") {
                         if (message.screen_id === screenId) {
                             attention.dispatch(toAttentionSample(message, Date.now()));
@@ -128,7 +117,6 @@ function ScreenPlayer() {
         });
     });
     const state = useStore(store, (s) => s);
-    const { mic: micOpen } = useStore(sensing, (s) => s);
 
     useEffect(() => {
         socket.start();
@@ -301,15 +289,6 @@ function ScreenPlayer() {
                     </div>
                 );
             })}
-            {micOpen && (
-                // Title-safe and sized to the glass (creative.css): legible on 4K, never overscanned.
-                <div className="screen-sensing">
-                    <div className="screen-mic-indicator" role="status" data-listening="on">
-                        <span className="screen-mic-indicator-dot" aria-hidden />
-                        Micrófono activo · solo temas, nada se graba
-                    </div>
-                </div>
-            )}
         </main>
     );
 }

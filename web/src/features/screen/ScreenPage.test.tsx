@@ -542,37 +542,3 @@ it("starts optional voice preparation before the visual crossfade finishes", asy
     });
     expect(visibleCopy()).toContain("prefetched");
 });
-
-it("shows the listening indicator only while the live switch has the mic open", async () => {
-    const live = (listening: boolean, screen = "demo-01"): PlayerOutbound => ({
-        type: "live.status",
-        v: 1,
-        screen_id: screen,
-        revision: 1,
-        live: true,
-        mic: listening,
-        speech_opt_in: true,
-        sensing: true,
-        listening,
-        ai_generation: true,
-        agents: ["speech", "vision"],
-        changed_at: new Date().toISOString(),
-    });
-    const indicator = () => host.querySelector('[data-listening="on"]');
-    expect(indicator()).toBeNull();
-    await act(async () => {
-        harness.receive(live(true));
-        await Promise.resolve();
-    });
-    expect(indicator()?.textContent).toContain("Micrófono activo");
-    await act(async () => {
-        harness.receive(live(false, "other-screen"));
-        await Promise.resolve();
-    });
-    expect(indicator()).not.toBeNull(); // another screen's switch never changes ours
-    await act(async () => {
-        harness.receive(live(false));
-        await Promise.resolve();
-    });
-    expect(indicator()).toBeNull();
-});
