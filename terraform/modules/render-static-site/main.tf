@@ -28,7 +28,15 @@ resource "render_static_site" "this" {
   ] : null
 
   # Vite fingerprints everything under /assets, so it can be cached forever.
+  # /screen runs YOLO on the CPU (ADR 0010); multithreaded WASM needs a
+  # cross-origin isolated page. `credentialless` (not require-corp) keeps the
+  # backend's logos, video loops and voice-overs loading without CORP headers.
+  # Scoped to /screen: the console and demo tools stay as they were.
   headers = [
     { path = "/assets/*", name = "Cache-Control", value = "public, max-age=31536000, immutable" },
+    { path = "/screen", name = "Cross-Origin-Opener-Policy", value = "same-origin" },
+    { path = "/screen", name = "Cross-Origin-Embedder-Policy", value = "credentialless" },
+    { path = "/screen/*", name = "Cross-Origin-Opener-Policy", value = "same-origin" },
+    { path = "/screen/*", name = "Cross-Origin-Embedder-Policy", value = "credentialless" },
   ]
 }

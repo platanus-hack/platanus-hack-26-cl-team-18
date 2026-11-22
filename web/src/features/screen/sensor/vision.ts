@@ -31,6 +31,17 @@ export type PerceptionFacts = Omit<DevPerception, "v" | "type" | "screen_id" | "
 
 const unit = (value: number) => Math.min(1, Math.max(0, value));
 
+/**
+ * WASM threads need SharedArrayBuffer, which needs a cross-origin isolated page
+ * (COOP/COEP on /screen: terraform/modules/render-static-site). Half the cores,
+ * at most 4: the player's video decode and the speech worklet share the CPU.
+ */
+function wasmThreads(): number {
+    if (typeof crossOriginIsolated === "undefined" || !crossOriginIsolated) return 1;
+    const cores = navigator.hardwareConcurrency || 2;
+    return Math.max(1, Math.min(4, Math.ceil(cores / 2)));
+}
+
 export class BrowserVision {
     private session: Ort.InferenceSession | null = null;
     private ort: typeof Ort | null = null;
@@ -106,12 +117,36 @@ export class BrowserVision {
     private async load(): Promise<void> {
         if (this.session !== null) return;
         const ort = await import("onnxruntime-web");
-        ort.env.wasm.numThreads = 1; // static hosting sends no COOP/COEP: no threads
-        const providers = "gpu" in navigator ? ["webgpu", "wasm"] : ["wasm"];
-        this.session = await ort.InferenceSession.create(MODEL_URL, {
-            executionProviders: providers,
-            graphOptimizationLevel: "all",
+        ort.env.wasm.numThreads = wasmThreads();
+        const options = { graphOptimizationLevel: "all" } as const;
+        let session: Ort.InferenceSession | null = null;
+        let backend = "wasm";
+        if ("gpu" in navigator) {
+            try {
+                session = await ort.InferenceSession.create(MODEL_URL, {
+                    ...options,
+                    executionProviders: ["webgpu"],
+                });
+                backend = "webgpu";
+            } catch {
+                session = null; // no usable adapter: the CPU path below
+            }
+        }
+        session ??= await ort.InferenceSession.create(MODEL_URL, {
+            ...options,
+            executionProviders: ["wasm"],
         });
+        // The console's detector label says which path runs (and how many threads).
+        this.detector =
+            backend === "wasm"
+                ? `yolo26n-pose-web/wasm-${String(ort.env.wasm.numThreads)}t`
+                : "yolo26n-pose-web/webgpu";
+        // One throwaway run so the first person seen doesn't pay for kernel setup.
+        const size = 3 * MODEL_SIZE * MODEL_SIZE;
+        await session.run({
+            images: new ort.Tensor("float32", new Float32Array(size), [1, 3, MODEL_SIZE, MODEL_SIZE]),
+        });
+        this.session = session;
         this.ort = ort;
     }
 
