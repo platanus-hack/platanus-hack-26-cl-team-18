@@ -10,7 +10,8 @@ from app.contract.speech_matching import DEFAULT_KEYTERMS
     [
         ("no quiero cerveza, quiero café", ("café",), ("cerveza",)),
         ("ya no quiero café", (), ("café",)),
-        ("quiero cerveza sin alcohol", (), ("cerveza",)),
+        # The beer is rejected; asking for it without alcohol is its own want.
+        ("quiero cerveza sin alcohol", ("sin alcohol",), ("cerveza",)),
         ("quiero café y cerveza", ("café", "cerveza"), ()),
         ("no café ni cerveza", (), ("café", "cerveza")),
         ("no quiero café pero sí una chela", ("cerveza",), ("café",)),
@@ -38,7 +39,7 @@ def test_zero_alcohol_requests_never_activate_the_alcohol_category(text):
         ("Una chela no, mejor café", ("café",), ("cerveza",)),
         ("Café en vez de cerveza", ("café",), ("cerveza",)),
         ("No solo café, también cerveza", ("café", "cerveza"), ()),
-        ("Cerveza sin alcohol y café", ("café",), ("cerveza",)),
+        ("Cerveza sin alcohol y café", ("café", "sin alcohol"), ("cerveza",)),
         ("El anuncio dice cerveza", (), ()),
         ("Qué significa la palabra café", (), ()),
         ("Si quisiera cerveza", (), ()),
@@ -113,3 +114,36 @@ def test_misheard_forms_are_matched_but_never_bias_the_recognizer():
     prompted = {term.lower() for term in DEFAULT_KEYTERMS.prompt_terms()}
     assert DEFAULT_KEYTERMS.understand("quiero un acfe").wanted == ("café",)
     assert not prompted & {"acfe", "ambre", "hambe", "hungry", "coffee"}
+
+
+@pytest.mark.parametrize(
+    ("text", "wanted"),
+    [
+        ("quiero un helado", ("helado",)),
+        ("unas papas fritas", ("papas",)),
+        ("las papas", ("papas",)),
+        ("un chocolatito", ("chocolate",)),
+        ("algo dulce", ("dulce",)),
+        ("un juguito de naranja", ("jugo",)),
+        ("una chocolatada bien fría", ("leche",)),
+        ("una bebida", ("bebida",)),
+        ("algo isotónico", ("isotónica",)),
+        ("I want ice cream", ("helado",)),
+        # The other meaning, in Chilean Spanish.
+        ("está helado afuera", ()),
+        ("qué helado hace", ()),
+        ("mis papás vienen a buscarme", ()),
+        ("los papás del equipo", ()),
+        ("qué dulce eres", ()),
+        ("es muy dulce", ()),
+        ("no quiero helado", ()),
+    ],
+)
+def test_chilean_store_words_and_their_other_meanings(text, wanted):
+    assert DEFAULT_KEYTERMS.understand(text).wanted == wanted
+
+
+def test_the_recognizer_prompt_still_covers_every_intent_within_scribe_limits():
+    terms = DEFAULT_KEYTERMS.prompt_terms()
+    assert set(DEFAULT_KEYTERMS.variants) <= set(terms)
+    assert len(terms) <= 50 and sum(map(len, terms)) <= 1000

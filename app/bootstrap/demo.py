@@ -512,6 +512,13 @@ def register_demo(
         "cerveza": beer,
     }
     keyterm_catalog = {term: cue_segments.get(term, seg) for term, seg in keyterm_catalog.items()}
+    # A market may also give a segment to a keyterm the base map leaves unheard ("sed",
+    # "helado", "jugo"...): only canonical keyterms the agent can report count.
+    keyterm_catalog |= {
+        term: segment
+        for term, segment in cue_segments.items()
+        if term in DEFAULT_KEYTERMS.variants and term not in keyterm_catalog
+    }
     # Creative generation (docs/creative-generation.md): targeted stock copy on the hot
     # path, guarded AI copy as a warm upgrade when a copywriter is configured.
     catalog = CreativeCatalog(

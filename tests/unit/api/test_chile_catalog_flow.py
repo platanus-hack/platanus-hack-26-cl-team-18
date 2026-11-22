@@ -89,8 +89,10 @@ def test_the_main_aisles_have_a_rival_so_vcg_prices_are_real() -> None:
 
 
 def test_alto_en_products_are_never_shown_to_a_group_with_a_child() -> None:
-    # Ley 20.606: no advertising of "ALTO EN" foods to children under 14.
+    # Ley 20.606: no advertising of "ALTO EN" foods to children under 14; Ley 21.363
+    # treats an alcohol brand's 0.0 line as alcohol advertising (Guinness 0.0).
     assert {slug for slug, b in BRANDS.items() if b.age_restricted} == {
+        "guinness-0-0",
         "lays",
         "marco-polo",
         "super-8",
@@ -102,8 +104,9 @@ def test_alto_en_products_are_never_shown_to_a_group_with_a_child() -> None:
         "savory",
         "bresler",
     }
-    # No alcohol at a gas station (Ley 21.363).
+    # No alcohol at a gas station (Ley 21.363): the only beer brand sells its 0.0.
     assert "alcohol" not in {brand.category for brand in CHILE.brands}
+    assert {b.slug for b in CHILE.brands if b.category.startswith("beer")} == {"guinness-0-0"}
 
 
 def test_a_brand_whose_name_contains_a_known_brand_is_not_its_own_competitor() -> None:
@@ -295,3 +298,49 @@ def test_a_craving_gets_its_own_hook_not_generic_hunger(
     assert response.status_code == 200
     teaser = next(s for s in response.json()["spec"]["stages"] if s["name"] == "teaser")
     assert teaser["copy_text"] == hook
+
+
+def test_completo_and_a_beer_at_night_airs_guinness_zero_and_a_child_swaps_it_out(
+    tmp_path,
+) -> None:
+    # The team's wow beat: Dominó's completo + Guinness 0.0 for adults; a child steps
+    # into frame and the age-restricted 0.0 beer is gone on the next decision.
+    clock = FixedClock(datetime(2026, 11, 21, 23, tzinfo=UTC))  # 8 p.m. at the venue
+    settings = AppSettings(
+        app_env="test", demo_simulator=True, media_dir=tmp_path, demo_catalog="chile"
+    )
+    container = build_container(settings, clock=clock)
+    objects = [
+        DetectedObject(label="hot dog", score=1),
+        DetectedObject(label="beer bottle", score=1),
+    ]
+    with (
+        TestClient(create_app(container=container)) as client,
+        client.websocket_connect("/ws/screen/demo-01") as player,
+        client.websocket_connect("/ws/agent") as agent,
+    ):
+        player.receive_json()
+        agent.send_text(_snapshot(1, clock.now_utc(), objects).model_dump_json())
+        adults = _creative(player)
+        assert {slot.brand_name for slot in adults.spec.slots} == {"Dominó", "Guinness 0.0"}
+        assert adults.spec.offer is not None
+        assert adults.spec.offer.label == "Completo + Guinness 0.0 para 2"
+        teaser = next(s.copy_text for s in adults.spec.stages if s.name == "teaser")
+        assert "cero alcohol" in teaser
+
+        now = clock.advance(timedelta(seconds=5))
+        child = _snapshot(2, now, objects).model_copy(
+            update={"minor_likely": MinorLikely(value=True, confidence=1)}
+        )
+        agent.send_text(child.model_dump_json())
+        swapped = _creative(player)
+        assert "Guinness 0.0" not in {slot.brand_name for slot in swapped.spec.slots}
+
+
+def test_a_zero_alcohol_line_gets_its_brand_initial_not_the_abv() -> None:
+    import base64
+
+    guinness = BRANDS["guinness-0-0"]
+    logo = _brand_logo(guinness.slug, guinness.name, guinness.color)
+    svg = base64.b64decode(logo.removeprefix("data:image/svg+xml;base64,")).decode()
+    assert ">G</text>" in svg

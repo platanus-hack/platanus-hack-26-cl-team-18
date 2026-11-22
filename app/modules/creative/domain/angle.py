@@ -68,7 +68,7 @@ ANGLE_CATEGORIES: Mapping[Angle, frozenset[str]] = {
     Angle.POST_WORKOUT: frozenset(
         {"sports_goods", "energy_drink", "sports_drink", "coffee", "water"}
     ),
-    Angle.SOCIAL: frozenset({"alcohol"}),
+    Angle.SOCIAL: frozenset({"alcohol", "beer_zero"}),
 }
 
 # The lead category's natural angle when no stronger signal exists.
@@ -88,6 +88,7 @@ CATEGORY_ANGLE: Mapping[str, Angle] = {
     "energy_drink": Angle.ENERGY,
     "sports_goods": Angle.ENERGY,
     "alcohol": Angle.SOCIAL,
+    "beer_zero": Angle.SOCIAL,  # a 0.0 beer is still an age-restricted brand
 }
 
 SPEECH_INTENT_MIN = Decimal("0.5")

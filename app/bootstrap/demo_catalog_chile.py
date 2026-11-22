@@ -5,9 +5,10 @@ VCG prices are real, mutual partner baskets with offers sized to the group, and 
 offer per brand. Baskets follow real distribution lines where we know them (CCU sells
 Red Bull, Pepsi and Cachantun; the Coca-Cola bottlers sell Coca-Cola, Monster and
 Benedictino). No beer, spirits or Loto: Chile bans alcohol sales at gas stations
-(Ley 21.363), so the minor-safety beat here blocks the "ALTO EN" products instead
-(Ley 20.606 bans their advertising to children under 14): snacks, candy, flavoured
-milk, nectars and ice cream. Energy and sports drinks stay open so the hero basket
+(Ley 21.363). The one beer brand is Guinness 0.0, a non-alcoholic beer the shop can
+sell; Ley 21.363 still treats an alcohol brand's 0.0 line as alcohol advertising, so it
+is age-restricted like the "ALTO EN" products (Ley 20.606 bans their advertising to
+children under 14): snacks, candy, flavoured milk, nectars and ice cream. Energy and sports drinks stay open so the hero basket
 survives a false minor flag; a stricter reading would restrict them too.
 
 These are real trademarks used for a local demo without affiliation; the fictional
@@ -25,6 +26,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from app.bootstrap.demo_catalog import (
+    BEER,
     CANDY,
     CHOCOLATE_CANDY,
     COFFEE,
@@ -35,6 +37,7 @@ from app.bootstrap.demo_catalog import (
     ICE_CREAM,
     JUICES,
     MILK,
+    NON_ALCOHOLIC,
     PASTRY,
     READY_TO_DRINK_COFFEE,
     SALTY_SNACKS,
@@ -61,6 +64,9 @@ BRANDS: tuple[DemoBrand, ...] = (
         tagline="Score. Máxima potencia.",  # its own site: "Bebida Energética con Máxima Potencia"
         voice=("directo", "chileno", "sin adornos"),
         product="energy_drink",
+        # Exact match only: bidding 8 on fitness, affinity (fitness <-> water, <-> sports
+        # drinks) would put "Pilas bajas" on every thirsty shopper and water bottle.
+        broad_match=False,
     ),
     DemoBrand(
         slug="red-bull",
@@ -353,6 +359,63 @@ BRANDS: tuple[DemoBrand, ...] = (
         voice=("veraniego", "cercano"),
         product="ice_cream",
     ),
+    # --- added from the team's campaign references (assets/campaigns/photos/SOURCES.md)
+    # Starbucks fights Juan Valdez for the coffee slot: the cold, afternoon cup.
+    DemoBrand(
+        slug="starbucks",
+        name="Starbucks",
+        category="coffee",
+        age_restricted=False,
+        segments=(COFFEE, READY_TO_DRINK_COFFEE),
+        rate_clp_per_as="4.8",
+        color="#00704a",
+        stock_copy="Starbucks · Frappuccino helado, preparado al momento.",
+        voice=("cálido", "cercano"),
+        product="coffee",
+    ),
+    # Dominó, the Santiago fuente de soda (since 1952), fights Pronto for the completo.
+    DemoBrand(
+        slug="domino",
+        name="Dominó",
+        category="pastry",  # the counter-food aisle: Pronto's rival, never its partner
+        age_restricted=False,
+        segments=(FAST_FOOD,),
+        rate_clp_per_as="4.6",
+        color="#d52b1e",
+        stock_copy="Dominó · El completo de fuente de soda, de siempre.",
+        tagline="Dominó. La fuente de soda de Chile.",  # printed on its own cups
+        voice=("cercano", "chileno"),
+        broad_match=False,  # the completo + bebida combo (DemoBrand.broad_match)
+        product="pastry",
+    ),
+    # Vital de Chanqueahue (CCU), mineral water: Cachantun's and Benedictino's rival.
+    DemoBrand(
+        slug="vital",
+        name="Vital",
+        category="water",
+        age_restricted=False,
+        segments=(WATER,),
+        rate_clp_per_as="2.9",
+        color="#1f3c88",
+        stock_copy="Vital · Agua mineral de Chanqueahue, bien fría.",
+        voice=("fresco", "simple"),
+        product="water",
+    ),
+    # Non-alcoholic, so the shop may sell it; an alcohol brand's 0.0 line is still
+    # alcohol advertising (Ley 21.363): age-restricted, never shown with a minor.
+    DemoBrand(
+        slug="guinness-0-0",
+        name="Guinness 0.0",
+        category="beer_zero",
+        age_restricted=True,
+        segments=(BEER, NON_ALCOHOLIC),
+        rate_clp_per_as="5.5",
+        color="#1a1a1a",
+        stock_copy="Guinness 0.0 · Toda la cremosidad, cero alcohol.",
+        tagline="Lo bueno se hace esperar.",  # its "Good things come to those who wait"
+        voice=("sereno", "nocturno"),
+        product="beer_zero",
+    ),
 )
 
 
@@ -531,6 +594,34 @@ BASKETS: tuple[DemoBasket, ...] = (
         slugs=frozenset({"ambrosoli", "juan-valdez"}),
         names="Juan Valdez + Ambrosoli",
         tiers=_sized(3190, 5790, 8290, 10690),
+    ),
+    # The team's references: Dominó's completo with a bebida or a Guinness 0.0 (the fuente
+    # de soda classic, completo + schop, made legal for a gas station), a Frappuccino
+    # with a medialuna, and a picnic: Vital and chips.
+    DemoBasket(
+        slugs=frozenset({"domino", "coca-cola"}),
+        names="Dominó + Coca-Cola",
+        tiers=(
+            (1, "Completo Dominó + bebida", "", 4990),
+            (2, "Dúo Dominó", " x2", 9590),
+            (3, "Trío Dominó", " x3", 13990),
+            (4, "Pack x4 Dominó", " x4", 18290),
+        ),
+    ),
+    DemoBasket(
+        slugs=frozenset({"domino", "guinness-0-0"}),
+        names="Dominó + Guinness 0.0",
+        tiers=_pack("Completo + Guinness 0.0", (5990, 11490, 16790, 21990)),
+    ),
+    DemoBasket(
+        slugs=frozenset({"starbucks", "pronto-copec"}),
+        names="Starbucks + Pronto Copec",
+        tiers=_pack("Frappuccino + medialuna", (5490, 10490, 15290, 19990)),
+    ),
+    DemoBasket(
+        slugs=frozenset({"vital", "lays"}),
+        names="Vital + Lay's",
+        tiers=_pack("Pack picnic", (3690, 6890, 9790, 12490)),
     ),
     # Solo offers: every brand sells alone too, sized to the group.
     DemoBasket(
@@ -715,6 +806,38 @@ BASKETS: tuple[DemoBasket, ...] = (
             (1390, 2590, 3690, 4690),
         ),
     ),
+    DemoBasket(
+        slugs=frozenset({"starbucks"}),
+        names="Starbucks",
+        tiers=_solo(
+            ("Frappuccino Tall", "Dos Frappuccino", "Tres Frappuccino", "Cuatro Frappuccino"),
+            (4490, 8490, 12290, 15990),
+        ),
+    ),
+    DemoBasket(
+        slugs=frozenset({"domino"}),
+        names="Dominó",
+        tiers=_solo(
+            ("Completo italiano Dominó", "Dos completos", "Tres completos", "Cuatro completos"),
+            (3890, 7490, 10990, 14290),
+        ),
+    ),
+    DemoBasket(
+        slugs=frozenset({"vital"}),
+        names="Vital",
+        tiers=_solo(
+            ("Vital 1,6 L", "Dos Vital", "Tres Vital", "Cuatro Vital"),
+            (1290, 2390, 3390, 4290),
+        ),
+    ),
+    DemoBasket(
+        slugs=frozenset({"guinness-0-0"}),
+        names="Guinness 0.0",
+        tiers=_solo(
+            ("Guinness 0.0 440 ml", "Dos Guinness 0.0", "Tres Guinness 0.0", "Cuatro Guinness 0.0"),
+            (2190, 3990, 5690, 7290),
+        ),
+    ),
 )
 
 CHILE = Catalog(
@@ -731,7 +854,13 @@ CHILE = Catalog(
         ("powerade", SPORTS_DRINKS),
         ("gatorade", SPORTS_DRINKS),
     ),
-    segment_angles=((WATER, "energy"), (FITNESS, "energy"), (SPORTS_DRINKS, "energy")),
+    segment_angles=(
+        (WATER, "energy"),
+        (FITNESS, "energy"),
+        (SPORTS_DRINKS, "energy"),
+        # "Una sin alcohol": the Guinness 0.0 moment, with its own "cero alcohol" hook.
+        (NON_ALCOHOLIC, "social"),
+    ),
     # Every brand airs imagery: its own campaign photos, else its category's scene.
     category_scenes=True,
     # At a highway shop a can or a bottle means a tired driver or a thirsty one, not
@@ -740,6 +869,17 @@ CHILE = Catalog(
         ("energy drink can", ENERGY_DRINKS),
         ("bottle", WATER),
         ("energía", ENERGY_DRINKS),
+        # What a shopper says at the counter (app/contract/speech_matching.py keyterms).
+        ("sed", WATER),
+        ("helado", ICE_CREAM),
+        ("papas", SALTY_SNACKS),
+        ("chocolate", CHOCOLATE_CANDY),
+        ("dulce", CANDY),
+        ("jugo", JUICES),
+        ("leche", MILK),
+        ("bebida", SOFT_DRINKS),
+        ("isotónica", SPORTS_DRINKS),
+        ("sin alcohol", NON_ALCOHOLIC),
     ),
     daypart_boosts=(
         # Highway dayparts (venue local time, creative.domain.brief.daypart_for_hour):
@@ -802,6 +942,10 @@ MARKET_SHAPE: dict[str, tuple[int, str | None]] = {
     "super-8": (15_000, "2.2"),
     "ambrosoli": (12_000, "2"),
     "benedictino": (4_000, None),  # small test budget: paces out during the demo
+    "domino": (110_000, "3"),  # Pronto's rival for the completo: the counter bidding war
+    "starbucks": (70_000, "3.2"),
+    "guinness-0-0": (50_000, "3.5"),
+    "vital": (30_000, "2"),
 }
 
 CHILE = replace(

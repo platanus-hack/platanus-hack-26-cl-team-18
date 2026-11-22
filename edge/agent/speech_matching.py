@@ -55,6 +55,16 @@ _OTHER_SENSE: dict[str, tuple[frozenset[str], frozenset[str], int]] = {
         frozenset({"con", "es", "era", "de"}),
         1,
     ),
+    # "está helado" / "qué helado" is freezing, not an ice cream.
+    "helado": (
+        frozenset({"esta", "estaba", "estoy", "estamos", "muy", "que", "hace", "ta", "tan"}),
+        frozenset(),
+        0,
+    ),
+    # Accents fold "papás" (parents) into "papas": "mis papás", "los papás".
+    "papas": (frozenset({"mis", "tus", "sus", "los", "nuestros"}), frozenset(), 0),
+    # "qué dulce" / "es muy dulce" describes someone, it is not a craving.
+    "dulce": (frozenset({"que", "muy", "es", "tan", "mas", "eres", "esta"}), frozenset(), 0),
     # A hackathon trains models, not legs.
     "entrenar": (frozenset(), _MODEL_WORDS, 3),
     "entreno": (frozenset(), _MODEL_WORDS, 3),
@@ -292,11 +302,29 @@ DEFAULT_KEYTERMS = KeytermCatalog.from_mapping(
         "sed": ("tengo sed", "agua", "algo helado"),
         "cerveza": ("cervezas", "cervecita", "cervecitas", "chela", "chelas", "schop", "shop"),
         "energía": ("cansado", "cansada", "sueño", "energético", "energizante"),
+        # The rest of a Chilean convenience store (DEMO_CATALOG=chile maps each to its
+        # IAB segment; a catalog without that aisle hears them and bids nothing).
+        "helado": ("helados", "heladito", "un helado", "conito"),
+        "papas": ("papitas", "papas fritas", "unas papas", "chips"),
+        "chocolate": ("chocolates", "chocolatito", "un chocolate"),
+        "dulce": ("dulces", "dulcecito", "algo dulce", "caramelo", "caramelos"),
+        "jugo": ("jugos", "juguito", "néctar", "jugo de naranja"),
+        "leche": ("lechita", "chocolatada", "leche con chocolate"),
+        "bebida": ("bebidas", "bebidita", "gaseosa", "una bebida"),
+        "isotónica": ("isotónico", "isotónicas", "isotónicos", "hidratante"),
+        # A beer without alcohol: "cerveza" itself is rejected in that clause (above).
+        "sin alcohol": ("cero alcohol", "0.0", "libre de alcohol"),
     },
     misheard={
         "hambre": ("ambre", "hambe", "hanbre", "hungry", "starving"),
         "café": ("acfe", "coffee"),
         "sed": ("thirsty",),
         "energía": ("tired", "sleepy"),
+        "helado": ("ice cream",),
+        "jugo": ("juice",),
+        "leche": ("milk",),
+        "dulce": ("candy",),
+        "bebida": ("soda",),
+        "sin alcohol": ("alcohol free", "non alcoholic"),
     },
 )

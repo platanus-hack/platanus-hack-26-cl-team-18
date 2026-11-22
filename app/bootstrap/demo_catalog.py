@@ -442,11 +442,14 @@ def catalog_named(name: str) -> Catalog:
 
 
 def _initials(name: str) -> str:
-    """'Marco Polo' → 'MP', 'Super 8' → 'S8', 'Andina del Valle' → 'AV', 'Savory' → 'S'."""
+    """'Marco Polo' → 'MP', 'Super 8' → 'S8', 'Andina del Valle' → 'AV', 'Savory' → 'S',
+    'Guinness 0.0' → 'G' (a "0.0" line is a variant, not a word of the name)."""
     words = [
         w
         for w in name.replace("-", " ").split()
-        if w[:1].isalnum() and w.lower() not in {"y", "de", "del", "la", "el"}
+        if w[:1].isalnum()
+        and w.lower() not in {"y", "de", "del", "la", "el"}
+        and not (w.replace(".", "").isdigit() and "." in w)
     ]
     return "".join(w[0] for w in words[:2]).upper() or name[:1].upper()
 

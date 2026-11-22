@@ -45,7 +45,8 @@
       "video": "cl-monster-mega",
       "alternates": [
         "cl-monster-lineup",
-        "cl-ruta-5"
+        "cl-ruta-5",
+        "cl-monster-hielo"
       ]
     },
     "juan-valdez": {
@@ -292,6 +293,60 @@
       "video": "cl-chocolate",
       "alternates": [
         "cl-dulces"
+      ]
+    },
+    "starbucks": {
+      "photo": "cl-starbucks-frappuccino",
+      "video": "cl-starbucks-frappuccino",
+      "alternates": [
+        "cl-cappuccino"
+      ]
+    },
+    "domino": {
+      "photo": "cl-domino-completos",
+      "video": "cl-domino-completos",
+      "alternates": [
+        "cl-completo-palta"
+      ]
+    },
+    "vital": {
+      "photo": "cl-vital-picnic",
+      "video": "cl-vital-picnic",
+      "alternates": [
+        "cl-agua"
+      ]
+    },
+    "guinness-0-0": {
+      "photo": "cl-guinness-pint",
+      "video": "cl-guinness-pint",
+      "alternates": []
+    },
+    "coca-cola+domino": {
+      "photo": "cl-domino-completos",
+      "video": "cl-domino-completos",
+      "alternates": [
+        "cl-bebida-noche"
+      ]
+    },
+    "domino+guinness-0-0": {
+      "photo": "cl-domino-completos",
+      "video": "cl-domino-completos",
+      "alternates": [
+        "cl-guinness-pint"
+      ]
+    },
+    "pronto-copec+starbucks": {
+      "photo": "cl-starbucks-frappuccino",
+      "video": "cl-starbucks-frappuccino",
+      "alternates": [
+        "cl-medialunas"
+      ]
+    },
+    "lays+vital": {
+      "photo": "cl-vital-picnic",
+      "video": "cl-vital-picnic",
+      "alternates": [
+        "cl-papas-rusticas"
       ]
     }
   }

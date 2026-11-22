@@ -14,6 +14,13 @@ Chile catalog (`DEMO_CATALOG=chile`), built by `scripts/build_chile_photos.py`:
   derivatives (the crops) stay under CC BY-SA. They air in rotation and as
   category scenes (manifest `alternates`, `category:<name>`).
 
+Team-supplied campaign references (WhatsApp, 2026-11-22), framed by the same helpers
+(16:9 crop or pack shot) and shown only for their own brand: real product photography
+with the brand's own packaging, never edited or redrawn (CLAUDE.md invariant 4).
+`cl-domino-completos` (Dominó), `cl-starbucks-frappuccino` (Starbucks),
+`cl-guinness-pint` (Guinness 0.0), `cl-monster-hielo` (Monster) and `cl-vital-picnic`
+(Vital). Trademarks of their owners, used for a hackathon demo without affiliation.
+
 | File | Source | Author | License | Changes |
 |---|---|---|---|---|
 | `cl-completo-palta.webp` | [Completo italiano - Flickr - Bárb Santelices.jpg](https://commons.wikimedia.org/wiki/File:Completo_italiano_-_Flickr_-_B%C3%A1rb_Santelices.jpg) | Bárb Santelices. from Chile | CC0 | cropped to 16:9 |

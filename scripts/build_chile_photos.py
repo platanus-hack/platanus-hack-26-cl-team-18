@@ -161,6 +161,17 @@ def _get(url: str, *, attempts: int = 5) -> io.BytesIO:
     raise AssertionError("unreachable")
 
 
+# Kept verbatim in SOURCES.md on every rebuild (the files are not downloaded here).
+TEAM_SUPPLIED = (
+    "Team-supplied campaign references (WhatsApp, 2026-11-22), framed by the same helpers\n"
+    "(16:9 crop or pack shot) and shown only for their own brand: real product photography\n"
+    "with the brand's own packaging, never edited or redrawn (CLAUDE.md invariant 4).\n"
+    "`cl-domino-completos` (Dominó), `cl-starbucks-frappuccino` (Starbucks),\n"
+    "`cl-guinness-pint` (Guinness 0.0), `cl-monster-hielo` (Monster) and `cl-vital-picnic`\n"
+    "(Vital). Trademarks of their owners, used for a hackathon demo without affiliation.\n\n"
+)
+
+
 def _strip_html(value: str) -> str:
     return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", value)).strip()
 
@@ -306,7 +317,8 @@ def main() -> None:
         "  drink and road only: no recognisable faces, no third-party marks. CC BY-SA\n"
         "  derivatives (the crops) stay under CC BY-SA. They air in rotation and as\n"
         "  category scenes (manifest `alternates`, `category:<name>`).\n\n"
-        "| File | Source | Author | License | Changes |\n|---|---|---|---|---|\n"
+        + TEAM_SUPPLIED
+        + "| File | Source | Author | License | Changes |\n|---|---|---|---|---|\n"
         + "\n".join(credits)
         + "\n"
     )

@@ -99,6 +99,10 @@ SEEN: dict[str, str | None] = {
     "andina-del-valle": "juice",
     "savory": "ice cream",
     "bresler": "ice cream",
+    "starbucks": "cup",
+    "domino": "hot dog",
+    "vital": "bottle",
+    "guinness-0-0": "beer bottle",
 }
 
 # Hour (UTC; Santiago is UTC-3) each basket's story happens at. Default: lunch.
@@ -117,6 +121,9 @@ HOUR = {
     frozenset({"lays", "pepsi"}): 23,  # carrete
     frozenset({"juan-valdez", "super-8"}): 23,
     frozenset({"ambrosoli", "juan-valdez"}): 23,
+    frozenset({"domino", "guinness-0-0"}): 23,  # completo + 0.0 after work
+    frozenset({"lays", "vital"}): 19,  # picnic
+    frozenset({"pronto-copec", "starbucks"}): 19,  # once
 }
 # A completo is a hot dog, not a croissant.
 HOT_DOG_BASKETS = {

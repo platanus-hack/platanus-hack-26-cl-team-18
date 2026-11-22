@@ -150,7 +150,7 @@ def teaser_for(brief: CreativeBrief, angle: Angle) -> str:
             ),
             None,
         )
-        if angle in (Angle.HUNGER, Angle.ENERGY)
+        if angle in (Angle.HUNGER, Angle.ENERGY, Angle.SOCIAL)
         else None
     )
     by_hour = _DAYPART_TEASERS.get((angle, brief.daypart)) if brief.daypart else None
@@ -183,6 +183,10 @@ _CATEGORY_TEASERS: dict[str, tuple[str, str]] = {
     "candy": ("Un antojo dulce antes de seguir.", "Un antojo dulce para los {group}."),
     "dairy": ("Antojo de chocolate frío.", "Antojo de chocolate frío para los {group}."),
     "juice": ("Algo rico antes de partir.", "Algo rico para los {group} antes de partir."),
+    # Thirst is not "pilas bajas": water and sports drinks answer it (energy keyword kept).
+    "water": ("Sed de ruta. Recarga con agua fría.", "Sed de ruta. Recarga para los {group}."),
+    "sports_drink": ("Hidrátate y recarga energía.", "Hidratación y recarga para los {group}."),
+    "beer_zero": ("El panorama, con cero alcohol.", "Los {group}, el panorama con cero alcohol."),
 }
 
 
