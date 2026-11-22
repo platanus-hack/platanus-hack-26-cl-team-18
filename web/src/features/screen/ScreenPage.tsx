@@ -11,6 +11,7 @@ import { frontCreative, initialPlayerState, playerReducer, type Playable } from 
 import { preloadCreative } from "./preload";
 import { latestAttention, toAttentionSample } from "./stages";
 import { VoicePlayer } from "./voice";
+import { holdScreenAwake } from "./wake-lock";
 
 const CROSSFADE_MS = 250; // matches --duration-crossfade
 
@@ -127,6 +128,9 @@ function ScreenPlayer() {
             socket.stop();
         };
     }, [socket]);
+
+    // The TV must not sleep through a house ad or a photo creative (no video to hold it).
+    useEffect(() => holdScreenAwake(), []);
 
     // Preload the back layer; a newer creative aborts the previous preload.
     const preloading = state.phase.kind === "preloading" ? state.phase : null;
@@ -280,13 +284,9 @@ function ScreenPlayer() {
                 );
             })}
             {micOpen && (
-                <div
-                    className="absolute bottom-[3vh] left-[3vh] flex items-center gap-2 rounded-full bg-ink px-4 py-2 text-compact font-medium text-white shadow-overlay"
-                    style={{ zIndex: "var(--z-overlay)" }}
-                    role="status"
-                    data-listening="on"
-                >
-                    <span className="size-2 rounded-full bg-danger" aria-hidden />
+                // Title-safe and sized to the glass (creative.css): legible on 4K, never overscanned.
+                <div className="screen-mic-indicator" role="status" data-listening="on">
+                    <span className="screen-mic-indicator-dot" aria-hidden />
                     Micrófono activo · solo temas, nada se graba
                 </div>
             )}

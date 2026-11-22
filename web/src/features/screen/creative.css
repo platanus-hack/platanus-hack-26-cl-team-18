@@ -13,9 +13,14 @@
  * - light (day): warm Lino field, Tinta type, the product photo as a right-hand
  *   panel with the figure emerging from behind it;
  * - dark (night): the photo full-bleed under a shade, light type on Tinta.
+ *
+ * Type and marks size in `--u`: 1cqw on a 16:9 canvas, held to the height on wider ones
+ * (21:9) and free to grow on 4K, so every TV shows the same composition. Never cap a size in
+ * rem: a 4K kiosk at 100 % scaling would get a 1080p-sized ad in a quarter of the glass.
  */
 .creative-canvas {
     container-type: size;
+    --u: min(1cqw, 1.7778cqh);
     --ad-field: #f3efe8; /* Lino */
     --ad-ink: var(--palette-ink-950);
     --ad-muted: #6b645b; /* 5.1:1 on Lino */
@@ -125,7 +130,7 @@
 /* One line per stage: the display treatment, regular weight, tight. */
 .creative-hook {
     font-family: var(--font-display);
-    font-size: clamp(1.25rem, 6.8cqw, 9rem);
+    font-size: max(1.25rem, calc(6.8 * var(--u)));
     font-weight: 500;
     line-height: 0.98;
     letter-spacing: -0.045em;
@@ -133,7 +138,7 @@
 }
 .creative-offer-line {
     font-family: var(--font-display);
-    font-size: clamp(1rem, 3.1cqw, 4rem);
+    font-size: max(1rem, calc(3.1 * var(--u)));
     font-weight: 500;
     line-height: 1.08;
     letter-spacing: -0.03em;
@@ -145,19 +150,19 @@
     display: inline-flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 1.4cqw;
+    gap: calc(1.4 * var(--u));
     font-variant-numeric: tabular-nums;
 }
 .creative-price-figure {
     display: inline-flex;
     align-items: flex-start;
-    font-size: 4.4cqw;
+    font-size: calc(4.4 * var(--u));
     font-weight: 600;
     line-height: 0.88;
     letter-spacing: -0.05em;
 }
 .creative-price.is-hero .creative-price-figure {
-    font-size: clamp(2rem, 13cqw, 15rem);
+    font-size: max(2rem, calc(13 * var(--u)));
     letter-spacing: -0.06em;
 }
 .creative-price-currency {
@@ -169,17 +174,17 @@
 }
 .creative-price-party {
     font-family: var(--font-label);
-    font-size: 1.3cqw;
+    font-size: calc(1.3 * var(--u));
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.1em;
-    padding: 0.55cqw 1.1cqw;
+    padding: calc(0.55 * var(--u)) calc(1.1 * var(--u));
     border-radius: 999px;
     background: var(--creative-accent);
     color: var(--palette-ink-950);
 }
 .creative-price.is-hero .creative-price-party {
-    font-size: 1.6cqw;
+    font-size: calc(1.6 * var(--u));
 }
 
 /* ------------------------------------------------------------------ baseline */
@@ -187,41 +192,41 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 1.6cqh 3.2cqw;
+    gap: 1.6cqh calc(3.2 * var(--u));
     max-width: calc(var(--ad-column) - 2 * var(--creative-gutter));
 }
 .creative-brands {
     display: flex;
     align-items: center;
-    gap: 1.2cqw;
+    gap: calc(1.2 * var(--u));
 }
 .creative-brand {
     display: inline-flex;
     align-items: center;
-    gap: 0.8cqw;
-    font-size: 1.8cqw;
+    gap: calc(0.8 * var(--u));
+    font-size: calc(1.8 * var(--u));
     font-weight: 600;
     letter-spacing: -0.025em;
     white-space: nowrap;
 }
 .creative-brand-logo {
-    width: 3.4cqw;
-    height: 3.4cqw;
+    width: calc(3.4 * var(--u));
+    height: calc(3.4 * var(--u));
     object-fit: contain;
 }
 .creative-times {
     color: var(--ad-muted);
-    font-size: 1.5cqw;
+    font-size: calc(1.5 * var(--u));
 }
 .creative-meta {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.8cqh 2.4cqw;
+    gap: 0.8cqh calc(2.4 * var(--u));
 }
 .creative-label {
     font-family: var(--font-label);
-    font-size: 1.3cqw;
+    font-size: calc(1.3 * var(--u));
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.1em;
@@ -242,7 +247,7 @@
 }
 .creative-close-line {
     font-family: var(--font-display);
-    font-size: clamp(1.25rem, 5.6cqw, 7rem);
+    font-size: max(1.25rem, calc(5.6 * var(--u)));
     font-weight: 500;
     line-height: 1;
     letter-spacing: -0.045em;
@@ -250,15 +255,15 @@
 }
 .creative-code {
     font-family: var(--font-label);
-    font-size: 2cqw;
+    font-size: calc(2 * var(--u));
     font-weight: 500;
     letter-spacing: 0.18em;
-    padding: 0.6cqw 1cqw;
+    padding: calc(0.6 * var(--u)) calc(1 * var(--u));
     border: 1px solid var(--ad-rule);
     border-radius: 0.25rem;
 }
 .creative-close-note {
-    font-size: 1.3cqw;
+    font-size: calc(1.3 * var(--u));
     color: var(--ad-muted);
 }
 .creative-qr {
@@ -273,7 +278,7 @@
     padding: 1.8cqh;
     background: var(--palette-ink-50);
     border-radius: 0.25rem;
-    box-shadow: 0.5cqw 0.5cqw 0 var(--creative-accent);
+    box-shadow: calc(0.5 * var(--u)) calc(0.5 * var(--u)) 0 var(--creative-accent);
 }
 .creative-canvas[data-theme="dark"] .creative-qr {
     right: calc(var(--creative-gutter) * 1.4);
@@ -285,7 +290,7 @@
 }
 .creative-qr-caption {
     font-family: var(--font-label);
-    font-size: 1.1cqw;
+    font-size: calc(1.1 * var(--u));
     font-weight: 500;
     letter-spacing: 0.2em;
     text-transform: uppercase;
@@ -309,16 +314,16 @@
 .creative-approach {
     display: none;
     font-family: var(--font-label);
-    font-size: 1.3cqw;
+    font-size: calc(1.3 * var(--u));
     font-weight: 500;
     letter-spacing: 0.1em;
     text-transform: uppercase;
 }
 .creative-canvas[data-distance="far"] .creative-hook {
-    font-size: clamp(1.25rem, 8.6cqw, 11rem);
+    font-size: max(1.25rem, calc(8.6 * var(--u)));
 }
 .creative-canvas[data-distance="far"] .creative-price.is-hero .creative-price-figure {
-    font-size: clamp(2rem, 15cqw, 17rem);
+    font-size: max(2rem, calc(15 * var(--u)));
 }
 .creative-canvas[data-distance="far"] .creative-label:not(.creative-meta-price),
 .creative-canvas[data-distance="far"] .creative-close-note,
@@ -332,7 +337,7 @@
     height: 52cqh;
 }
 .creative-canvas[data-distance="near"] .creative-code {
-    font-size: 2.6cqw;
+    font-size: calc(2.6 * var(--u));
 }
 
 /*
@@ -345,12 +350,12 @@
     transition: font-size var(--duration-crossfade) ease-out;
 }
 .creative-canvas[data-distance="far"] .creative-meta-price {
-    font-size: clamp(1.25rem, 5.2cqw, 6rem);
+    font-size: max(1.25rem, calc(5.2 * var(--u)));
     font-weight: 750;
     letter-spacing: -0.02em;
 }
 .creative-canvas[data-distance="mid"] .creative-meta-price {
-    font-size: clamp(1rem, 2.6cqw, 3rem);
+    font-size: max(1rem, calc(2.6 * var(--u)));
     font-weight: 700;
 }
 .creative-canvas[data-distance="far"] .creative-offer-line {
@@ -363,24 +368,111 @@
  * long line. The story column may shrink; it never pushes the baseline off screen.
  */
 .creative-canvas .creative-hook[data-fit="long"] {
-    font-size: clamp(1.125rem, 5cqw, 6.5rem);
+    font-size: max(1.125rem, calc(5 * var(--u)));
 }
 .creative-canvas .creative-hook[data-fit="longest"] {
-    font-size: clamp(1rem, 3.8cqw, 5rem);
+    font-size: max(1rem, calc(3.8 * var(--u)));
     line-height: 1.04;
 }
 .creative-canvas .creative-close-line[data-fit="long"] {
-    font-size: clamp(1.125rem, 4.4cqw, 5.5rem);
+    font-size: max(1.125rem, calc(4.4 * var(--u)));
 }
 .creative-canvas .creative-close-line[data-fit="longest"] {
-    font-size: clamp(1rem, 3.4cqw, 4.5rem);
+    font-size: max(1rem, calc(3.4 * var(--u)));
     line-height: 1.04;
 }
 .creative-story {
     min-height: 0;
     overflow: clip;
-    overflow-clip-margin: 0.25em;
+    /* Room for descenders (g, p, y) under the tight display line-height. In canvas units, not
+       em: the story's own font is the small body size, and an em margin sliced the g's tail.
+       Stays under the composition gap (4cqh), so a clipped line never touches the baseline. */
+    overflow-clip-margin: 3cqh;
 }
 .creative-baseline {
     flex-shrink: 0;
+}
+
+/*
+ * Portrait (a vertical totem): one column. Copy on top, the photo as a middle band with the QR
+ * centred on it, the brand lockup on the bottom baseline. Sizes follow the width, larger than
+ * on a TV, since the column is the full width.
+ */
+@container (aspect-ratio < 1) {
+    .creative-canvas > * {
+        --u: 1.8cqw;
+        --ad-column: 100cqw;
+    }
+    .creative-composition {
+        padding: 6cqh var(--creative-gutter) 4.5cqh;
+    }
+    .creative-story {
+        max-height: 38cqh;
+    }
+    .creative-canvas[data-theme="light"] .creative-visual {
+        inset: 46cqh 0 14cqh 0;
+    }
+    .creative-canvas[data-theme] .creative-media {
+        object-position: 70% 50%;
+    }
+    .creative-canvas[data-theme] .creative-figure {
+        top: 46cqh;
+        left: 5cqw;
+        right: auto;
+        width: 90cqw;
+        height: 90cqw;
+        transform: none;
+    }
+    .creative-canvas[data-theme="dark"] .creative-shade,
+    .creative-canvas[data-theme="dark"][data-stage="close"] .creative-shade {
+        background: linear-gradient(
+            180deg,
+            var(--ad-field) 0%,
+            color-mix(in srgb, var(--ad-field) 85%, transparent) 38%,
+            color-mix(in srgb, var(--ad-field) 25%, transparent) 60%,
+            color-mix(in srgb, var(--ad-field) 85%, transparent) 86%
+        );
+    }
+    .creative-canvas[data-theme] .creative-qr {
+        top: 64cqh;
+        right: 50%;
+        transform: translate(50%, -50%);
+        padding: 1.2cqh;
+    }
+    .creative-canvas[data-theme] .creative-qr-image,
+    .creative-canvas[data-distance="near"] .creative-qr-image {
+        height: min(30cqh, 62cqw);
+    }
+}
+
+/* The ADR 0005 mic indicator: inside the 5 % title-safe area (TVs overscan) and sized to the
+   glass, so it stays legible on a 4K panel and is never cropped on a cheap one. */
+.screen-mic-indicator {
+    position: absolute;
+    top: 5vh;
+    right: 5vw;
+    z-index: var(--z-overlay);
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+    padding: 0.55em 1.1em;
+    border-radius: 999px;
+    background: var(--palette-ink-950);
+    color: var(--palette-ink-50);
+    font-family: var(--font-sans);
+    font-size: max(0.875rem, 2.1vmin);
+    font-weight: 500;
+    box-shadow: var(--shadow-overlay);
+}
+.screen-mic-indicator-dot {
+    width: 0.55em;
+    height: 0.55em;
+    border-radius: 999px;
+    background: var(--color-danger);
+}
+@media (orientation: portrait) {
+    .screen-mic-indicator {
+        top: auto;
+        bottom: 14.5vh;
+    }
 }
