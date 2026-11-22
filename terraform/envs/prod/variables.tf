@@ -60,6 +60,12 @@ variable "health_check_path" {
   default     = null
 }
 
+variable "create_database" {
+  description = "Create Postgres. False = in-memory backend (free plan)."
+  type        = bool
+  default     = true
+}
+
 variable "db_plan" {
   description = "Postgres plan."
   type        = string

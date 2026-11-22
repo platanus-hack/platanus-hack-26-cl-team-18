@@ -12,8 +12,8 @@ run "prod_plans_with_tracked_inputs" {
   }
 
   assert {
-    condition     = contains(module.app.env_var_names, "DATABASE_URL")
-    error_message = "Prod must receive DATABASE_URL."
+    condition     = contains(module.app.env_var_names, "DATABASE_URL") == var.create_database
+    error_message = "Prod receives DATABASE_URL exactly when it has a database."
   }
 }
 

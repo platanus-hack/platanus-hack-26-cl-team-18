@@ -1,5 +1,6 @@
-# One deployable environment on Render: a Python web service, its Postgres
-# database, and an env group that holds secrets Terraform never sees.
+# One deployable environment on Render: a Python web service, an optional
+# Postgres database, and an env group that holds secrets Terraform never sees.
+# Without the database the backend keeps its state in memory (DATABASE_URL unset).
 
 locals {
   secret_placeholder = "set-in-render-dashboard"
@@ -10,13 +11,17 @@ locals {
     {
       APP_ENV        = { value = var.environment }
       PYTHON_VERSION = { value = var.python_version }
-      # Internal URL: private network only, no egress, no public exposure.
-      DATABASE_URL = { value = render_postgres.db.connection_info.internal_connection_string }
     },
+    # Internal URL: private network only, no egress, no public exposure.
+    var.create_database ? {
+      DATABASE_URL = { value = render_postgres.db[0].connection_info.internal_connection_string }
+    } : {},
   )
 }
 
 resource "render_postgres" "db" {
+  count = var.create_database ? 1 : 0
+
   name           = "${var.name}-db"
   plan           = var.db_plan
   region         = var.region
@@ -35,12 +40,13 @@ resource "render_postgres" "db" {
 }
 
 resource "render_web_service" "app" {
-  name               = var.name
-  plan               = var.service_plan
-  region             = var.region
-  environment_id     = var.environment_id
-  start_command      = var.start_command
-  pre_deploy_command = var.pre_deploy_command
+  name           = var.name
+  plan           = var.service_plan
+  region         = var.region
+  environment_id = var.environment_id
+  start_command  = var.start_command
+  # Migrations need the database; Render's free plan also runs no pre-deploy step.
+  pre_deploy_command = var.create_database ? var.pre_deploy_command : null
   health_check_path  = var.health_check_path
 
   runtime_source = {

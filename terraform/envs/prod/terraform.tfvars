@@ -2,8 +2,17 @@
 # up in git diff and review. Never put a secret value in this file; list its
 # name in secret_names and set the value in the Render dashboard.
 
-# Render's GitHub app must have access to this repository.
-repo_url = "https://github.com/platanus-hack/platanus-hack-26-cl-team-18"
+# Public repo: Render builds it from the URL without GitHub app access, but
+# then gets no push webhooks, so deploys are manual (dashboard "Manual Deploy"
+# or the service's Deploy Hook URL).
+repo_url    = "https://github.com/platanus-hack/platanus-hack-26-cl-team-18"
+auto_deploy = false
+
+# Free plan: $0, sleeps after 15 min idle (~50 s cold start), no pre-deploy
+# step. No Postgres: the backend keeps auctions/charges in memory, so a sleep
+# or redeploy resets them. For starter + Postgres, drop these two lines.
+service_plan    = "free"
+create_database = false
 
 # app/main.py (FastAPI). Must bind $PORT.
 # --ws-max-size: uvicorn buffers a whole frame before the app sees it; 4 MiB covers
