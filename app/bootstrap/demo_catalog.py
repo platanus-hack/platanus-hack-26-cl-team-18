@@ -75,6 +75,11 @@ class DemoBasket:
     slugs: frozenset[str]
     names: str  # how offers name the basket; every brand must appear (copy guard)
     tiers: tuple[tuple[int, str, str, int], ...]  # (min party, label, text suffix, CLP)
+    # Co-marketing (CLP per attention-second): what each brand of a two-brand basket adds
+    # when it shares the screen with the other (BasketBonus). It keeps the basket on air
+    # through a moderate bidding war: a challenger takes its rival's seat in the basket,
+    # and only a large raise buys the whole screen alone. None = no co-marketing deal.
+    bonus_clp_per_as: str | None = None
 
 
 BRANDS: tuple[DemoBrand, ...] = (

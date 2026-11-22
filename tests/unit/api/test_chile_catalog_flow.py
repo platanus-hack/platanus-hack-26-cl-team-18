@@ -344,3 +344,58 @@ def test_a_zero_alcohol_line_gets_its_brand_initial_not_the_abv() -> None:
     logo = _brand_logo(guinness.slug, guinness.name, guinness.color)
     svg = base64.b64decode(logo.removeprefix("data:image/svg+xml;base64,")).decode()
     assert ">G</text>" in svg
+
+
+def _aired_with_boost(tmp_path, objects: list[str], hour: int, boost: dict[str, str]) -> list[str]:
+    clock = FixedClock(datetime(2026, 11, 21, hour, tzinfo=UTC))
+    settings = AppSettings(
+        app_env="test", demo_simulator=True, media_dir=tmp_path, demo_catalog="chile"
+    )
+    container = build_container(settings, clock=clock)
+    with (
+        TestClient(create_app(container=container)) as client,
+        client.websocket_connect("/ws/screen/demo-01") as player,
+        client.websocket_connect("/ws/agent") as agent,
+    ):
+        player.receive_json()
+        lines = {
+            line["brand_name"]: line["campaign_id"]
+            for line in client.get("/api/book").json()["lines"]
+        }
+        for seq, (brand, multiplier) in enumerate(boost.items(), start=1):
+            response = client.post(
+                "/api/advertiser/bid-multiplier",
+                json={
+                    "type": "advertiser.bid_multiplier",
+                    "v": 1,
+                    "campaign_id": lines[brand],
+                    "multiplier": multiplier,
+                    "seq": seq,
+                },
+            )
+            assert response.status_code < 300, response.text
+        found = [DetectedObject(label=label, score=1) for label in objects]
+        agent.send_text(_snapshot(1, clock.now_utc(), found).model_dump_json())
+        return [slot.brand_name for slot in _creative(player).spec.slots]
+
+
+@pytest.mark.parametrize(
+    ("objects", "hour", "boost", "aired"),
+    [
+        # The hero at 2 a.m.: Red Bull raises a little to a lot and takes Score's seat,
+        # the basket stays (co-marketing, DemoBasket.bonus_clp_per_as)...
+        (["energy drink can", "cup"], 5, {}, ["Score", "Juan Valdez"]),
+        (["energy drink can", "cup"], 5, {"Red Bull": "1.5"}, ["Red Bull", "Juan Valdez"]),
+        (["energy drink can", "cup"], 5, {"Red Bull": "3"}, ["Red Bull", "Juan Valdez"]),
+        # ...and only an all-in raise buys the whole screen alone.
+        (["energy drink can", "cup"], 5, {"Red Bull": "5"}, ["Red Bull"]),
+        # The completo at lunch: Dominó takes Pronto's seat, Bilz takes Coca-Cola's.
+        (["hot dog", "soda can"], 16, {}, ["Pronto Copec", "Coca-Cola"]),
+        (["hot dog", "soda can"], 16, {"Dominó": "2"}, ["Dominó", "Coca-Cola"]),
+        (["hot dog", "soda can"], 16, {"Bilz y Pap": "2"}, ["Bilz y Pap", "Pronto Copec"]),
+    ],
+)
+def test_the_bidding_war_swaps_a_seat_in_the_basket_before_it_buys_the_screen(
+    tmp_path, objects: list[str], hour: int, boost: dict[str, str], aired: list[str]
+) -> None:
+    assert sorted(_aired_with_boost(tmp_path, objects, hour, boost)) == sorted(aired)

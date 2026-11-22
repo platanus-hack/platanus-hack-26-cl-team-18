@@ -107,6 +107,7 @@ from app.modules.campaigns.application.ports.registry import CampaignRegistry
 from app.modules.campaigns.application.stock import StockBoard
 from app.modules.campaigns.domain.autobid import AutoBidGoal
 from app.modules.campaigns.domain.book import (
+    BasketBonus,
     Bidder,
     BidMultiplier,
     BrandId,
@@ -333,6 +334,16 @@ def seed_market(
                 for index, segment in enumerate(brand.segments)
             ),
             partners=frozenset(brand_by_slug[slug] for slug in catalog.partners_of(brand.slug)),
+            # Co-marketing deals (DemoBasket.bonus_clp_per_as): extra per attention-second
+            # when the partner shares the screen; never scaled by the live multiplier.
+            basket_bonuses=tuple(
+                BasketBonus(partner=brand_by_slug[other], rate=_clp_per_as(basket.bonus_clp_per_as))
+                for basket in catalog.baskets
+                if basket.bonus_clp_per_as is not None
+                and len(basket.slugs) == 2
+                and brand.slug in basket.slugs
+                for other in sorted(basket.slugs - {brand.slug})
+            ),
             broad_match=brand.broad_match,
             live_multiplier=stored[brand.slug].multiplier,
             budget_remaining=stored[brand.slug].budget,

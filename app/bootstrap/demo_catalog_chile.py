@@ -477,11 +477,13 @@ BASKETS: tuple[DemoBasket, ...] = (
         slugs=frozenset({"score", "juan-valdez"}),
         names="Score + Juan Valdez",
         tiers=_sized(3990, 7490, 9990, 12990),
+        bonus_clp_per_as="1.8",  # the bidding war swaps a seat, the basket stays
     ),
     DemoBasket(
         slugs=frozenset({"red-bull", "juan-valdez"}),
         names="Red Bull + Juan Valdez",
         tiers=_sized(4290, 7990, 10990, 13990),
+        bonus_clp_per_as="1.8",  # the bidding war swaps a seat, the basket stays
     ),
     # Breakfast before the road (summer trips to the coast).
     DemoBasket(
@@ -498,6 +500,7 @@ BASKETS: tuple[DemoBasket, ...] = (
     DemoBasket(
         slugs=frozenset({"pronto-copec", "coca-cola"}),
         names="Pronto Copec + Coca-Cola",
+        bonus_clp_per_as="1.8",
         tiers=(
             (1, "Completo palta + bebida", "", 3990),
             (2, "Dúo completo", " x2", 7490),
@@ -530,6 +533,7 @@ BASKETS: tuple[DemoBasket, ...] = (
     DemoBasket(
         slugs=frozenset({"pronto-copec", "bilz-y-pap"}),
         names="Pronto Copec + Bilz y Pap",
+        bonus_clp_per_as="1.8",
         tiers=(
             (1, "Completo palta + bebida", "", 3790),
             (2, "Dúo completo", " x2", 7290),
@@ -622,6 +626,7 @@ BASKETS: tuple[DemoBasket, ...] = (
     DemoBasket(
         slugs=frozenset({"domino", "coca-cola"}),
         names="Dominó + Coca-Cola",
+        bonus_clp_per_as="1.8",
         tiers=(
             (1, "Completo Dominó + bebida", "", 4990),
             (2, "Dúo Dominó", " x2", 9590),

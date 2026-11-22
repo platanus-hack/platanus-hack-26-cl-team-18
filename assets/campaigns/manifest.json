@@ -27,16 +27,18 @@
       "video": "rayo-coffee"
     },
     "score": {
-      "photo": "cl-score",
-      "video": "cl-score",
+      "photo": "cl-lata-fria",
+      "video": "cl-lata-fria",
       "alternates": [
-        "cl-ruta-amanecer"
+        "cl-ruta-amanecer",
+        "cl-ruta-5"
       ]
     },
     "red-bull": {
-      "photo": "cl-red-bull",
-      "video": "cl-red-bull",
+      "photo": "cl-red-bull-studio",
+      "video": "cl-red-bull-studio",
       "alternates": [
+        "cl-red-bull-lineup",
         "cl-ruta-5"
       ]
     },
@@ -73,19 +75,19 @@
       ]
     },
     "juan-valdez+score": {
-      "photo": "cl-score-cafe",
-      "video": "cl-score-cafe",
+      "photo": "cl-ruta-amanecer",
+      "video": "cl-ruta-amanecer",
       "alternates": [
-        "cl-ruta-amanecer",
-        "cl-cappuccino"
+        "cl-cappuccino",
+        "cl-lata-fria"
       ]
     },
     "juan-valdez+red-bull": {
-      "photo": "cl-red-bull-cafe",
-      "video": "cl-red-bull-cafe",
+      "photo": "cl-red-bull-studio",
+      "video": "cl-red-bull-studio",
       "alternates": [
-        "cl-ruta-5",
-        "cl-cappuccino"
+        "cl-cappuccino",
+        "cl-red-bull-lineup"
       ]
     },
     "juan-valdez+pronto-copec": {

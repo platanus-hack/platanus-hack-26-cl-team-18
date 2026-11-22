@@ -26,8 +26,8 @@
  },
  "cup": {
   "false_hits": 0,
-  "found": 10,
-  "photos": 10
+  "found": 8,
+  "photos": 8
  },
  "donut": {
   "false_hits": 6,
@@ -37,7 +37,7 @@
  "energy drink can": {
   "false_hits": 0,
   "found": 3,
-  "photos": 5
+  "photos": 7
  },
  "hot dog": {
   "false_hits": 1,

@@ -187,8 +187,15 @@ it. Demo insurance: hold the Monster Energy marker (id 27) on the sheet.
 - *Completo + Guinness 0.0.* Hold a hot dog and a beer bottle at night: the screen airs
   "Completo + Guinness 0.0 para 2" (Dominó's fuente de soda classic, made legal for a gas
   station). Step a child into frame: it swaps to a plain Pronto completo, live.
-- *The counter bidding war.* A hot dog airs Pronto; Dominó raises its bid on
-  `/demo/<key>/advertiser` and takes the screen with its own completos.
+- *The counter bidding war.* A hot dog and a can air "Dúo completo" (Pronto +
+  Coca-Cola); Dominó raises its bid on `/demo/<key>/advertiser` and takes Pronto's seat:
+  "Dúo Dominó" (Dominó + Coca-Cola). Bilz y Pap raising takes Coca-Cola's seat instead.
+- *The hero bidding war, in two tiers.* At 2 a.m. a can and a coffee air Score + Juan
+  Valdez. Red Bull raising its slider anywhere from 1.2x to 3x takes Score's seat and the
+  basket stays (Red Bull + Juan Valdez: the co-marketing bonus on the hero baskets,
+  `DemoBasket.bonus_clp_per_as`); only an all-in raise (4x-5x) buys the whole screen
+  alone, and the console's single-brand coverage drops. Both are honest market
+  outcomes (`test_the_bidding_war_swaps_a_seat_in_the_basket_before_it_buys_the_screen`).
 - *Starbucks vs Juan Valdez.* A cup airs Juan Valdez; Starbucks raises its bid and the
   Frappuccino takes the slot. With a medialuna marker: "Frappuccino + medialuna para 2".
 - *Thirst.* A bottle airs Cachantun ("Sed de ruta. Recarga para los dos."); bottle +

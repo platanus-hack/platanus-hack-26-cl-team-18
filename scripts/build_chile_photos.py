@@ -127,28 +127,24 @@ COMMONS: tuple[CommonsPhoto, ...] = (
         title="File:Botella de Cachantún, MAC Quinta Normal, Santiago 20230520.jpg",
         pack=True,
     ),
+    # Real Red Bull cans: a studio pack shot (the can right of centre, copy on the left)
+    # and its lineup; and an unbranded cold can for Score, whose can Commons lacks.
+    CommonsPhoto(
+        stem="cl-red-bull-studio",
+        title="File:Redbull zero 1.jpg",
+        pack=True,
+        region=(0.31, 0.12, 0.63, 0.98),
+    ),
+    CommonsPhoto(stem="cl-red-bull-lineup", title="File:Red Bull energy drinks.jpg"),
+    CommonsPhoto(stem="cl-lata-fria", title="File:Drinking can ring-pull tab.jpg"),
     # The venue itself: a real Copec station in La Reina (Pronto Copec's own campaigns).
     CommonsPhoto(stem="cl-copec-estacion", title="File:Copec La Reina.jpg", focus=(0.5, 0.45)),
 )
 
-# PIL hue: lime ≈ 50-75, violet ≈ 170-200, yellow ≈ 30-34, blue ≈ 150-160.
-# Red Bull goes blue (its blue-and-silver can), not its red accent: a pastel can
-# shifted to red reads pink.
-RELIGHTS: tuple[Relight, ...] = (
-    Relight(stem="cl-score", base="energy", hue_from=(45, 80), hue_to=32, saturation=1.2),
-    Relight(stem="cl-red-bull", base="rayo", hue_from=(160, 215), hue_to=152, saturation=1.25),
-    Relight(stem="cl-monster", base="energy", hue_from=(45, 80), hue_to=62, saturation=1.2),
-    Relight(
-        stem="cl-score-cafe", base="energy-coffee", hue_from=(45, 80), hue_to=30, saturation=1.2
-    ),
-    Relight(
-        stem="cl-red-bull-cafe",
-        base="rayo-coffee",
-        hue_from=(160, 215),
-        hue_to=152,
-        saturation=1.3,
-    ),
-)
+# No relit shots any more: hue-shifting an unbranded studio can into a brand's colours
+# read as fake on a TV ("AI-looking"), so every brand airs a real photo instead (a real
+# can where Commons has one; a real Chilean road or a real unbranded can otherwise).
+RELIGHTS: tuple[Relight, ...] = ()
 
 
 def _api(params: dict[str, str]) -> dict:
@@ -331,9 +327,6 @@ def main() -> None:
         "Fictional-catalog photos (`energy`, `coffee`, `beer`, `rayo`, `energy-coffee`,\n"
         "`rayo-coffee`) are unbranded AI scenery; prompts in `../prompts.json`.\n\n"
         "Chile catalog (`DEMO_CATALOG=chile`), built by `scripts/build_chile_photos.py`:\n\n"
-        "- `cl-score`, `cl-red-bull`, `cl-monster`, `cl-score-cafe`, `cl-red-bull-cafe`: the\n"
-        "  unbranded studio shots above with the can's rim light moved to the brand's hue.\n"
-        "  No mark, label or packaging is drawn (CLAUDE.md invariant 4).\n"
         "- Real photos from Wikimedia Commons (Chilean counter food, drinks and sweets,\n"
         "  Ruta 5 and a Copec station), credited below as the licenses require. Food,\n"
         "  drink and road only: no recognisable faces, no third-party marks. CC BY-SA\n"

@@ -232,16 +232,6 @@
    "label": "cup"
   },
   {
-   "id": "cl-score-cafe",
-   "repo": "assets/campaigns/photos/cl-score-cafe.webp",
-   "label": "cup"
-  },
-  {
-   "id": "cl-red-bull-cafe",
-   "repo": "assets/campaigns/photos/cl-red-bull-cafe.webp",
-   "label": "cup"
-  },
-  {
    "id": "cl-monster-sixpack",
    "repo": "assets/campaigns/photos/cl-monster-sixpack.webp",
    "label": "energy drink can"
@@ -260,6 +250,16 @@
    "id": "cl-vital-picnic",
    "repo": "assets/campaigns/photos/cl-vital-picnic.webp",
    "label": "bottle"
+  },
+  {
+   "id": "cl-red-bull-studio",
+   "repo": "assets/campaigns/photos/cl-red-bull-studio.webp",
+   "label": "energy drink can"
+  },
+  {
+   "id": "cl-red-bull-lineup",
+   "repo": "assets/campaigns/photos/cl-red-bull-lineup.webp",
+   "label": "energy drink can"
   }
  ]
 }

@@ -5,9 +5,6 @@ Fictional-catalog photos (`energy`, `coffee`, `beer`, `rayo`, `energy-coffee`,
 
 Chile catalog (`DEMO_CATALOG=chile`), built by `scripts/build_chile_photos.py`:
 
-- `cl-score`, `cl-red-bull`, `cl-monster`, `cl-score-cafe`, `cl-red-bull-cafe`: the
-  unbranded studio shots above with the can's rim light moved to the brand's hue.
-  No mark, label or packaging is drawn (CLAUDE.md invariant 4).
 - Real photos from Wikimedia Commons (Chilean counter food, drinks and sweets,
   Ruta 5 and a Copec station), credited below as the licenses require. Food,
   drink and road only: no recognisable faces, no third-party marks. CC BY-SA
@@ -45,4 +42,7 @@ with the brand's own packaging, never edited or redrawn (CLAUDE.md invariant 4).
 | `cl-pepsi-max.webp` | [Pepsi Max can.jpg](https://commons.wikimedia.org/wiki/File:Pepsi_Max_can.jpg) | Ramolito | Public domain | pack shot: whole, on its own blurred photo |
 | `cl-bilz.webp` | [Botella Bilz 2023.jpg](https://commons.wikimedia.org/wiki/File:Botella_Bilz_2023.jpg) | Anuchikibrikiivdamke | CC BY-SA 4.0 | pack shot: whole, on its own blurred photo |
 | `cl-cachantun-botella.webp` | [Botella de Cachantún, MAC Quinta Normal, Santiago 20230520.jpg](https://commons.wikimedia.org/wiki/File:Botella_de_Cachant%C3%BAn,_MAC_Quinta_Normal,_Santiago_20230520.jpg) | Carlos Figueroa Rojas | CC BY-SA 4.0 | pack shot: whole, on its own blurred photo |
+| `cl-red-bull-studio.webp` | [Redbull zero 1.jpg](https://commons.wikimedia.org/wiki/File:Redbull_zero_1.jpg) | Connor J Williams | CC BY 2.0 | pack shot: whole, on its own blurred photo, cut from the wider shot |
+| `cl-red-bull-lineup.webp` | [Red Bull energy drinks.jpg](https://commons.wikimedia.org/wiki/File:Red_Bull_energy_drinks.jpg) | Oto Zapletal | CC BY-SA 4.0 | cropped to 16:9 |
+| `cl-lata-fria.webp` | [Drinking can ring-pull tab.jpg](https://commons.wikimedia.org/wiki/File:Drinking_can_ring-pull_tab.jpg) | Marcos André | CC BY 2.0 | cropped to 16:9 |
 | `cl-copec-estacion.webp` | [Copec La Reina.jpg](https://commons.wikimedia.org/wiki/File:Copec_La_Reina.jpg) | User13121989 | CC BY-SA 4.0 | cropped to 16:9 |
