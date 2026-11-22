@@ -40,7 +40,7 @@ export function AppShell({
     return (
         <div className="paper-theme">
             <header className="sticky top-0 z-(--z-overlay) border-b border-border bg-canvas/85 backdrop-blur-md">
-                <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4 sm:gap-6 sm:px-6">
+                <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4 sm:gap-6 sm:px-6">
                     <a
                         href="/"
                         aria-label="ADverse"
@@ -50,7 +50,7 @@ export function AppShell({
                             src="/brand/adverse-mark-on-dark.svg"
                             alt=""
                             aria-hidden
-                            className="h-5 w-auto"
+                            className="h-6 w-auto"
                         />
                         <span aria-hidden>
                             ADverse<span className="text-moment">.</span>

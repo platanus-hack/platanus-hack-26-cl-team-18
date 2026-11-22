@@ -174,13 +174,14 @@
     --font-label: "Geist Mono", ui-monospace, monospace;
 
     /* Type tiers (relvo --type-*) */
-    --text-micro: 0.625rem;
-    --text-metadata: 0.6875rem;
-    --text-compact: 0.8125rem;
-    --text-body: 0.9375rem;
-    --text-section: 1.05rem;
-    --text-title: 1.5rem;
-    --text-kpi: 2rem;
+    /* Sized for a demo room: the console is read from across the table, not at arm's length. */
+    --text-micro: 0.8125rem;
+    --text-metadata: 0.875rem;
+    --text-compact: 1.0625rem;
+    --text-body: 1.1875rem;
+    --text-section: 1.375rem;
+    --text-title: 1.875rem;
+    --text-kpi: 2.75rem;
     --text-display: 4.5rem;
     --text-hero: clamp(2.25rem, 5vw, 3.25rem);
 
