@@ -114,6 +114,16 @@ afterEach(() => {
     Reflect.deleteProperty(navigator, "permissions");
 });
 
+/** The browser flips a permission in site settings (or answers the prompt). */
+async function permission(name: "camera" | "microphone", state: string) {
+    await vi.waitFor(() => {
+        expect(fakes.permissions.get(name)).toBeDefined();
+    });
+    const status = fakes.permissions.get(name)!;
+    status.state = state;
+    status.onchange?.();
+}
+
 describe("ScreenSensor on a demo day", () => {
     it("a live.status for another screen on the same backend changes nothing here", () => {
         socket().options.onMessage(status({ screen_id: "screen-2" }));
@@ -182,6 +192,62 @@ describe("ScreenSensor on a demo day", () => {
             .sent.filter((m) => m.type === "audience.snapshot")
             .map((m) => m.seq);
         expect(seqs).toEqual([1, 2]);
+    });
+});
+
+describe("ScreenSensor when camera or mic access changes", () => {
+    it("camera allowed again while live reopens it at once (no wait for the next status)", async () => {
+        socket().options.onMessage(status({ sensing: true }));
+        vision().start.mockClear();
+        await permission("camera", "granted");
+        expect(vision().start).toHaveBeenCalledTimes(1);
+    });
+
+    it("camera allowed during standby stays closed", async () => {
+        socket().options.onMessage(status({ sensing: false }));
+        await permission("camera", "granted");
+        expect(vision().start).not.toHaveBeenCalled();
+    });
+
+    it("camera access revoked closes it (the next status asks again)", async () => {
+        socket().options.onMessage(status({ sensing: true }));
+        vision().stop.mockClear();
+        await permission("camera", "denied");
+        expect(vision().stop).toHaveBeenCalled();
+    });
+
+    it("mic allowed again skips the backoff and opens if someone is there", async () => {
+        socket().options.onMessage(status({ listening: true }));
+        vision().onSnapshot(snapshot(1));
+        speech().start.mockClear();
+        await permission("microphone", "granted");
+        expect(speech().retryNow).toHaveBeenCalled();
+        expect(speech().start).toHaveBeenCalled();
+    });
+
+    it("mic access revoked closes Scribe", async () => {
+        socket().options.onMessage(status({ listening: true }));
+        vision().onSnapshot(snapshot(1));
+        speech().stop.mockClear();
+        await permission("microphone", "denied");
+        expect(speech().stop).toHaveBeenCalled();
+    });
+
+    it("a stopped sensor ignores later permission changes", async () => {
+        socket().options.onMessage(status({ sensing: true }));
+        current.stop();
+        vision().start.mockClear();
+        await permission("camera", "granted");
+        expect(vision().start).not.toHaveBeenCalled();
+    });
+
+    it("a browser without the Permissions API still senses", () => {
+        Reflect.deleteProperty(navigator, "permissions");
+        const sensor = new ScreenSensor("screen-1", "token");
+        expect(() => {
+            sensor.start();
+        }).not.toThrow();
+        sensor.stop();
     });
 });
 

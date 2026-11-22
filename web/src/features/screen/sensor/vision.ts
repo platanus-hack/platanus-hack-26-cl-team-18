@@ -50,6 +50,10 @@ function wasmThreads(): number {
     return Math.max(1, Math.min(4, Math.ceil(cores / 2)));
 }
 
+function stopTracks(stream: MediaStream): void {
+    for (const track of stream.getTracks()) track.stop();
+}
+
 export class BrowserVision {
     private session: Ort.InferenceSession | null = null;
     private ort: typeof Ort | null = null;
@@ -63,6 +67,9 @@ export class BrowserVision {
     /** Set after the GPU path failed mid-run: the next load goes straight to WASM. */
     private gpuBroken = false;
     private failures = 0;
+    /** Bumped by every start() and stop(): an older start that wakes up is stale. */
+    private generation = 0;
+    private loading: Promise<void> | null = null;
     private input: Float32Array | null = null;
     /** When the camera last delivered a new frame (requestVideoFrameCallback, else currentTime). */
     private lastFrameMs = 0;
@@ -81,35 +88,56 @@ export class BrowserVision {
     async start(): Promise<void> {
         if (this.running) return;
         this.running = true;
+        // A stop() + start() while this one awaits (a permission prompt, the model
+        // download) supersedes it: from then on it may only let go of its own camera.
+        const run = ++this.generation;
+        let stream: MediaStream | null = null;
         try {
             await this.load();
-            this.stream = await navigator.mediaDevices.getUserMedia({
+            if (!this.current(run)) return;
+            stream = await navigator.mediaDevices.getUserMedia({
                 video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" },
                 audio: false,
             });
-            if (!this.isRunning()) {
-                this.release();
+            if (!this.current(run)) {
+                stopTracks(stream);
                 return;
             }
+            this.stream = stream;
             const video = document.createElement("video");
             video.muted = true;
             video.playsInline = true;
-            video.srcObject = this.stream;
+            video.srcObject = stream;
             await video.play();
+            if (!this.current(run)) {
+                video.srcObject = null;
+                stopTracks(stream);
+                return;
+            }
             this.video = video;
-            // Unplugged or taken by the OS: let go; the next live.status starts again.
-            for (const track of this.stream.getVideoTracks()) {
+            // Unplugged, revoked or taken by the OS: let go; the next live.status starts again.
+            const own = stream;
+            for (const track of own.getVideoTracks()) {
                 track.addEventListener("ended", () => {
-                    this.recover("camera track ended");
+                    if (this.stream === own) this.recover("camera track ended");
                 });
             }
             this.watchFrames(video);
             this.tick();
         } catch (error) {
+            if (!this.current(run)) {
+                if (stream !== null) stopTracks(stream);
+                return;
+            }
             console.warn(`[sensor] camera unavailable: ${String(error)}`);
             this.running = false;
             this.release();
         }
+    }
+
+    /** Re-read after an await: is the start that began as `run` still the live one? */
+    private current(run: number): boolean {
+        return this.running && this.generation === run;
     }
 
     /** Re-read after an await: `stop()` may have run meanwhile. */
@@ -119,6 +147,7 @@ export class BrowserVision {
 
     stop(): void {
         this.running = false;
+        this.generation++;
         if (this.timer !== null) clearTimeout(this.timer);
         this.timer = null;
         this.release();
@@ -168,16 +197,22 @@ export class BrowserVision {
     }
 
     private release(): void {
-        this.stream?.getTracks().forEach((t) => {
-            t.stop();
-        });
+        if (this.stream !== null) stopTracks(this.stream);
         this.stream = null;
         if (this.video !== null) this.video.srcObject = null;
         this.video = null;
     }
 
-    private async load(): Promise<void> {
-        if (this.session !== null) return;
+    /** One load at a time: a stop() + start() mid-download shares it, never builds a second session. */
+    private load(): Promise<void> {
+        if (this.session !== null) return Promise.resolve();
+        this.loading ??= this.createSession().finally(() => {
+            this.loading = null;
+        });
+        return this.loading;
+    }
+
+    private async createSession(): Promise<void> {
         const ort = await import("onnxruntime-web");
         ort.env.wasm.numThreads = wasmThreads();
         const options = { graphOptimizationLevel: "all" } as const;

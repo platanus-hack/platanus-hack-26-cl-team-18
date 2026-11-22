@@ -481,6 +481,46 @@ describe("BrowserVision on a demo day", () => {
         expect(snapshots).toHaveLength(0);
     });
 
+    it("standby then live again mid-permission-prompt: the late grant is let go, one camera runs", async () => {
+        let grantFirst: (stream: unknown) => void = () => {};
+        camera.getUserMedia = vi
+            .fn()
+            .mockImplementationOnce(
+                () =>
+                    new Promise((resolve) => {
+                        grantFirst = resolve;
+                    }),
+            )
+            .mockImplementation(() => Promise.resolve(fakeStream()));
+        model.output = "person";
+        const vision = sensor();
+        const first = vision.start();
+        await run(0);
+        vision.stop(); // standby while the prompt is open
+        await vision.start(); // live again: a fresh start gets the camera
+        grantFirst(fakeStream()); // the first prompt resolves late
+        await first;
+        await run(1_000);
+        const live = camera.tracks.filter((t) => t.stop.mock.calls.length === 0);
+        expect(live).toHaveLength(1);
+        const before = snapshots.length;
+        await run(1_000);
+        expect(snapshots.length - before).toBeLessThanOrEqual(6); // one 5 fps loop, not two
+        vision.stop();
+        for (const track of camera.tracks) expect(track.stop).toHaveBeenCalled();
+    });
+
+    it("standby then live again while the model loads builds one session, not two", async () => {
+        const vision = sensor();
+        const first = vision.start();
+        vision.stop();
+        const second = vision.start();
+        await Promise.all([first, second]);
+        expect(model.created).toHaveLength(1);
+        expect(camera.getUserMedia).toHaveBeenCalledTimes(1);
+        vision.stop();
+    });
+
     it("start twice (two live.status in a row) opens the camera once", async () => {
         const vision = sensor();
         await Promise.all([vision.start(), vision.start()]);

@@ -288,6 +288,61 @@ describe("BrowserSpeech on a demo day", () => {
         expect(FakeScribe.all).toHaveLength(1);
         speech.stop();
     });
+
+    it("an unplugged or revoked mic (track ended) releases Scribe, and the next start reopens", async () => {
+        const { speech, scribe } = await opened();
+        micTracks[0]?.dispatchEvent(new Event("ended"));
+        expect(scribe.readyState).toBe(FakeScribe.CLOSED);
+        await speech.start(); // the next snapshot asks again
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(FakeScribe.all).toHaveLength(2);
+        speech.stop();
+    });
+
+    it("standby then live again mid-token-fetch: one Scribe session and one open mic", async () => {
+        let answer: (r: Response) => void = () => {};
+        fetchMock.mockImplementationOnce(
+            () =>
+                new Promise<Response>((resolve) => {
+                    answer = resolve;
+                }),
+        );
+        const speech = sensor();
+        const first = speech.start();
+        speech.stop(); // the room emptied
+        await speech.start(); // someone came back
+        answer(new Response(JSON.stringify(session)));
+        await first;
+        await vi.advanceTimersByTimeAsync(0);
+        expect(FakeScribe.all).toHaveLength(1);
+        expect(micTracks.filter((t) => t.stop.mock.calls.length === 0)).toHaveLength(1);
+        speech.stop();
+        for (const track of micTracks) expect(track.stop).toHaveBeenCalled();
+    });
+
+    it("a Scribe drop followed by standby never reopens the mic", async () => {
+        const { speech, scribe } = await opened();
+        scribe.drop();
+        speech.stop(); // standby lands before the 1 s reopen
+        await vi.advanceTimersByTimeAsync(5_000);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        expect(getUserMedia).toHaveBeenCalledTimes(1);
+    });
+
+    it("retryNow skips the backoff once the mic is allowed again", async () => {
+        getUserMedia.mockImplementationOnce(() =>
+            Promise.reject(new DOMException("denied", "NotAllowedError")),
+        );
+        const speech = sensor();
+        await speech.start();
+        await speech.start(); // inside the 10 s backoff: nothing
+        expect(getUserMedia).toHaveBeenCalledTimes(1);
+        speech.retryNow();
+        await speech.start();
+        expect(getUserMedia).toHaveBeenCalledTimes(2);
+        expect(FakeScribe.all).toHaveLength(1);
+        speech.stop();
+    });
 });
 
 describe("toPcm16 under hall noise", () => {

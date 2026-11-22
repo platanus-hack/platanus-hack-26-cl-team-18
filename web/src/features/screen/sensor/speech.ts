@@ -62,6 +62,10 @@ function base64(bytes: Uint8Array): string {
     return btoa(binary);
 }
 
+function stopTracks(stream: MediaStream): void {
+    for (const track of stream.getTracks()) track.stop();
+}
+
 export class BrowserSpeech {
     private running = false;
     /** After a failed start, wait before asking for another token (no hammering). */
@@ -72,6 +76,8 @@ export class BrowserSpeech {
     private pending: Int16Array[] = [];
     private pendingSamples = 0;
     private utterance = 0;
+    /** Bumped by every start() and stop(): an older start that wakes up is stale. */
+    private generation = 0;
     private language = "es";
 
     constructor(
@@ -83,20 +89,38 @@ export class BrowserSpeech {
     async start(): Promise<void> {
         if (this.running || Date.now() < this.retryAfterMs) return;
         this.running = true;
+        // A stop() + start() while this one awaits (token fetch, mic prompt) supersedes
+        // it: from then on it may only let go of what it opened itself.
+        const run = ++this.generation;
+        let stream: MediaStream | null = null;
         try {
             const session = await this.fetchSession();
+            if (!this.current(run)) return; // the token is single-use and unspent: no cost
             this.language = session.language_code;
-            this.stream = await navigator.mediaDevices.getUserMedia({
+            stream = await navigator.mediaDevices.getUserMedia({
                 audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
                 video: false,
             });
-            if (!this.isRunning()) {
-                this.release();
+            if (!this.current(run)) {
+                stopTracks(stream);
                 return;
             }
+            this.stream = stream;
+            // Unplugged or permission revoked: close Scribe (it bills silence); the
+            // next snapshot starts again and the mic prompt or backoff decides.
+            const own = stream;
+            for (const track of own.getAudioTracks()) {
+                track.addEventListener("ended", () => {
+                    if (this.stream === own) this.recover("mic track ended");
+                });
+            }
             this.openScribe(session);
-            await this.openMic(this.stream);
+            await this.openMic(stream, run);
         } catch (error) {
+            if (!this.current(run)) {
+                if (stream !== null) stopTracks(stream);
+                return;
+            }
             console.warn(`[sensor] speech unavailable: ${String(error)}`);
             this.retryAfterMs = Date.now() + RETRY_MS;
             this.running = false;
@@ -106,12 +130,24 @@ export class BrowserSpeech {
 
     stop(): void {
         this.running = false;
+        this.generation++;
         this.release();
     }
 
-    /** Re-read after an await: `stop()` may have run meanwhile. */
-    private isRunning(): boolean {
-        return this.running;
+    /** The mic was just allowed again: the next start() skips the failure backoff. */
+    retryNow(): void {
+        this.retryAfterMs = 0;
+    }
+
+    /** Re-read after an await: is the start that began as `run` still the live one? */
+    private current(run: number): boolean {
+        return this.running && this.generation === run;
+    }
+
+    private recover(reason: string): void {
+        if (!this.running) return;
+        console.warn(`[sensor] restarting speech: ${reason}`);
+        this.stop();
     }
 
     private async fetchSession(): Promise<ScribeSession> {
@@ -139,17 +175,20 @@ export class BrowserSpeech {
             this.onScribe(String(event.data));
         };
         socket.onclose = () => {
-            // Single-use token: a dropped session reopens with a fresh one.
+            // Single-use token: a dropped session reopens with a fresh one, unless
+            // a stop() or another start() came in meanwhile (standby, empty room).
             if (this.running && this.socket === socket) {
-                this.release();
-                this.running = false;
-                setTimeout(() => void this.start(), 1_000);
+                this.stop();
+                const dropped = this.generation;
+                setTimeout(() => {
+                    if (this.generation === dropped) void this.start();
+                }, 1_000);
             }
         };
         this.socket = socket;
     }
 
-    private async openMic(stream: MediaStream): Promise<void> {
+    private async openMic(stream: MediaStream, run: number): Promise<void> {
         const context = new AudioContext();
         this.context = context;
         const url = URL.createObjectURL(new Blob([CAPTURE_WORKLET], { type: "text/javascript" }));
@@ -157,6 +196,10 @@ export class BrowserSpeech {
             await context.audioWorklet.addModule(url);
         } finally {
             URL.revokeObjectURL(url);
+        }
+        if (!this.current(run)) {
+            void context.close().catch(() => {}); // stop() ran meanwhile
+            return;
         }
         const source = context.createMediaStreamSource(stream);
         const node = new AudioWorkletNode(context, "team18-capture");
@@ -229,9 +272,7 @@ export class BrowserSpeech {
         if (socket !== null && socket.readyState <= WebSocket.OPEN) socket.close();
         void this.context?.close().catch(() => {});
         this.context = null;
-        this.stream?.getTracks().forEach((t) => {
-            t.stop();
-        });
+        if (this.stream !== null) stopTracks(this.stream);
         this.stream = null;
         this.pending = [];
         this.pendingSamples = 0;

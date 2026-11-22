@@ -41,7 +41,10 @@ export class ScreenSensor {
     private seq = { snapshot: 0, utterance: 0, hello: 0, perception: 0, keyframe: 0 };
     private open = false;
     private listening = false;
+    private sensing = false;
+    private stopped = false;
     private lastPeopleAtMs: number | null = null;
+    private readonly watched: PermissionStatus[] = [];
 
     constructor(
         private readonly screenId: string,
@@ -116,13 +119,49 @@ export class ScreenSensor {
     }
 
     start(): void {
+        this.stopped = false;
         this.socket.start();
+        this.watchPermission("camera", (granted) => {
+            if (!granted) this.vision.stop();
+            else if (this.sensing) void this.vision.start();
+        });
+        this.watchPermission("microphone", (granted) => {
+            if (!granted) {
+                this.speech.stop();
+                return;
+            }
+            this.speech.retryNow();
+            this.updateSpeech();
+        });
     }
 
     stop(): void {
+        this.stopped = true;
+        for (const status of this.watched.splice(0)) status.onchange = null;
         this.socket.stop();
         this.vision.stop();
         this.speech.stop();
+    }
+
+    /**
+     * Access granted or revoked in the browser (site settings, the prompt): act now
+     * instead of on the next status or after the failure backoff. Revoking ends the
+     * tracks too, but not in every browser. No Permissions API, or no "camera" name
+     * (Firefox): the 5 s live.status and the speech backoff still recover.
+     */
+    private watchPermission(name: "camera" | "microphone", onChange: (granted: boolean) => void) {
+        const permissions = (navigator as Partial<Navigator>).permissions;
+        if (permissions === undefined) return;
+        permissions
+            .query({ name })
+            .then((status) => {
+                if (this.stopped) return;
+                this.watched.push(status);
+                status.onchange = () => {
+                    if (!this.stopped) onChange(status.state === "granted");
+                };
+            })
+            .catch(() => {});
     }
 
     private hello(): void {
@@ -138,6 +177,7 @@ export class ScreenSensor {
     }
 
     private apply(status: LiveStatus): void {
+        this.sensing = status.sensing;
         if (status.sensing) void this.vision.start();
         else this.vision.stop();
         this.listening = status.listening;
