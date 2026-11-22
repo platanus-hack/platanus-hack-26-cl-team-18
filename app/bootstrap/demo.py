@@ -428,10 +428,18 @@ def register_demo(
     kits_by_id = {kit.brand_id: kit for kit in kits}
     slug_of = {kit.brand_id: _slug(kit.name) for kit in kits}
     brand_by_slug = {slug: brand for brand, slug in slug_of.items()}
-    # Creatives whose copy is the approved campaign line (Catalog.pinned_copy): no AI rewrite.
+    # Creatives whose copy is the approved campaign line (Catalog.pinned_copy): no AI rewrite
+    # and no hook test (HookLab), so the team's own line airs every time.
     pinned_copy = {
         brand_by_slug[slug] for slug in market.catalog.pinned_copy if slug in brand_by_slug
     }
+
+    def pinned(brief: CreativeBrief) -> bool:
+        return any(brand.brand_id in pinned_copy for brand in brief.brands)
+
+    def hooks_to_test(brief: CreativeBrief) -> int:
+        return 1 if pinned(brief) else studio.hook_count(brief)
+
     fitness, coffee, beer, food = (SegmentId.create(key) for key in ("408", "977", "369", "1404"))
     # A watching group with no other signal: a low-confidence coffee moment, never a
     # house ad for a whole queue (group_default.py; measured on real footage).
@@ -1086,7 +1094,7 @@ def register_demo(
         composed: Composed | None = None
         variant = 0
         if brief is not None:
-            variant = hook_lab.variant_for(brief.signature(), studio.hook_count(brief))
+            variant = hook_lab.variant_for(brief.signature(), hooks_to_test(brief))
             composed = studio.compose(brief, variant=variant)
             if composed.score.verdict.passed:
                 spec = with_cached_voice(render_spec(brief, composed.draft, kits_by_id))
@@ -1191,11 +1199,7 @@ def register_demo(
                 compose_ms=composed.compose_ms if composed is not None else None,
                 note=note,
             )
-        if (
-            brief is not None
-            and studio.needs_upgrade(brief)
-            and not any(brand.brand_id in pinned_copy for brand in brief.brands)
-        ):
+        if brief is not None and studio.needs_upgrade(brief) and not pinned(brief):
             request_copy(
                 _CopyJob(
                     brief=brief,
@@ -1262,7 +1266,7 @@ def register_demo(
         brief = brief_for(decision.moment, result) if result.winners else None
         spec = house_spec
         if brief is not None:
-            variant = hook_lab.variant_for(brief.signature(), studio.hook_count(brief))
+            variant = hook_lab.variant_for(brief.signature(), hooks_to_test(brief))
             composed = studio.compose(brief, variant=variant)
             if composed.score.verdict.passed:
                 spec = render_spec(brief, composed.draft, kits_by_id)
