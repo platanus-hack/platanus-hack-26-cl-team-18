@@ -95,6 +95,29 @@ def test_gate_reset_clears_the_model_state() -> None:
     assert vad.resets == 1
 
 
+def test_a_reset_in_a_hall_that_never_goes_quiet_does_not_deafen_the_gate() -> None:
+    # A mic hiccup or a Scribe reconnect resets the gate, which then waits for
+    # silence so the damaged tail is never transcribed. Crowd babble is speech to
+    # any VAD, so that silence never came: measured offline, speech mode stayed
+    # deaf for the rest of the demo at every babble SNR, with Silero and energy.
+    gate = SpeechGate(Scripted([0.9] * 2000), start_frames=3, hangover_frames=10)
+    gate.reset()
+    kinds = [o.event for i in range(200) for o in gate.feed(SILENCE)]
+    assert GateEvent.SPEECH_START in kinds
+    # It still skips the damaged tail: the gate stays shut for about a second.
+    first = next(i for i in range(200) if _opens_after_reset(i))
+    assert 20 <= first <= 45, first
+
+
+def _opens_after_reset(frames: int) -> bool:
+    gate = SpeechGate(Scripted([0.9] * (frames + 1)), start_frames=3, hangover_frames=10)
+    gate.reset()
+    opened = False
+    for _ in range(frames + 1):
+        opened = any(o.event is GateEvent.SPEECH_START for o in gate.feed(SILENCE)) or opened
+    return opened
+
+
 def test_end_threshold_must_not_exceed_the_start_threshold() -> None:
     with pytest.raises(ValueError):
         SpeechGate(Scripted([]), threshold=0.5, end_threshold=0.6)
@@ -408,6 +431,7 @@ def test_device_argument_accepts_an_index_or_a_name(raw: object, expected: objec
 # ------------------------------------------------------------------ offline eval gate
 
 
+@pytest.mark.timeout(300)  # Silero on CPU (edge[audio] + the model) takes ~90 s
 def test_offline_robustness_eval_has_no_gated_failures() -> None:
     """Real TTS speech x venue conditions x shipped VADs (docs: agent/speech/robustness.py)."""
     results = robustness.run_offline(SILERO)

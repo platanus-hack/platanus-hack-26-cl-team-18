@@ -23,6 +23,13 @@ def test_coffee_request_reaches_the_matching_player_and_survives_camera_updates(
     assert invariant_violations(run.decisions) == []
 
 
+def test_hall_chatter_that_only_sounds_like_a_need_never_changes_the_ad():
+    (scenario,) = load_scenarios(SCENARIO_DIR / "speech", only={"speech-venue-chatter"})
+    run = run_scenario(scenario)
+    assert [check for check in run.checks if not check.passed] == []
+    assert invariant_violations(run.decisions) == []
+
+
 def test_repeated_requests_also_switch_with_real_minimum_ad_times_enabled():
     (scenario,) = load_scenarios(SCENARIO_DIR / "speech", only={"speech-coffee-beer-switch"})
     run = run_scenario(scenario, swap_holds=True)

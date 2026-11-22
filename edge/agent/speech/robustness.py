@@ -10,7 +10,12 @@ stereo speakerphone) and streamed through the real `SpeechGate` with each VAD
 we can ship (Silero when the model is present, the adaptive energy fallback).
 Gates per clip: the gate streams >= 97 % of the voiced frames, opens no more
 segments than the line has sentences, closes after the speech, ends within
-1.3 s of the last voiced frame, and never opens on noise alone.
+1.3 s of the last voiced frame, and never opens on noise alone. Venue tier:
+pink noise, music and applause at 5-10 dB SNR; a gate reset mid-babble must
+still hear the next request; and 60 s of hall ambience with nobody speaking
+(stationary noise must open nothing; applause and babble are reported as
+opens/min, i.e. billed streaming and chances for a spurious topic). For the
+"coverage" column of a no-speech row, read "share of time streamed".
 
 Live tier (`--live`, spends a few cents of realtime STT): the same degraded
 clips, with the room still talking for 4 s after the line, go through
@@ -122,6 +127,41 @@ def _hum(n: int) -> np.ndarray:
     return harmonics.sum(axis=0) * 0.03 * 32768
 
 
+def _pink(n: int, rng: np.random.Generator) -> np.ndarray:
+    """1/f noise: HVAC, a fridge, distant traffic."""
+    spectrum = np.fft.rfft(rng.standard_normal(n))
+    freqs = np.arange(len(spectrum), dtype=np.float64)
+    freqs[0] = 1.0
+    return np.fft.irfft(spectrum / np.sqrt(freqs), n)
+
+
+def _music(n: int, rng: np.random.Generator) -> np.ndarray:
+    """Background music: a looped chord progression with harmonics and a beat."""
+    t = np.arange(n) / SAMPLE_RATE
+    out = np.zeros(n)
+    chords = ((220, 277, 330), (196, 247, 294), (175, 220, 262), (165, 208, 247))
+    for start in range(0, n, SAMPLE_RATE):
+        bar = slice(start, min(start + SAMPLE_RATE, n))
+        for f0 in chords[(start // SAMPLE_RATE) % len(chords)]:
+            for k in (1, 2, 3):
+                out[bar] += np.sin(2 * np.pi * f0 * k * t[bar]) / k
+    beat = (np.arange(n) % (SAMPLE_RATE // 2)) < 800
+    return out + beat * rng.standard_normal(n) * 2
+
+
+def _applause(n: int, rng: np.random.Generator) -> np.ndarray:
+    """A demo hall: 3 s of applause (dense claps) every 8 s over a low floor."""
+    out = rng.standard_normal(n) * 0.05
+    decay = np.exp(-np.arange(400) / 60)
+    for _ in range(int(n / SAMPLE_RATE * 15)):
+        i = int(rng.integers(0, max(n - 400, 1)))
+        out[i : i + 400] += (rng.standard_normal(400) * decay * 3)[: len(out[i : i + 400])]
+    envelope = np.zeros(n)
+    for start in range(0, n, 8 * SAMPLE_RATE):
+        envelope[start : start + 3 * SAMPLE_RATE] = 1
+    return out * (0.1 + envelope)
+
+
 CONDITIONS: tuple[Condition, ...] = (
     Condition("clean", lambda x, s, r: x),
     Condition("far_quiet_-24dB", lambda x, s, r: x * 10 ** (-24 / 20)),
@@ -130,6 +170,15 @@ CONDITIONS: tuple[Condition, ...] = (
     Condition("white_snr20", lambda x, s, r: x + _at_snr(r.standard_normal(len(x)), s, 20)),
     Condition("white_snr10", lambda x, s, r: x + _at_snr(r.standard_normal(len(x)), s, 10)),
     Condition("mains_hum", lambda x, s, r: x + _hum(len(x))),
+    Condition("pink_snr5", lambda x, s, r: x + _at_snr(_pink(len(x), r), s, 5)),
+    Condition("music_snr10", lambda x, s, r: x + _at_snr(_music(len(x), r), s, 10)),
+    # Claps are impulsive broadband bursts: the energy fallback opens on them.
+    Condition(
+        "applause_snr5",
+        lambda x, s, r: x + _at_snr(_applause(len(x), r), s, 5),
+        stationary=False,
+        gated=False,
+    ),
     # Babble is speech: a VAD is *supposed* to fire on it. Reported, not gated.
     Condition(
         "crowd_babble_snr10",
@@ -342,6 +391,85 @@ def eval_resampled_device() -> GateResult:
     return result
 
 
+def eval_reset_in_babble(vad_name: str, make_vad: VadFactory) -> GateResult:
+    """A mic hiccup or Scribe reconnect mid-crowd must not leave speech mode deaf.
+
+    The reset gate waits for silence before listening again; babble never goes
+    quiet, so without a bounded wait the next request was never streamed.
+    """
+    rng = np.random.default_rng(zlib.crc32(b"reset|babble"))
+    speech = load_pcm(LINES[0].fixture)
+    clean = scene(speech, lead_s=4.0)
+    truth = voiced_frames(clean)
+    before = _at_snr(_babble(3 * SAMPLE_RATE, rng), clean, 10)
+    after = clean + _at_snr(_babble(len(clean), rng), clean, 10)
+    gate = SpeechGate(make_vad())
+    run_gate(gate, to_frames(before))
+    gate.reset()
+    trace = run_gate(gate, to_frames(after))
+    coverage = float(trace.streamed[truth].mean())
+    result = GateResult(
+        vad_name,
+        LINES[0].name,
+        "reset_in_babble",
+        round(coverage, 4),
+        trace.segments,
+        99,
+        True,
+        None,
+        0,
+        True,
+    )
+    if coverage < MIN_COVERAGE:
+        result.failures.append(f"coverage {coverage:.1%} < {MIN_COVERAGE:.0%} after a reset")
+    return result
+
+
+# Long ambience, nobody addressing the screen. Stationary noise must never open
+# the gate (every open streams billed audio and can produce a spurious topic);
+# applause, a PA and babble are reported per minute (a VAD hears them as speech).
+VENUE_NOISES: tuple[tuple[str, Callable[[int, np.random.Generator], np.ndarray], bool], ...] = (
+    ("pink", _pink, True),
+    ("music", _music, True),
+    ("applause", _applause, False),
+    ("babble", _babble, False),
+)
+VENUE_NOISE_S = 60
+VENUE_NOISE_DBFS = -21.0  # a loud hall at the speakerphone
+
+
+def eval_venue_noise(
+    vad_name: str,
+    make_vad: VadFactory,
+    name: str,
+    make_noise: Callable[..., np.ndarray],
+    gated: bool,
+) -> GateResult:
+    rng = np.random.default_rng(zlib.crc32(f"venue|{name}".encode()))
+    n = VENUE_NOISE_S * SAMPLE_RATE
+    noise = make_noise(n, rng)
+    noise *= 32768 * 10 ** (VENUE_NOISE_DBFS / 20) / max(_rms(noise), 1e-9)
+    trace = run_gate(SpeechGate(make_vad()), to_frames(noise))
+    opens_per_min = trace.segments * 60 / VENUE_NOISE_S
+    result = GateResult(
+        vad_name,
+        "(no speech)",
+        f"{name}_{VENUE_NOISE_S}s",
+        round(float(trace.streamed.mean()), 4),
+        trace.segments,
+        0,
+        not trace.open_at_end,
+        None,
+        trace.segments,  # noise column: opens in the window
+        gated,
+    )
+    if trace.segments:
+        result.failures.append(
+            f"{opens_per_min:.1f} opens/min, streaming {trace.streamed.mean():.0%} of the time"
+        )
+    return result
+
+
 def run_offline(silero_model: Path | None) -> list[GateResult]:
     results: list[GateResult] = []
     for vad_name, make_vad in vad_factories(silero_model).items():
@@ -349,6 +477,11 @@ def run_offline(silero_model: Path | None) -> list[GateResult]:
             eval_clip(vad_name, make_vad, line, cond) for line in LINES for cond in CONDITIONS
         )
         results.append(eval_two_part_request(vad_name, make_vad))
+        results.append(eval_reset_in_babble(vad_name, make_vad))
+        results.extend(
+            eval_venue_noise(vad_name, make_vad, name, make, gated)
+            for name, make, gated in VENUE_NOISES
+        )
     results.append(eval_resampled_device())
     return results
 

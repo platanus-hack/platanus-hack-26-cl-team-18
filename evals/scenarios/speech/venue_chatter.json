@@ -1,0 +1,13 @@
+{
+  "name": "speech-venue-chatter",
+  "beat": "Hall chatter that only sounds like a need never changes the ad",
+  "description": "Third speech audit: in a hackathon hall 'once' is the time or our own spoken price, 'entrenar' is a model, 'qué bajón' is a bummer, and quantified negations are not requests. Each line moved the ad to a burger before the fix.",
+  "steps": [
+    {"scene": {"people": 1, "looking": 1}, "expect": {"brands": []}},
+    {"scene": {"people": 1, "looking": 1}, "speech": [], "speech_text": "son las once, hay que entrenar el modelo", "expect": {"brands": [], "no_change": true}},
+    {"scene": {"people": 1, "looking": 1}, "speech": [], "speech_text": "once mil novecientos noventa pesos", "expect": {"brands": [], "no_change": true}},
+    {"scene": {"people": 1, "looking": 1}, "speech": [], "speech_text": "qué bajón, perdimos", "expect": {"brands": [], "no_change": true}},
+    {"scene": {"people": 1, "looking": 1}, "speech": [], "speech_text": "nadie tiene hambre", "expect": {"brands": [], "no_change": true}},
+    {"scene": {"people": 1, "looking": 1}, "speech": [], "speech_text": "el equipo está completo", "expect": {"brands": [], "no_change": true}}
+  ]
+}

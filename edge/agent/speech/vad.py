@@ -215,6 +215,10 @@ class SpeechGate:
       so soft syllables and trailing consonants don't chop the phrase.
     - Closes after `hangover_frames` consecutive non-speech frames.
     - Caps a segment at `max_segment_frames` so a noisy room can't stream forever.
+    - After `reset()` it waits for silence, so the tail of a damaged phrase is never
+      transcribed, but at most `max_reset_wait_frames`: crowd babble is speech to any
+      VAD, and a hall that never goes quiet would otherwise leave speech mode deaf
+      for the rest of the demo (measured offline at every babble SNR).
     """
 
     def __init__(
@@ -227,8 +231,12 @@ class SpeechGate:
         hangover_frames: int = 10,  # ~320 ms: speech end -> final 227 ms vs 431 ms at 512 ms (bench)
         preroll_frames: int = 10,  # ~320 ms
         max_segment_frames: int = 470,  # ~15 s
+        max_reset_wait_frames: int = 31,  # ~1 s: longer than a phrase's tail
     ) -> None:
-        if not 0 < threshold <= 1 or min(start_frames, hangover_frames, max_segment_frames) < 1:
+        if (
+            not 0 < threshold <= 1
+            or min(start_frames, hangover_frames, max_segment_frames, max_reset_wait_frames) < 1
+        ):
             raise ValueError("VAD thresholds and frame windows must be positive")
         if preroll_frames < start_frames:
             raise ValueError("pre-roll must include all speech-start frames")
@@ -248,6 +256,8 @@ class SpeechGate:
         self._silent_run = 0
         self._segment_frames = 0
         self._waiting_for_silence = False
+        self._max_reset_wait = max_reset_wait_frames
+        self._reset_waited = 0
         self._extended_hangover = hangover_frames
 
     def reset(self) -> None:
@@ -256,6 +266,7 @@ class SpeechGate:
         self._voiced_run = self._silent_run = self._segment_frames = 0
         self._preroll.clear()
         self._waiting_for_silence = True
+        self._reset_waited = 0
         self._extended_hangover = self._hangover_frames
         _reset(self._vad)
 
@@ -293,7 +304,11 @@ class SpeechGate:
         voiced = probability >= (self._end_threshold if self._open else self._threshold)
         if self._waiting_for_silence:
             self._silent_run = 0 if voiced else self._silent_run + 1
-            if self._silent_run >= self._hangover_frames:
+            self._reset_waited += 1
+            if (
+                self._silent_run >= self._hangover_frames
+                or self._reset_waited >= self._max_reset_wait
+            ):
                 self._waiting_for_silence = False
                 self._silent_run = 0
             return

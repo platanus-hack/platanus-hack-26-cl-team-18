@@ -10,6 +10,13 @@ from app.contract.speech_matching import normalize
 # This is a content match, never a blanket microphone mute or speaker inference.
 TRANSCRIPT_GRACE = timedelta(seconds=2.4)
 MAX_WINDOWS = 8
+# A partial of our own line with one recognition error ("nescafe un cafes rapido")
+# is neither a substring nor globally similar to a long line. Local alignment: the
+# share of the heard letters (spaces ignored, so "nes cafe" == "nescafe") found in
+# order in the line. Real requests over a voice-over measured <= 0.70 on the demo
+# catalog; one-error echo partials >= 0.87.
+LOCAL_ALIGNMENT = 0.85
+MIN_LOCAL_CHARS = 12
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +53,19 @@ class PlaybackEcho:
         if len(heard) < 8:
             return False
         return any(
-            heard in window.copy or SequenceMatcher(None, heard, window.copy).ratio() >= 0.8
+            heard in window.copy
+            or SequenceMatcher(None, heard, window.copy).ratio() >= 0.8
+            or _locally_aligned(heard, window.copy)
             for window in self._windows
         )
+
+
+def _locally_aligned(heard: str, copy: str) -> bool:
+    # Realtime partials stutter ("agua agua fria"): a repeated word is one word.
+    words = heard.split()
+    heard = "".join(w for i, w in enumerate(words) if i == 0 or w != words[i - 1])
+    copy = copy.replace(" ", "")
+    if len(heard) < MIN_LOCAL_CHARS:
+        return False
+    blocks = SequenceMatcher(None, heard, copy, autojunk=False).get_matching_blocks()
+    return sum(block.size for block in blocks) / len(heard) >= LOCAL_ALIGNMENT
