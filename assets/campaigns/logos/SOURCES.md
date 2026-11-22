@@ -29,7 +29,15 @@ affiliation. Never AI-drawn or redrawn (CLAUDE.md invariant 4).
 | `colun.svg` | Brand site: colun.cl footer logo, cropped above its copyright line |
 | `ambrosoli.svg` | Brand site: ambrosoli.cl logo, on Ambrosoli red |
 | `benedictino.svg` | Bottler's site: koandina.com brand portfolio (Benedictino-100x-100-pix.jpg), trimmed |
+| `starbucks.svg` | Brand site: starbucks.com header siren (`/assets/icons/siren.svg`) |
+| `domino.svg` | Brand site: domino.cl header logo (`logo.svg`, "Dominó ORIGINAL·1952") |
+| `guinness-0-0.svg` | Brand site: guinness.com header harp and wordmark (Diageo), on a dark plate (its wordmark is white) |
+| `vital.svg` | Owner's site: coca-cola.com/cl brand page (`logos-nuevos/vital.png`) |
+| `savory.svg` | Brand site: savory.cl (`Savory Logo Transparente.png`, Nestlé) |
+| `super-8.svg` | Owner's site: nestle.cl brand tile (`Marca_Super8_0.jpg`), via the Wayback Machine (2023-12) |
+| `marco-polo.svg` | Brand site: marcopolo.cl logo (`marco-polo-logo.png`), via the Wayback Machine (2018); ICB still shows the same mark |
+| `bilz-y-pap.svg` | Owner's site: ccu.cl brands page (`Logo-BILZ-Y-PAP-ZERO-CCU.png`), on a dark plate (white tagline) |
+| `andina-del-valle.svg` | Owner's site: coca-cola.com/cl brand page (`logos-nuevos/del-valle.png`, the current "del Valle" mark), on a black plate |
 
-Missing (a plain wordmark is drawn until the brand's press-kit file is dropped in as
-`<slug>.svg`, `.png` or `.webp`): `marco-polo`, `super-8`,
-`bilz-y-pap`, `andina-del-valle`, `savory`.
+Every Chile brand now airs its own official mark. Each file above is embedded unmodified on
+the 64 px plate (nothing drawn, traced or recoloured; CLAUDE.md invariant 4).
