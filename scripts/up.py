@@ -11,7 +11,8 @@ Every step is idempotent and takes well under a second when already done, so
    packages when `package-lock.json` changed.
 3. The YOLOE object vocabulary, baked once into `edge/`.
 4. Postgres, only when `DATABASE_URL` is set: started with Docker if it is local
-   and down, then migrated.
+   and down, then migrated. If it won't come up, the station still starts, with
+   records in memory (loud warning; the preflight repeats it).
 5. The provider preflight (informational), then the station.
 
 Secrets are never printed: the demo key stays in `.env`.
@@ -165,17 +166,26 @@ def prepare_database(env_text: str) -> None:
     if target is None:
         return  # in memory: nothing to start
     host, port = target
-    if not _reachable(host, port):
-        if host not in LOCAL_HOSTS or shutil.which("docker") is None:
-            raise SystemExit(
-                f"✗ DATABASE_URL points at {host}:{port}, which is down. Start it, "
-                "or blank DATABASE_URL in .env to keep records in memory."
-            )
-        _step("starting local Postgres (docker compose)")
-        _run(["docker", "compose", "up", "-d", "--wait", "postgres"])
-    _step("database migrations")
-    # migrate.py reads DATABASE_URL from the environment only (Render's pre-deploy).
-    _run(["uv", "run", "python", "scripts/migrate.py"], extra_env={"DATABASE_URL": url})
+    # The screen is never blank: a database that won't come up costs the record of
+    # this run (the backend falls back to in-memory campaigns), never the station.
+    fallback = (
+        "  ⚠ records stay in memory this run (budgets from before are not restored, "
+        "charges are not kept). Fix Postgres and restart, or blank DATABASE_URL in .env."
+    )
+    try:
+        if not _reachable(host, port):
+            if host not in LOCAL_HOSTS or shutil.which("docker") is None:
+                print(f"⚠ DATABASE_URL points at {host}:{port}, which is down.", flush=True)
+                print(fallback, flush=True)
+                return
+            _step("starting local Postgres (docker compose)")
+            _run(["docker", "compose", "up", "-d", "--wait", "postgres"])
+        _step("database migrations")
+        # migrate.py reads DATABASE_URL from the environment only (Render's pre-deploy).
+        _run(["uv", "run", "python", "scripts/migrate.py"], extra_env={"DATABASE_URL": url})
+    except SystemExit as exc:
+        print(f"⚠ {exc}", flush=True)
+        print(fallback, flush=True)
 
 
 def main(argv: Sequence[str] | None = None) -> int:

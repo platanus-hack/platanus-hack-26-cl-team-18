@@ -5,6 +5,8 @@ from __future__ import annotations
 import shutil
 from typing import TYPE_CHECKING, TypedDict
 
+from app.modules.creative.infrastructure.campaign_assets import missing_campaign_photos
+
 if TYPE_CHECKING:
     from app.bootstrap.container import Container
 
@@ -13,6 +15,24 @@ class ProviderStatus(TypedDict):
     enabled: bool
     configured: bool
     missing: list[str]
+
+
+def records_status(container: Container) -> dict[str, object]:
+    """Where this run's budgets and records go. Counts and an exception class name
+    only: never a DSN or row content."""
+    writer = container.writer
+    return {
+        "campaigns": container.campaign_store,
+        "writer": None
+        if writer is None
+        else {
+            "written": writer.stats.written,
+            "dropped": writer.stats.dropped,
+            "rejected": writer.stats.rejected,
+            "failures": writer.stats.failures,
+            "last_error": writer.stats.last_error,
+        },
+    }
 
 
 def live_readiness(container: Container) -> dict[str, object]:
@@ -69,6 +89,7 @@ def live_readiness(container: Container) -> dict[str, object]:
             "expected_loops": len(container.loop_keys),
             "missing_loops": missing_loops,
             "generation_tools_missing": [] if shutil.which("ffmpeg") else ["ffmpeg"],
+            "missing_campaign_photos": missing_campaign_photos(),
         },
         "fallbacks": {"copy": "approved_stock", "voice": "silent", "video": "template"},
     }

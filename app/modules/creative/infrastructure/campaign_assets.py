@@ -14,6 +14,21 @@ def _local(name: str) -> str:
     return name
 
 
+def missing_campaign_photos(root: Path = CAMPAIGN_ASSETS) -> list[str]:
+    """Photos the manifest names that are not on disk (primary or alternate).
+
+    The loader skips them silently (a missing primary airs the template instead),
+    so the preflight lists them: usually a manifest committed without its photos.
+    """
+    manifest = json.loads((root / "manifest.json").read_text())
+    names = {
+        name
+        for entry in manifest["campaigns"].values()
+        for name in (entry["photo"], *entry.get("alternates", ()))
+    }
+    return sorted(name for name in names if not (root / "photos" / f"{name}.webp").is_file())
+
+
 def load_campaign_media(root: Path = CAMPAIGN_ASSETS) -> dict[str, CampaignMedia]:
     """Manifest keys: a basket ("juan-valdez+score"), a brand ("score") or a category
     scene ("category:ice_cream"). Each has a primary `photo`, optional `alternates`

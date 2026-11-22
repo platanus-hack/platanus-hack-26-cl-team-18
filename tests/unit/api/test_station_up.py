@@ -45,3 +45,21 @@ def test_npm_ci_runs_only_when_the_lock_changed(tmp_path: Path) -> None:
     os.utime(lock, None)
     os.utime(installed, (1, 1))
     assert needs_npm_ci(tmp_path)
+
+
+def test_a_database_that_is_down_never_stops_the_station(monkeypatch, capsys) -> None:
+    # The backend falls back to in-memory campaigns; `make up` must still start it.
+    import scripts.up as up
+
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setattr(up, "_reachable", lambda host, port: False)
+    up.prepare_database("DATABASE_URL=postgresql://u:p@db.example.org:5432/x\n")
+    assert "in memory" in capsys.readouterr().out
+
+    def failing_run(command, **_kwargs):
+        raise SystemExit(f"failed: {' '.join(command)}")
+
+    monkeypatch.setattr(up, "_run", failing_run)
+    monkeypatch.setattr(up.shutil, "which", lambda tool: "/usr/bin/docker")
+    up.prepare_database("DATABASE_URL=postgresql://u:p@localhost:5432/x\n")
+    assert "in memory" in capsys.readouterr().out

@@ -52,6 +52,16 @@ backend answers 404, and production never serves it (`app/api/demo_access.py`).
 Share `/demo/<key>/advertiser` with the judges for the bidding war; never put the
 hub on a slide. Scripted scenes without a camera: `scripts/demo/rehearse.py`.
 
+**Phones and the second laptop go through the player origin (:5188), never the
+backend (:8000).** Vite proxies `/r`, `/api`, `/ws` and `/media`, and the backend
+serves no `/demo/<key>/…` page. Tunnel: `cloudflared tunnel --url
+http://127.0.0.1:5188`, put the printed `https://…trycloudflare.com` in `.env` as
+`PUBLIC_BASE_URL` (the QR's origin, read at start), then restart the station; it
+allows that host in Vite and prints `QR codes open …`. Second laptop (D7): `make
+station ARGS="--web-host 0.0.0.0"` and open `http://<laptop IP>:5188/console`.
+`make live-preflight` warns about a QR origin phones can't open, campaigns a
+rehearsal drained, records that fell back to memory and missing campaign photos.
+
 ### The "En vivo" switch (start every round from standby)
 
 `make demo-live` starts the station in **standby**: the camera agent is loaded

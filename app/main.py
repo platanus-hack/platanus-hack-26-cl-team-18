@@ -30,6 +30,8 @@ def create_app(
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         if settings.app_env != "test":
             configure_logging(settings.log_level)
+            for problem in settings.misconfigurations():
+                logger.warning("config: %s", problem)
         loop = asyncio.get_running_loop()
         built.hub.bind_loop(loop)
         built.warm.bind_loop(loop)

@@ -75,6 +75,7 @@ def register_live_market(container: Container) -> DemoControls:
         # campaigns for this process (spend and bids from before are not restored).
         logger.exception("Campaign registry unavailable: campaigns start in memory")
         market = market_with(None)
+        container.campaign_store = "memory_fallback"  # /health and the preflight show it
     slugs = {kit.brand_id: _slug(kit.name) for kit in market.kits}
     container.campaign_generator = CampaignGenerator(
         kits=market.kits,

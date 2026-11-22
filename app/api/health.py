@@ -5,7 +5,7 @@ from typing import Any
 from fastapi import APIRouter, Request
 
 from app.bootstrap.container import Container
-from app.bootstrap.readiness import live_readiness
+from app.bootstrap.readiness import live_readiness, records_status
 from app.contract.messages import CONTRACT_VERSION
 
 router = APIRouter()
@@ -38,6 +38,7 @@ def health(request: Request) -> dict[str, Any]:
             "failed": c.warm.stats.failed,
             "in_flight": c.warm.stats.in_flight,
         },
+        "records": records_status(c),
         "hub": {
             "sent": c.hub.stats.sent,
             "dropped_sinks": c.hub.stats.dropped_sinks,

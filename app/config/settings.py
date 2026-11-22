@@ -2,16 +2,35 @@
 
 from __future__ import annotations
 
+import logging
 from decimal import Decimal
+from ipaddress import ip_address
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlsplit
 
-from pydantic import Field, SecretStr
+from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Hosts a judge's phone can never open: a QR pointing here is dead on arrival.
+_LOOPBACK_HOSTS = {"localhost", "0.0.0.0", "::"}
+# app/api/demo_access.py and device_auth.py refuse shorter secrets in prod.
+_PROD_MIN_SECRET_LENGTH = 24
+
+
+def _is_loopback(host: str) -> bool:
+    if host in _LOOPBACK_HOSTS or host.endswith(".localhost"):
+        return True
+    try:
+        return ip_address(host).is_loopback
+    except ValueError:
+        return False
 
 
 class AppSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore", frozen=True)
+    model_config = SettingsConfigDict(
+        env_file=".env", extra="ignore", frozen=True, validate_by_name=True
+    )
 
     app_env: Literal["local", "test", "prod"] = "local"
     log_level: str = "INFO"
@@ -33,7 +52,11 @@ class AppSettings(BaseSettings):
     # local station; real trademarks, so keep it off public deploys).
     demo_catalog: Literal["fictional", "chile"] = "fictional"
     # Where phones reach the backend through the tunnel (QR → {public_base_url}/r/{code}).
-    public_base_url: str = "http://localhost:5173"
+    # Unset on Render: the service's own URL (RENDER_EXTERNAL_URL), which serves /r/{code}.
+    public_base_url: str = Field(
+        default="http://localhost:5173",
+        validation_alias=AliasChoices("PUBLIC_BASE_URL", "RENDER_EXTERNAL_URL"),
+    )
     # Warm audience AI (Claude): keyframe tags (objects/held products only) and speech
     # topics for utterances the keyterm matcher missed. Off: keyterms and markers only.
     audience_ai: bool = True
@@ -62,6 +85,56 @@ class AppSettings(BaseSettings):
     # Demo only: the console's camera panel shows a face-blurred, downscaled camera
     # view under the boxes (in memory, never stored). Always off in prod.
     demo_camera_preview: bool = True
+
+    @field_validator("log_level")
+    @classmethod
+    def _known_log_level(cls, value: str) -> str:
+        level = value.strip().upper()
+        if not isinstance(logging.getLevelNamesMapping().get(level), int):
+            raise ValueError(f"unknown log level {value!r} (DEBUG, INFO, WARNING, ERROR)")
+        return level
+
+    @field_validator("public_base_url")
+    @classmethod
+    def _http_origin(cls, value: str) -> str:
+        url = urlsplit(value.strip())
+        if url.scheme not in {"http", "https"} or not url.hostname:
+            raise ValueError(
+                f"{value!r} is not an http(s) URL; phones open {{PUBLIC_BASE_URL}}/r/<code>"
+            )
+        return value.strip().rstrip("/")
+
+    @field_validator("warm_concurrency")
+    @classmethod
+    def _positive_limits(cls, value: dict[str, int]) -> dict[str, int]:
+        # A limit of 0 parks every job of that provider forever (no error, no upgrade).
+        bad = {name: limit for name, limit in value.items() if limit < 1}
+        if bad:
+            raise ValueError(f"every provider limit must be >= 1, got {bad}")
+        return value
+
+    def misconfigurations(self) -> list[str]:
+        """Valid but almost certainly unintended settings, for the boot log and preflight."""
+        problems = []
+        host = urlsplit(self.public_base_url).hostname or ""
+        if _is_loopback(host):
+            problems.append(
+                f"PUBLIC_BASE_URL is {self.public_base_url}: the QR's /r/<code> link only "
+                "opens on this machine; set it to the tunnel or LAN URL for judges' phones"
+            )
+        if self.app_env == "prod":
+            for name, secret in (
+                ("DEMO_KEY", self.demo_key),
+                ("AGENT_TOKEN", self.agent_token),
+                ("SCREEN_TOKEN", self.screen_token),
+            ):
+                value = secret.get_secret_value() if secret else ""
+                if value and len(value) < _PROD_MIN_SECRET_LENGTH:
+                    problems.append(
+                        f"{name} has {len(value)} chars; prod needs {_PROD_MIN_SECRET_LENGTH}+, "
+                        "so it unlocks nothing (openssl rand -hex 16)"
+                    )
+        return problems
 
     @property
     def demo_camera_preview_enabled(self) -> bool:

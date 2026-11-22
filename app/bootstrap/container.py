@@ -86,6 +86,9 @@ class Container:
     redemption_ledger: Any = None  # RedemptionLedger; in memory unless DATABASE_URL is set
     # CampaignRegistry: stable campaign ids, budgets and live bids (Postgres when set).
     campaign_registry: Any = None
+    # Where budgets and bids live this run: "memory", "postgres", or "memory_fallback"
+    # (DATABASE_URL set but unreachable at boot: spend from before is not restored).
+    campaign_store: str = "memory"
     topic_extractor: TopicExtractor | None = None  # speech topics (AUDIENCE_AI)
     loop_keys: tuple[str, ...] = ()
     campaign_generator: CampaignGenerator | None = None
@@ -244,6 +247,7 @@ def build_records(container: Container) -> None:
         ids=IdGenerator(),
         clock=container.clock,
     )
+    container.campaign_store = "postgres"
 
     async def close_writer() -> None:
         writer.close()

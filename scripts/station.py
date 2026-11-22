@@ -17,9 +17,10 @@ import sys
 import time
 import webbrowser
 from dataclasses import dataclass
+from ipaddress import ip_address
 from pathlib import Path
 from typing import BinaryIO
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 from urllib.request import urlopen
 
 from app.config.settings import AppSettings
@@ -51,6 +52,37 @@ def live_switch_environment(environment: dict[str, str], *, start_live: bool) ->
     return {**environment, "LIVE_STARTS_ON": "true" if start_live else "false"}
 
 
+def web_environment(environment: dict[str, str], *, public_base_url: str) -> dict[str, str]:
+    """The player/console reach the backend through their own origin (Vite proxies /api,
+    /ws, /r, /media). VITE_BACKEND_URL is inlined into the page, so any value, even the
+    station's 127.0.0.1, would send the second laptop's console and a judge's phone
+    to their own machine (ADR 0008 D3/D7). Vite also refuses unknown Host headers, so
+    the tunnel's host is allowed explicitly (IP hosts and localhost always are)."""
+    result = {k: v for k, v in environment.items() if k != "VITE_BACKEND_URL"}
+    result["PUBLIC_BASE_URL"] = public_base_url
+    hosts = [".trycloudflare.com"]
+    host = urlsplit(public_base_url).hostname or ""
+    try:
+        ip_address(host)
+    except ValueError:
+        if host and host != "localhost" and not host.endswith(".trycloudflare.com"):
+            hosts.append(host)
+    result["__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS"] = ",".join(hosts)
+    return result
+
+
+def exit_hint(log_path: Path) -> str:
+    """The last line a crashed component logged (e.g. "camera 0 could not be opened")."""
+    try:
+        with log_path.open("rb") as log:
+            log.seek(0, os.SEEK_END)
+            log.seek(max(0, log.tell() - 4096))
+            lines = log.read().decode(errors="replace").splitlines()
+    except OSError:
+        return ""
+    return next((line.strip()[:200] for line in reversed(lines) if line.strip()), "")
+
+
 def agent_live_args(*, start_live: bool) -> list[str]:
     """Agents in a standby station wait for the switch before opening the camera loop or mic."""
     return [] if start_live else ["--await-live"]
@@ -77,8 +109,11 @@ class ManagedProcess:
                 os.killpg(self.process.pid, signal.SIGTERM)
             self.restarts += 1
             self.restart_at = now + min(5, self.restarts)
+            hint = exit_hint(Path(self.log.name)) if isinstance(self.log.name, str) else ""
             print(
-                f"{self.name} exited ({code}); restarting in {min(5, self.restarts)}s", flush=True
+                f"{self.name} exited ({code}); restarting in {min(5, self.restarts)}s"
+                + (f" | last log: {hint}" if hint else ""),
+                flush=True,
             )
             self.process = None
         if now >= self.restart_at:
@@ -107,6 +142,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--backend-port", type=int, default=8000)
     parser.add_argument("--web-port", type=int, default=5188)
+    parser.add_argument(
+        "--web-host",
+        default="127.0.0.1",
+        help="where the player/console listen; 0.0.0.0 lets the second laptop's console "
+        "in (ADR 0008 D7). The backend always stays on 127.0.0.1 behind Vite's proxy",
+    )
     parser.add_argument("--screen", default="demo-01")
     parser.add_argument("--camera", type=int, default=0)
     parser.add_argument(
@@ -149,11 +190,11 @@ def main() -> int:
     if args.speech and (args.silero_model is None or not args.silero_model.is_file()):
         parser.error("speech needs --silero-model pointing to a downloaded ONNX model")
     # Refuse to attach to an unrelated backend, or kill another task's process.
-    for port in (args.backend_port, args.web_port):
+    for host, port in (("127.0.0.1", args.backend_port), (args.web_host, args.web_port)):
         with socket.socket() as probe:
             probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             try:
-                probe.bind(("127.0.0.1", port))
+                probe.bind((host, port))
             except OSError:
                 parser.error(
                     f"port {port} is occupied; stop that station or choose different ports"
@@ -165,9 +206,13 @@ def main() -> int:
         provider_environment(dict(os.environ), paid=args.paid_providers),
         start_live=args.start_live,
     )
-    env["BACKEND_URL"] = backend
-    # An inherited build override must not send this station to a different backend.
-    env["VITE_BACKEND_URL"] = origin
+    env["BACKEND_URL"] = backend  # Vite's proxy target (web/vite.config.ts)
+    # The QR's origin: PUBLIC_BASE_URL (tunnel or LAN URL), else this station's player
+    # origin, which proxies /r/{code} (the settings default, :5173, is not running here).
+    public_base_url = (
+        settings.public_base_url if "public_base_url" in settings.model_fields_set else origin
+    )
+    env = web_environment(env, public_base_url=public_base_url)
     env["SPEECH_MODE_SCREENS"] = json.dumps([args.screen] if args.speech else [])
     # The console's "Lo que ve la cámara": detection boxes, plus (demo only, never in
     # prod) a face-blurred, downscaled camera view under them (DEMO_CAMERA_PREVIEW).
@@ -205,7 +250,7 @@ def main() -> int:
                 "dev",
                 "--",
                 "--host",
-                "127.0.0.1",
+                args.web_host,
                 "--port",
                 str(args.web_port),
                 "--strictPort",
@@ -275,6 +320,16 @@ def main() -> int:
         f"Player: {origin}/screen?id={args.screen}\nConsole: {origin}/console?screen={args.screen}",
         flush=True,
     )
+    if args.web_host != "127.0.0.1":
+        print(
+            f"Second laptop: http://<this laptop's IP>:{args.web_port}/console?screen={args.screen}",
+            flush=True,
+        )
+    print(f"QR codes open {public_base_url}/r/<code>", flush=True)
+    for problem in settings.model_copy(
+        update={"public_base_url": public_base_url}
+    ).misconfigurations():
+        print(f"WARNING: {problem}", flush=True)
     if settings.demo_key and settings.demo_key.get_secret_value():
         print(f"Demo tools (private): {origin}/demo/<DEMO_KEY from .env>", flush=True)
     # The player remembers the screen token after its first load (web/src/lib/device.ts);
