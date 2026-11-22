@@ -36,6 +36,7 @@ def load_catalog(path: Path = DEFAULT_CATALOG) -> LoadedCatalog:
         CatalogSegment(
             segment_id=SegmentId.create(item["id"]),
             label=item["label"],
+            label_es=item.get("label_es"),
             path=item["path"],
             tier=SegmentTier(item["tier"]),
         )

@@ -4,179 +4,208 @@
   "catalog_version": "cstore-2026-11-21",
   "source": "https://github.com/InteractiveAdvertisingBureau/Taxonomies/blob/main/Audience%20Taxonomies/Audience%20Taxonomy%201.1.tsv",
   "retrieved": "2026-11-21",
-  "notes": "Convenience-store subset. Interest and Purchase Intent tiers only: no Demographic segments and nothing sensitive (health conditions, religion, politics, orientation). IDs and paths copied from the official TSV; the Purchase Intent asterisk is dropped from paths. Brand refs are the prop marker slugs in edge/props/markers.json (ADR 0008 D2). Spoken keyterms map to segments in the demo seed (speech_evidence.py), not here. `related` lists curated, symmetric same-need pairs the auction may match at a discount (weight 0-100); the IAB hierarchy in `path` adds broader/narrower matches on its own. Age-restricted segments (369) are never related to anything, so a related match can't widen alcohol's reach.",
+  "notes": "Convenience-store subset. Interest and Purchase Intent tiers only: no Demographic segments and nothing sensitive (health conditions, religion, politics, orientation). IDs and paths copied from the official TSV; the Purchase Intent asterisk is dropped from paths. Brand refs are the prop marker slugs in edge/props/markers.json (ADR 0008 D2). Spoken keyterms map to segments in the demo seed (speech_evidence.py), not here. `related` lists curated, symmetric same-need pairs the auction may match at a discount (weight 0-100); the IAB hierarchy in `path` adds broader/narrower matches on its own. Age-restricted segments (369) are never related to anything, so a related match can't widen alcohol's reach. `label_es` is the Spanish name the console, Dev/QA and advertiser pages show; `label` stays the official IAB name (model prompts, traceability).",
   "segments": [
     {
       "id": "369",
       "label": "Alcoholic Beverages",
+      "label_es": "Bebidas alcohólicas",
       "path": "Interest | Food & Drink | Alcoholic Beverages",
       "tier": "interest"
     },
     {
       "id": "372",
       "label": "Desserts and Baking",
+      "label_es": "Postres y repostería",
       "path": "Interest | Food & Drink | Desserts and Baking",
       "tier": "interest"
     },
     {
       "id": "373",
       "label": "Dining Out",
+      "label_es": "Comer fuera",
       "path": "Interest | Food & Drink | Dining Out",
       "tier": "interest"
     },
     {
       "id": "377",
       "label": "Non-Alcoholic Beverages",
+      "label_es": "Bebidas sin alcohol",
       "path": "Interest | Food & Drink | Non-Alcoholic Beverages",
       "tier": "interest"
     },
     {
       "id": "408",
       "label": "Fitness and Exercise",
+      "label_es": "Deporte y ejercicio",
       "path": "Interest | Healthy Living | Fitness and Exercise",
       "tier": "interest"
     },
     {
       "id": "410",
       "label": "Running and Jogging",
+      "label_es": "Running y trote",
       "path": "Interest | Healthy Living | Fitness and Exercise | Running and Jogging",
       "tier": "interest"
     },
     {
       "id": "481",
       "label": "Music and Audio",
+      "label_es": "Música y audio",
       "path": "Interest | Music and Audio",
       "tier": "interest"
     },
     {
       "id": "541",
       "label": "Pets",
+      "label_es": "Mascotas",
       "path": "Interest | Pets",
       "tier": "interest"
     },
     {
       "id": "544",
       "label": "Dogs",
+      "label_es": "Perros",
       "path": "Interest | Pets | Dogs",
       "tier": "interest"
     },
     {
       "id": "607",
       "label": "Sports",
+      "label_es": "Deportes",
       "path": "Interest | Sports",
       "tier": "interest"
     },
     {
       "id": "625",
       "label": "Cycling",
+      "label_es": "Ciclismo",
       "path": "Interest | Sports | Cycling",
       "tier": "interest"
     },
     {
       "id": "636",
       "label": "Skateboarding",
+      "label_es": "Skate",
       "path": "Interest | Sports | Extreme Sports | Skateboarding",
       "tier": "interest"
     },
     {
       "id": "663",
       "label": "Soccer",
+      "label_es": "Fútbol",
       "path": "Interest | Sports | Soccer",
       "tier": "interest"
     },
     {
       "id": "687",
       "label": "Technology & Computing",
+      "label_es": "Tecnología",
       "path": "Interest | Technology & Computing",
       "tier": "interest"
     },
     {
       "id": "719",
       "label": "Travel",
+      "label_es": "Viajes",
       "path": "Interest | Travel",
       "tier": "interest"
     },
     {
       "id": "733",
       "label": "Video Gaming",
+      "label_es": "Videojuegos",
       "path": "Interest | Video Gaming",
       "tier": "interest"
     },
     {
       "id": "736",
       "label": "Mobile Games",
+      "label_es": "Juegos móviles",
       "path": "Interest | Video Gaming | Mobile Games",
       "tier": "interest"
     },
     {
       "id": "975",
       "label": "Carbonated Soft Drinks",
+      "label_es": "Bebidas gaseosas",
       "path": "Purchase Intent | Consumer Packaged Goods | Edible | Beverages | Carbonated Soft Drinks",
       "tier": "purchase_intent"
     },
     {
       "id": "977",
       "label": "Coffee",
+      "label_es": "Café",
       "path": "Purchase Intent | Consumer Packaged Goods | Edible | Beverages | Coffee & Tea | Coffee",
       "tier": "purchase_intent"
     },
     {
       "id": "982",
       "label": "Tea/Coffee - Ready-to-Drink",
+      "label_es": "Té y café listos para tomar",
       "path": "Purchase Intent | Consumer Packaged Goods | Edible | Beverages | Coffee & Tea | Tea/Coffee - Ready-to-Drink",
       "tier": "purchase_intent"
     },
     {
       "id": "997",
       "label": "Energy Drinks",
+      "label_es": "Bebidas energéticas",
       "path": "Purchase Intent | Consumer Packaged Goods | Edible | Beverages | Sports/Energy Drinks | Energy Drinks",
       "tier": "purchase_intent"
     },
     {
       "id": "1000",
       "label": "Bottled Water",
+      "label_es": "Agua embotellada",
       "path": "Purchase Intent | Consumer Packaged Goods | Edible | Beverages | Water | Bottled Water",
       "tier": "purchase_intent"
     },
     {
       "id": "1011",
       "label": "Ice Cream/Sherbet",
+      "label_es": "Helados",
       "path": "Purchase Intent | Consumer Packaged Goods | Edible | Frozen | Frozen Desserts | Ice Cream/Sherbet",
       "tier": "purchase_intent"
     },
     {
       "id": "1045",
       "label": "Pastry/Doughnuts",
+      "label_es": "Pastelería",
       "path": "Purchase Intent | Consumer Packaged Goods | Edible | General Food | Bakery | Pastry/Doughnuts",
       "tier": "purchase_intent"
     },
     {
       "id": "1074",
       "label": "Candy",
+      "label_es": "Dulces",
       "path": "Purchase Intent | Consumer Packaged Goods | Edible | General Food | Candy",
       "tier": "purchase_intent"
     },
     {
       "id": "1115",
       "label": "Snacks",
+      "label_es": "Snacks",
       "path": "Purchase Intent | Consumer Packaged Goods | Edible | General Food | Snacks",
       "tier": "purchase_intent"
     },
     {
       "id": "1122",
       "label": "Salty Snacks",
+      "label_es": "Snacks salados",
       "path": "Purchase Intent | Consumer Packaged Goods | Edible | General Food | Snacks | Salty Snacks",
       "tier": "purchase_intent"
     },
     {
       "id": "1404",
       "label": "Fast Food",
+      "label_es": "Comida rápida",
       "path": "Purchase Intent | Food and Beverage Services | Fast Food",
       "tier": "purchase_intent"
     },
     {
       "id": "1633",
       "label": "Exercise and Fitness Equipment",
+      "label_es": "Equipamiento deportivo",
       "path": "Purchase Intent | Sporting Goods | Exercise and Fitness Equipment",
       "tier": "purchase_intent"
     }

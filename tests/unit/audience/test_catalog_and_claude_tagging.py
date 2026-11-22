@@ -55,6 +55,12 @@ def test_catalog_is_interest_and_purchase_intent_only() -> None:
     assert CATALOG.label(SegmentId.create("977")) == "Coffee"
 
 
+def test_people_read_spanish_names_while_models_keep_the_iab_label() -> None:
+    assert all(segment.label_es for segment in CATALOG.segments)
+    assert CATALOG.display_label(SegmentId.create("977")) == "Café"
+    assert CATALOG.display_label(SegmentId.create("999999")) == "999999"  # unknown id
+
+
 def test_every_cue_is_normalized_and_resolves() -> None:
     for rule in CATALOG.cues:
         assert rule.cue == normalize_cue(rule.cue)

@@ -23,8 +23,8 @@ def test_a_related_segment_reaches_the_partner_bid_and_the_console_shows_the_mat
     (match,) = patio.matches
     assert (match.kind, match.bid_segment_label, match.segment_label) == (
         "related",
-        "Coffee",
-        "Pastry/Doughnuts",
+        "Café",
+        "Pastelería",
     )
     assert match.weight == 0.4
     assert patio.bid_per_as.amount == "2"  # 5 CLP/AS · 0.4

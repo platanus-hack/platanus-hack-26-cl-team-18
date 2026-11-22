@@ -181,8 +181,8 @@ def test_a_duo_with_an_energy_can_and_a_coffee_gets_the_score_and_juan_valdez_ba
         creative = CreativeReady.model_validate(player.receive_json())
 
         # At a gas station an energy can is a tired-driver moment, not a gym exit.
-        assert "Energy Drinks" in {segment.label for segment in first.segments}
-        assert "Fitness and Exercise" not in {segment.label for segment in first.segments}
+        assert "Bebidas energéticas" in {segment.label for segment in first.segments}
+        assert "Deporte y ejercicio" not in {segment.label for segment in first.segments}
         assert creative.spec.angle in {"energy", "coffee_break"}
         assert [slot.brand_name for slot in creative.spec.slots] == ["Score", "Juan Valdez"]
         assert creative.spec.offer is not None and creative.spec.offer.price.amount == "7490"

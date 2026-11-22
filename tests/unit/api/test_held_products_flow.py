@@ -49,5 +49,5 @@ def test_a_held_cafe_patio_cup_boosts_its_partner_and_shows_on_the_console(tmp_p
             ("coffee", "cafe-patio", 0.95)
         ]
         # The marker is a held product, never an audience segment.
-        assert [s.label for s in moment.segments] == ["Fitness and Exercise"]
+        assert [s.label for s in moment.segments] == ["Deporte y ejercicio"]
         assert voltio_value(auction) > baseline

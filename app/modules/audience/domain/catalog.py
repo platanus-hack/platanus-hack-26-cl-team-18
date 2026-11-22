@@ -34,9 +34,14 @@ def normalize_cue(text: str) -> str:
 @dataclass(frozen=True, slots=True, kw_only=True)
 class CatalogSegment:
     segment_id: SegmentId
-    label: str
+    label: str  # the official IAB name (model prompts, traceability)
     path: str
     tier: SegmentTier
+    label_es: str | None = None  # what people read: console, Dev/QA, advertiser pages
+
+    @property
+    def display_label(self) -> str:
+        return self.label_es or self.label
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -122,6 +127,11 @@ class SegmentCatalog:
     def label(self, segment_id: SegmentId) -> str:
         segment = self._by_id.get(segment_id)
         return segment.label if segment is not None else segment_id.value
+
+    def display_label(self, segment_id: SegmentId) -> str:
+        """The Spanish name people read; the IAB label when there is none."""
+        segment = self.segment(segment_id)
+        return segment.display_label if segment is not None else segment_id.value
 
     def rules_for(self, source: SegmentSource, cue: str) -> tuple[CueRule, ...]:
         return self._by_cue.get((source, normalize_cue(cue)), ())

@@ -22,8 +22,8 @@
       "expect": {
         "brands": [],
         "matches": {
-          "Café Patio": ["related:Coffee>Pastry/Doughnuts"],
-          "Miga": ["exact:Pastry/Doughnuts>Pastry/Doughnuts"]
+          "Café Patio": ["related:Café>Pastelería"],
+          "Miga": ["exact:Pastelería>Pastelería"]
         },
         "excluded": {
           "Café Patio": "below_reserve",
@@ -45,8 +45,8 @@
       "expect": {
         "brands": ["Miga"],
         "matches": {
-          "Café Patio": ["exact:Coffee>Coffee", "related:Coffee>Pastry/Doughnuts"],
-          "Miga": ["exact:Coffee>Coffee", "exact:Pastry/Doughnuts>Pastry/Doughnuts"]
+          "Café Patio": ["exact:Café>Café", "related:Café>Pastelería"],
+          "Miga": ["exact:Café>Café", "exact:Pastelería>Pastelería"]
         },
         "excluded": {
           "Café Patio": "outbid"
@@ -70,9 +70,9 @@
       "expect": {
         "brands": ["Brasa Burger"],
         "matches": {
-          "Brasa Burger": ["exact:Fast Food>Fast Food", "related:Fast Food>Carbonated Soft Drinks"],
-          "Cola Sur": ["exact:Carbonated Soft Drinks>Carbonated Soft Drinks"],
-          "Pacífica": ["related:Carbonated Soft Drinks>Fast Food"]
+          "Brasa Burger": ["exact:Comida rápida>Comida rápida", "related:Comida rápida>Bebidas gaseosas"],
+          "Cola Sur": ["exact:Bebidas gaseosas>Bebidas gaseosas"],
+          "Pacífica": ["related:Bebidas gaseosas>Comida rápida"]
         },
         "excluded": {
           "Toro Burger": "competitor"
@@ -96,7 +96,7 @@
       "expect": {
         "brands": ["Malta Sur"],
         "matches": {
-          "Malta Sur": ["exact:Alcoholic Beverages>Alcoholic Beverages"]
+          "Malta Sur": ["exact:Bebidas alcohólicas>Bebidas alcohólicas"]
         },
         "max_price_per_as": {
           "Malta Sur": "12"
@@ -129,7 +129,7 @@
       "expect": {
         "brands": [],
         "matches": {
-          "Miga": ["related:Pastry/Doughnuts>Desserts and Baking"]
+          "Miga": ["related:Pastelería>Postres y repostería"]
         },
         "excluded": {
           "Miga": "below_reserve"
@@ -150,7 +150,7 @@
       "expect": {
         "brands": ["Miga"],
         "matches": {
-          "Café Patio": ["related:Coffee>Pastry/Doughnuts"]
+          "Café Patio": ["related:Café>Pastelería"]
         }
       }
     }

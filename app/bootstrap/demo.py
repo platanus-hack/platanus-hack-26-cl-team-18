@@ -442,7 +442,12 @@ def register_demo(
         for brand in market.catalog.brands
         if brand.product is not None
     )
-    segment_labels = {segment.segment_id: segment.label for segment in audience_catalog.segments}
+    # What people read (console, Dev/QA, advertisers): the Spanish name. Model prompts keep
+    # the official IAB label (iab_labels), so a translation never changes what a model sees.
+    segment_labels = {
+        segment.segment_id: segment.display_label for segment in audience_catalog.segments
+    }
+    iab_labels = {segment.segment_id: segment.label for segment in audience_catalog.segments}
     # Segment matching beyond exact ids (auction affinity.py): the IAB hierarchy from
     # the catalog paths plus its curated same-need pairs. A static in-memory table,
     # so the hot path stays a lookup.
@@ -1222,7 +1227,7 @@ def register_demo(
                     audiences=[
                         AdvertiserAudience(
                             segment_id=bid.segment_id.value,
-                            label=audience_catalog.label(bid.segment_id),
+                            label=audience_catalog.display_label(bid.segment_id),
                             rate_per_attention_s=MoneyDTO(
                                 amount=format(bid.rate.amount.normalize(), "f"),
                                 currency=str(bid.rate.currency),
@@ -1319,8 +1324,8 @@ def register_demo(
         if topic_extractor is None or warm is None:
             return
         text, language = utterance.text, utterance.language  # in memory only, never logged
-        catalog_text = {segment.value: label for segment, label in segment_labels.items()}
-        by_key = {segment.value: segment for segment in segment_labels}
+        catalog_text = {segment.value: label for segment, label in iab_labels.items()}
+        by_key = {segment.value: segment for segment in iab_labels}
 
         async def job() -> None:
             nonlocal speech

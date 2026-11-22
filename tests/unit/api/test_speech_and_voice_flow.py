@@ -114,7 +114,7 @@ def test_it_heard_me_speech_flips_the_auction_to_a_co_brand(speech_app) -> None:
         flipped = creative(player)
         assert set(paid_brands(flipped)) == {"Voltio", "Café Patio"}
         moment = ConsoleMoment.model_validate(console.receive_json())
-        coffee = next(s for s in moment.segments if s.label == "Coffee")
+        coffee = next(s for s in moment.segments if s.label == "Café")
         assert [src.value for src in coffee.sources] == ["speech"]
 
 
