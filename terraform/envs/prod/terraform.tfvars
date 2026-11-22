@@ -23,10 +23,10 @@ health_check_path = "/health"
 
 env_vars = {
   LOG_LEVEL = "INFO"
-  # Pick one with `uv run python -m scripts.elevenlabs_voices`; without it the
-  # creatives play silent. "Sarah": an ElevenLabs premade multilingual voice
-  # (speaks Spanish on Flash v2.5; works with a TTS-only API key).
-  ELEVENLABS_NARRATOR_VOICE_ID = "EXAVITQu4vr4xnSDxMaL"
+  # No voice-overs in prod (team decision, 2026-11-22): creatives play silent and no
+  # TTS is ever bought, whatever ELEVENLABS_* secrets the dashboard holds. To bring
+  # them back, drop this and set ELEVENLABS_NARRATOR_VOICE_ID (scripts.elevenlabs_voices).
+  VOICEOVERS_ENABLED = "false"
 }
 
 # Values are set in the Render dashboard (<name>-secrets env group). Names
