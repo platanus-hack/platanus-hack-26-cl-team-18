@@ -92,6 +92,9 @@ class Container:
     topic_extractor: TopicExtractor | None = None  # speech topics (AUDIENCE_AI)
     loop_keys: tuple[str, ...] = ()
     campaign_generator: CampaignGenerator | None = None
+    # May a player socket attach to this screen id (may it create a new runtime)?
+    # "ok" | "unauthorized" | "full" | "invalid"; the live market sets it (live.py).
+    admit_screen: Callable[[str, bool], str] = lambda _screen_id, _may_create: "ok"
     # Async cleanups run at shutdown (HTTP clients, ...).
     closers: list[Callable[[], Awaitable[None]]] = field(default_factory=list)
 

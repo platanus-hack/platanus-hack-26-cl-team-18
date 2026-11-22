@@ -184,6 +184,9 @@ class AppSettings(BaseSettings):
     )
     # Largest accepted WS frame; a keyframe JPEG is the biggest legitimate one.
     ws_max_frame_bytes: int = Field(default=2_000_000, gt=0)
+    # Screens one process runs (each a full audience/auction/creative runtime, never
+    # evicted). The demo uses demo-01 and rehearsal; a socket past the cap is refused.
+    max_screen_runtimes: int = Field(default=16, ge=1, le=1000)
     # Pending agent messages per connection before the oldest is dropped.
     ws_agent_mailbox_size: int = Field(default=32, gt=0)
     # Local media cache (voice-overs, video loops, hero images), served at /media.
