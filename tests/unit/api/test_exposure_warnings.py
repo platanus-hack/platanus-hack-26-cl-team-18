@@ -36,7 +36,9 @@ def test_unset_tokens_on_a_tunnel_warn_by_name() -> None:
 
 def test_one_missing_token_is_named_alone_and_values_are_never_printed() -> None:
     secret = "agent-0123456789abcdef0123456789"
-    (warning,) = exposure_warnings(closed(public_base_url=TUNNEL, agent_token=None, demo_key=secret))
+    (warning,) = exposure_warnings(
+        closed(public_base_url=TUNNEL, agent_token=None, demo_key=secret)
+    )
     assert "AGENT_TOKEN unset" in warning and "SCREEN_TOKEN" not in warning
     assert secret not in warning
 

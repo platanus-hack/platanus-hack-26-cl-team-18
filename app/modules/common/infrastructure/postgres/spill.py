@@ -75,7 +75,9 @@ def encode_unit(unit: Unit) -> str:
 
 def decode_unit(line: str) -> Unit:
     data = json.loads(line)
-    return tuple((str(sql), tuple(_decode(p) for p in params)) for sql, params in data["statements"])
+    return tuple(
+        (str(sql), tuple(_decode(p) for p in params)) for sql, params in data["statements"]
+    )
 
 
 class SpillFile:

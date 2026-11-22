@@ -74,7 +74,7 @@ def test_an_invalid_screen_id_is_never_a_runtime(tmp_path: Path) -> None:
 
 
 def test_with_a_screen_token_only_its_holder_starts_a_new_screen(tmp_path: Path) -> None:
-    client, container = app(tmp_path, screen_token=SCREEN)
+    client, _ = app(tmp_path, screen_token=SCREEN)
     token = {"subprotocols": ["team18", f"team18.token.{SCREEN}"]}
     with client:
         assert refused_with(client, "/ws/screen/lobby") == 1008  # a viewer can't mint one
