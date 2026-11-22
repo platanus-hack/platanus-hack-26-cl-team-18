@@ -175,3 +175,39 @@ describe("socket lifecycle races", () => {
         }
     });
 });
+
+describe("TypedSocket console token", () => {
+    function protocolsFor(url: string): readonly string[] | undefined {
+        vi.stubGlobal("WebSocket", { OPEN: 1 });
+        let offered: readonly string[] | undefined;
+        const socket = new TypedSocket({
+            url,
+            schema: Schema,
+            onMessage: () => undefined,
+            createSocket: (_url, protocols) => {
+                offered = protocols;
+                return new FakeSocket() as unknown as WebSocket;
+            },
+        });
+        socket.start();
+        socket.stop();
+        return offered;
+    }
+
+    it("offers a kept console token on /ws/console only", () => {
+        window.localStorage.setItem("team18.consoleToken", "cons123");
+        try {
+            expect(protocolsFor("ws://host/ws/console?live=1")).toEqual([
+                "team18",
+                "team18.token.cons123",
+            ]);
+            expect(protocolsFor("ws://host/ws/screen/demo-01")).toBeUndefined();
+        } finally {
+            window.localStorage.clear();
+        }
+    });
+
+    it("offers nothing on /ws/console without a token (CONSOLE_TOKEN unset)", () => {
+        expect(protocolsFor("ws://host/ws/console?live=1")).toBeUndefined();
+    });
+});

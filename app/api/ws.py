@@ -3,7 +3,8 @@
 - `/ws/agent`            perception agent <-> backend (snapshots, keyframes, utterances in;
                          `live.status` out after the agent's `agent.hello`)
 - `/ws/screen/{screen_id}` player <-> backend (creatives out, playback reports in)
-- `/ws/console`          backend -> operator console
+- `/ws/console`          backend -> operator console (CONSOLE_TOKEN, when set, rides in the
+                         subprotocol list like the screen token: app/api/device_auth.py)
 - `/ws/dev`              backend -> `/dev` QA console: console messages + `dev.*` (never prod;
                          demo key as `?key=`, app/api/demo_access.py)
 
@@ -32,7 +33,12 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 from pydantic import ValidationError
 
 from app.api.demo_access import demo_allowed
-from app.api.device_auth import accepted_subprotocol, agent_allowed, screen_can_report
+from app.api.device_auth import (
+    accepted_subprotocol,
+    agent_allowed,
+    console_allowed,
+    screen_can_report,
+)
 from app.bootstrap.container import Container
 from app.contract.messages import (
     AGENT_INBOUND,
@@ -304,6 +310,9 @@ async def screen_socket(ws: WebSocket, screen_id: str) -> None:
                     ws, "frame.binary_unsupported", "players send JSON text frames only"
                 )
                 continue
+            if len(text) > c.settings.ws_max_frame_bytes:
+                await _send_error(ws, "frame.too_large", "frame exceeds ws_max_frame_bytes")
+                continue
             if not can_report:
                 await _send_error(
                     ws,
@@ -345,7 +354,11 @@ async def screen_socket(ws: WebSocket, screen_id: str) -> None:
 @router.websocket("/ws/console")
 async def console_socket(ws: WebSocket) -> None:
     c = _container(ws)
-    await ws.accept()
+    if not console_allowed(c.settings, ws):
+        # CONSOLE_TOKEN is set and not offered: refused at the handshake (HTTP 403).
+        await ws.close(code=_POLICY_VIOLATION)
+        return
+    await ws.accept(subprotocol=accepted_subprotocol(ws))
     c.hub.add_console(ws, live=ws.query_params.get("live") == "1")
     try:
         await c.router.console_connected(ws)

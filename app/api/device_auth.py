@@ -10,8 +10,11 @@ every creative (view-only), but its reports are refused, so it can never bill.
 - Player: browsers can't set WebSocket headers, so the token rides in the one
   they can, the subprotocol list: `["team18", "team18.token.<SCREEN_TOKEN>"]`.
   The server answers with `team18` and never echoes the token.
+- Console: `/ws/console` streams every bid, charge and budget. With
+  `CONSOLE_TOKEN` set it is offered the same way as the screen token; unset,
+  the console stays open (opt-in, so the station works as before).
 
-A token that is unset means open outside prod (local station, tests, evals) and
+A device token that is unset means open outside prod (local station, tests, evals) and
 closed in prod. In prod a token must have at least `PROD_MIN_TOKEN_LENGTH`
 characters, so the dashboard placeholder can't unlock anything. Comparisons are
 constant time.
@@ -70,3 +73,14 @@ def agent_allowed(settings: AppSettings, ws: WebSocket) -> bool:
 
 def screen_can_report(settings: AppSettings, ws: WebSocket) -> bool:
     return token_allowed(settings, settings.screen_token, subprotocol_token(ws))
+
+
+def console_allowed(settings: AppSettings, ws: WebSocket) -> bool:
+    """`/ws/console` streams every bid, charge and budget. Opt-in: with CONSOLE_TOKEN set
+    the console must offer it like a player (`team18.token.<CONSOLE_TOKEN>`); unset, the
+    socket stays open in every environment (the station console as it always was)."""
+    secret = settings.console_token.get_secret_value() if settings.console_token else ""
+    if not secret:
+        return True
+    presented = subprotocol_token(ws)
+    return presented is not None and hmac.compare_digest(presented.encode(), secret.encode())

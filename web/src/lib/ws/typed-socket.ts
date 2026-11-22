@@ -1,3 +1,4 @@
+import { consoleProtocols, consoleToken } from "@/lib/device";
 import type { z } from "zod";
 
 /**
@@ -27,7 +28,10 @@ export interface SocketStats {
 
 interface Options<In> {
     readonly url: string;
-    /** WebSocket subprotocols (e.g. the screen token, lib/device.ts). */
+    /**
+     * WebSocket subprotocols (e.g. the screen token, lib/device.ts). Omitted on
+     * `/ws/console`: the console token, when this browser has one, is offered.
+     */
     readonly protocols?: readonly string[] | undefined;
     readonly schema: z.ZodType<In>;
     readonly onMessage: (message: In) => void;
@@ -55,6 +59,16 @@ export function backoffDelay(
     return Math.round(ceiling / 2 + (ceiling / 2) * random); // "equal jitter"
 }
 
+/** `/ws/console` offers the opt-in console token (CONSOLE_TOKEN) when one was given. */
+function defaultProtocols(url: string): readonly string[] | undefined {
+    try {
+        if (!new URL(url, "ws://localhost").pathname.endsWith("/ws/console")) return undefined;
+    } catch {
+        return undefined;
+    }
+    return consoleProtocols(consoleToken());
+}
+
 export class TypedSocket<In, Out = never> {
     private socket: WebSocket | null = null;
     private retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -64,7 +78,11 @@ export class TypedSocket<In, Out = never> {
     private stats_: SocketStats = { received: 0, invalid: 0, reconnects: 0 };
     private state_: ConnectionState = { status: "connecting", attempt: 0 };
 
-    constructor(private readonly options: Options<In>) {}
+    private readonly protocols: readonly string[] | undefined;
+
+    constructor(private readonly options: Options<In>) {
+        this.protocols = options.protocols ?? defaultProtocols(options.url);
+    }
 
     get state(): ConnectionState {
         return this.state_;
@@ -106,7 +124,7 @@ export class TypedSocket<In, Out = never> {
             this.options.createSocket ??
             ((url: string, protocols?: readonly string[]) =>
                 new WebSocket(url, protocols ? [...protocols] : undefined));
-        const socket = create(this.options.url, this.options.protocols);
+        const socket = create(this.options.url, this.protocols);
         this.socket = socket;
         this.connectTimer = setTimeout(() => {
             this.connectTimer = null;

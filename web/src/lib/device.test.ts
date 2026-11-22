@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { screenProtocols, screenToken } from "./device";
+import { consoleProtocols, consoleToken, screenProtocols, screenToken } from "./device";
 
 afterEach(() => {
     window.localStorage.clear();
@@ -27,4 +27,15 @@ it("a token that isn't a valid header token is never sent or kept", () => {
 
 it("offers the token in the subprotocol list, never in the URL", () => {
     expect(screenProtocols("abc123")).toEqual(["team18", "team18.token.abc123"]);
+});
+
+it("the console token is kept apart from the screen token", () => {
+    const console = { search: "?screen=demo-01&token=cons123", pathname: "/console", hash: "" };
+    const history = { replaceState: vi.fn() };
+    expect(consoleToken(console, history)).toBe("cons123");
+    expect(history.replaceState).toHaveBeenCalledWith(null, "", "/console?screen=demo-01");
+    expect(window.localStorage.getItem("team18.consoleToken")).toBe("cons123");
+    expect(window.localStorage.getItem("team18.screenToken")).toBeNull();
+    expect(consoleProtocols("cons123")).toEqual(["team18", "team18.token.cons123"]);
+    expect(consoleProtocols(null)).toBeUndefined();
 });

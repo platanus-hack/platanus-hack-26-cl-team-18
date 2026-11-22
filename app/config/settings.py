@@ -78,6 +78,7 @@ class AppSettings(BaseSettings):
     # outside prod, closed in prod (where each needs 24+ chars).
     agent_token: SecretStr | None = None
     screen_token: SecretStr | None = None
+    console_token: SecretStr | None = None  # CONSOLE_TOKEN: opt-in /ws/console auth (unset: open)
     dev_console: bool = True
     # Opt-in: relay the face-blurred keyframe the VLM gets to `/dev` (in memory, never
     # stored). Off by default; refused in prod.
