@@ -4,7 +4,13 @@ import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } fr
 import { readableAccent } from "./accent";
 import { spirographPath, themeForHour, type AdTheme } from "./ad-theme";
 import "./creative.css";
-import { copyFit, priceDigits, splitOfferHeadline, withoutBrandPrefix } from "./offer-copy";
+import {
+    copyFit,
+    priceDigits,
+    splitHyphenated,
+    splitOfferHeadline,
+    withoutBrandPrefix,
+} from "./offer-copy";
 import { useDwellStage, useViewingDistance, type AttentionSample } from "./stages";
 
 /** Reveal the actual mounted video only after it can play; overlays stay ready. */
@@ -120,7 +126,9 @@ export function CreativeView({
                         {stage.name === "offer" && (
                             <>
                                 <p className="creative-offer-line">
-                                    {splitOfferHeadline(stage.copy_text, spec.offer)}
+                                    <KeepWords
+                                        text={splitOfferHeadline(stage.copy_text, spec.offer)}
+                                    />
                                 </p>
                                 <OfferPrice spec={spec} hero />
                             </>
@@ -145,6 +153,23 @@ export function CreativeView({
                 </div>
             )}
         </div>
+    );
+}
+
+/** A line whose hyphenated words (brand names like "Coca-Cola") never break mid-word. */
+function KeepWords({ text }: { text: string }) {
+    return (
+        <>
+            {splitHyphenated(text).map((part, index) =>
+                index % 2 === 1 ? (
+                    <span key={index} style={{ whiteSpace: "nowrap" }}>
+                        {part}
+                    </span>
+                ) : (
+                    part
+                ),
+            )}
+        </>
     );
 }
 

@@ -133,8 +133,10 @@ def test_official_logos_are_used_where_present_and_a_wordmark_elsewhere() -> Non
     for slug in ("powerade", "gatorade", "soprole", "watts", "bresler"):
         brand = BRANDS[slug]
         assert _brand_logo(slug, brand.name, brand.color) == f"/campaign-assets/logos/{slug}.svg"
-    score = BRANDS["score"]
-    assert _brand_logo(score.slug, score.name, score.color).startswith("data:image/svg+xml")
+    benedictino = BRANDS["benedictino"]
+    assert _brand_logo(benedictino.slug, benedictino.name, benedictino.color).startswith(
+        "data:image/svg+xml"
+    )
 
 
 def _snapshot(seq: int, at: datetime, objects: list[DetectedObject]) -> AudienceSnapshot:

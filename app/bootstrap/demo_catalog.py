@@ -57,6 +57,10 @@ class DemoBrand:
     # after its first (core) one: real campaigns pay most for their core audience.
     budget_clp: int | None = None
     secondary_rate_clp_per_as: str | None = None
+    # False: bid only on its own segments, never by catalog affinity. A combo partner
+    # needs it: affinity ("soft drinks ↔ fast food") makes both brands reach both
+    # viewers, the auction then pays the basket screen share only, and the solo wins.
+    broad_match: bool = True
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -395,6 +399,9 @@ class Catalog:
     # Whether brands without photos of their own may air the manifest's unbranded
     # category scenes ("category:ice_cream"). Off for the pinned fictional seed.
     category_scenes: bool = False
+    # Segment → creative angle overrides (Angle values) for this venue: at a gas
+    # station a water bottle or a fitness cue is a road moment, not a gym exit.
+    segment_angles: tuple[tuple[str, str], ...] = ()
 
     def partners_of(self, slug: str) -> frozenset[str]:
         return frozenset(
@@ -425,15 +432,35 @@ def catalog_named(name: str) -> Catalog:
     raise ValueError(f"Unknown demo catalog: {name!r} (expected 'fictional' or 'chile')")
 
 
+def _initials(name: str) -> str:
+    """'Marco Polo' → 'MP', 'Super 8' → 'S8', 'Andina del Valle' → 'AV', 'Savory' → 'S'."""
+    words = [
+        w
+        for w in name.replace("-", " ").split()
+        if w[:1].isalnum() and w.lower() not in {"y", "de", "del", "la", "el"}
+    ]
+    return "".join(w[0] for w in words[:2]).upper() or name[:1].upper()
+
+
+def _ink(color: str) -> str:
+    """Black or white, whichever reads on `color` (WCAG relative luminance)."""
+    r, g, b = (int(color[i : i + 2], 16) / 255 for i in (1, 3, 5))
+    lin = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in (r, g, b)]
+    luminance = 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+    return "#111111" if luminance > 0.18 else "#ffffff"
+
+
 def wordmark(name: str, color: str) -> str:
-    """A plain SVG wordmark (the brand's name on its colour): a real asset, not AI."""
-    text = html.escape(name)
-    width = max(320, 34 * len(name))
+    """A placeholder mark until the brand's own file is dropped in: its initials on its
+    colour, as a square tile like the real logos (the lockup prints the name beside it).
+    Deterministic, never AI-drawn (invariant 4)."""
+    text = html.escape(_initials(name))
+    size = 34 if len(text) > 1 else 40
     svg = (
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="120" '
-        f'viewBox="0 0 {width} 120"><rect width="100%" height="100%" rx="24" fill="{color}"/>'
-        f'<text x="50%" y="58%" text-anchor="middle" dominant-baseline="middle" '
-        f'font-family="system-ui,sans-serif" font-size="56" font-weight="800" '
-        f'fill="#111111">{text}</text></svg>'
+        '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">'
+        f'<rect width="64" height="64" rx="12" fill="{color}"/>'
+        f'<text x="32" y="34" text-anchor="middle" dominant-baseline="middle" '
+        f'font-family="system-ui,sans-serif" font-size="{size}" font-weight="800" '
+        f'letter-spacing="-1" fill="{_ink(color)}">{text}</text></svg>'
     )
     return "data:image/svg+xml;base64," + base64.b64encode(svg.encode()).decode("ascii")

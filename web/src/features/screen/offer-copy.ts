@@ -27,6 +27,14 @@ export function splitOfferHeadline(copy: string, offer: CreativeOffer | null): s
     return head.length > 0 ? head : copy;
 }
 
+/**
+ * Split a line so hyphenated words ("Coca-Cola") can be kept whole: odd indexes are the
+ * hyphenated words. A brand name broken as "Coca-" / "Cola" on a TV reads as a typo.
+ */
+export function splitHyphenated(copy: string): string[] {
+    return copy.split(/(\p{L}[\p{L}\p{N}]*(?:-[\p{L}\p{N}]+)+)/u);
+}
+
 /** Kit lines read "Brand · line"; the logo already says the brand, so the hook drops it. */
 export function withoutBrandPrefix(copy: string, brand: string): string {
     const prefix = `${brand} · `;

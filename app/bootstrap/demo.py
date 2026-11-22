@@ -297,6 +297,7 @@ def seed_market(
                 for index, segment in enumerate(brand.segments)
             ),
             partners=frozenset(brand_by_slug[slug] for slug in catalog.partners_of(brand.slug)),
+            broad_match=brand.broad_match,
             live_multiplier=stored[brand.slug].multiplier,
             budget_remaining=stored[brand.slug].budget,
         )
@@ -468,6 +469,10 @@ def register_demo(
             SegmentId.create(demo_catalog.WATER): Angle.POST_WORKOUT,
             SegmentId.create(demo_catalog.ENERGY_DRINKS): Angle.ENERGY,
             SegmentId.create(demo_catalog.CANDY): Angle.HUNGER,
+            **{
+                SegmentId.create(segment): Angle(angle)
+                for segment, angle in market.catalog.segment_angles
+            },
         },
     )
     studio = CreativeStudio(

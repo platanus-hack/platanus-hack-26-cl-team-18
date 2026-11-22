@@ -1,6 +1,12 @@
 import type { CreativeOffer } from "@/contract";
 import { describe, expect, it } from "vitest";
-import { copyFit, priceDigits, splitOfferHeadline, withoutBrandPrefix } from "./offer-copy";
+import {
+    copyFit,
+    priceDigits,
+    splitHyphenated,
+    splitOfferHeadline,
+    withoutBrandPrefix,
+} from "./offer-copy";
 
 describe("copyFit", () => {
     it.each([
@@ -60,4 +66,16 @@ it.each([
     ["team18 · ", "team18 · "], // nothing would remain
 ])("drops only the slot's own brand prefix from %j", (copy, shown) => {
     expect(withoutBrandPrefix(copy, "team18")).toBe(shown);
+});
+
+describe("splitHyphenated", () => {
+    it("isolates hyphenated brand names so they can be kept on one line", () => {
+        expect(splitHyphenated("Pronto Copec + Coca-Cola x2 para los 2")).toEqual([
+            "Pronto Copec + ",
+            "Coca-Cola",
+            " x2 para los 2",
+        ]);
+        expect(splitHyphenated("Score + Juan Valdez x2")).toEqual(["Score + Juan Valdez x2"]);
+        expect(splitHyphenated("Café + medialuna - $2.990")).toEqual(["Café + medialuna - $2.990"]);
+    });
 });

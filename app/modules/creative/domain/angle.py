@@ -63,7 +63,7 @@ ANGLE_CATEGORIES: Mapping[Angle, frozenset[str]] = {
             "ice_cream",
         }
     ),
-    Angle.ENERGY: frozenset({"energy_drink", "sports_goods", "sports_drink", "coffee"}),
+    Angle.ENERGY: frozenset({"energy_drink", "sports_goods", "sports_drink", "coffee", "water"}),
     Angle.COFFEE_BREAK: frozenset({"coffee", "pastry", "dairy"}),
     Angle.POST_WORKOUT: frozenset(
         {"sports_goods", "energy_drink", "sports_drink", "coffee", "water"}

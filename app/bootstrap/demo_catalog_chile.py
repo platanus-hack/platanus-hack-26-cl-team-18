@@ -89,7 +89,7 @@ BRANDS: tuple[DemoBrand, ...] = (
         name="Juan Valdez",
         category="coffee",
         age_restricted=False,
-        segments=(COFFEE, PASTRY),
+        segments=(COFFEE,),
         rate_clp_per_as="5",
         color="#c8102e",
         stock_copy="Juan Valdez · Café colombiano, hecho al momento.",
@@ -114,11 +114,15 @@ BRANDS: tuple[DemoBrand, ...] = (
         name="Pronto Copec",
         category="pastry",
         age_restricted=False,
-        segments=(PASTRY, FAST_FOOD, COFFEE),
-        rate_clp_per_as="4",
+        # The completo is the counter's core product, medialunas next. Partners bid only
+        # their own product's audience: a basket wins full value only when its brands
+        # reach different viewers (auction clearing: same audience → the solo wins).
+        segments=(FAST_FOOD, PASTRY),
+        rate_clp_per_as="5",
         color="#e1251b",
-        stock_copy="Pronto Copec · Medialunas y completos en el mesón.",
+        stock_copy="Pronto Copec · Completos y medialunas en el mesón.",
         voice=("cercano", "práctico"),
+        broad_match=False,  # the completo + bebida combo (DemoBrand.broad_match)
         product="pastry",
     ),
     # --- soft drinks (sugar-free lines carry no ALTO EN seal) ------------------------
@@ -127,11 +131,12 @@ BRANDS: tuple[DemoBrand, ...] = (
         name="Coca-Cola",
         category="cola",
         age_restricted=False,
-        segments=(SOFT_DRINKS, FAST_FOOD),
-        rate_clp_per_as="4.5",
+        segments=(SOFT_DRINKS,),
+        rate_clp_per_as="5",
         color="#f40009",
         stock_copy="Coca-Cola · Zero Azúcar 591 ml, helada.",
         voice=("alegre", "simple"),
+        broad_match=False,  # the completo + bebida combo (DemoBrand.broad_match)
         product="soft_drink",
     ),
     DemoBrand(
@@ -139,11 +144,12 @@ BRANDS: tuple[DemoBrand, ...] = (
         name="Pepsi",
         category="cola",
         age_restricted=False,
-        segments=(SOFT_DRINKS, SALTY_SNACKS),
+        segments=(SOFT_DRINKS,),
         rate_clp_per_as="4",
         color="#2f7de1",
         stock_copy="Pepsi · Pepsi Zero, helada.",
         voice=("juvenil", "directo"),
+        broad_match=False,  # the completo + bebida combo (DemoBrand.broad_match)
         product="soft_drink",
     ),
     # --- water -----------------------------------------------------------------------
@@ -217,6 +223,7 @@ BRANDS: tuple[DemoBrand, ...] = (
         rate_clp_per_as="2.8",
         color="#d4213d",
         stock_copy="Ambrosoli · Dulces para el viaje.",
+        tagline="Ambrosoli. La vida es dulce.",  # its own line: "...la vida es dulce"
         voice=("familiar", "tranquilo"),
         product="candy",
     ),
@@ -226,11 +233,12 @@ BRANDS: tuple[DemoBrand, ...] = (
         name="Bilz y Pap",
         category="cola",
         age_restricted=False,
-        segments=(SOFT_DRINKS, FAST_FOOD),
+        segments=(SOFT_DRINKS,),
         rate_clp_per_as="4.2",
         color="#f4c300",
         stock_copy="Bilz y Pap · Zero 600 ml, bien heladas para el completo.",
         voice=("nostálgico", "alegre"),
+        broad_match=False,  # the completo + bebida combo (DemoBrand.broad_match)
         product="soft_drink",
     ),
     # --- sports drinks (Coca-Cola system vs PepsiCo) ---------------------------------
@@ -264,7 +272,7 @@ BRANDS: tuple[DemoBrand, ...] = (
         name="Colun",
         category="dairy",
         age_restricted=True,
-        segments=(NON_ALCOHOLIC, PASTRY),
+        segments=(NON_ALCOHOLIC,),
         rate_clp_per_as="3.2",
         color="#2a6ebb",
         stock_copy="Colun · Leche chocolatada de 200 ml, hecha en el sur.",
@@ -277,7 +285,7 @@ BRANDS: tuple[DemoBrand, ...] = (
         name="Soprole",
         category="dairy",
         age_restricted=True,
-        segments=(NON_ALCOHOLIC, PASTRY),
+        segments=(NON_ALCOHOLIC,),
         rate_clp_per_as="3",
         color="#e30613",
         stock_copy="Soprole · Leche chocolatada, fría.",
@@ -289,7 +297,7 @@ BRANDS: tuple[DemoBrand, ...] = (
         name="Watt's",
         category="juice",
         age_restricted=True,
-        segments=(NON_ALCOHOLIC, PASTRY),
+        segments=(NON_ALCOHOLIC,),
         rate_clp_per_as="3",
         color="#e2001a",
         stock_copy="Watt's · Néctar frío para el desayuno.",
@@ -301,7 +309,7 @@ BRANDS: tuple[DemoBrand, ...] = (
         name="Andina del Valle",
         category="juice",
         age_restricted=True,
-        segments=(NON_ALCOHOLIC, PASTRY),
+        segments=(NON_ALCOHOLIC,),
         rate_clp_per_as="2.9",
         color="#f7a800",
         stock_copy="Andina del Valle · Néctar frío, para el camino.",
@@ -557,8 +565,9 @@ BASKETS: tuple[DemoBasket, ...] = (
         slugs=frozenset({"pronto-copec"}),
         names="Pronto Copec",
         tiers=_solo(
-            ("Medialuna", "Dos medialunas", "Tres medialunas", "Cuatro medialunas"),
-            (1190, 2190, 2990, 3790),
+            # The counter's own star: the completo palta (Copec app, nov 2026: $2.500).
+            ("Completo palta", "Dos completos", "Tres completos", "Cuatro completos"),
+            (2490, 4790, 6990, 8990),
         ),
     ),
     DemoBasket(
@@ -701,6 +710,9 @@ CHILE = Catalog(
     name="chile",
     brands=BRANDS,
     baskets=BASKETS,
+    # A highway shop: water and fitness cues are a road moment ("Queda camino. A
+    # recargar."), never "Entrenaste" (the fictional seed's gym story).
+    segment_angles=((WATER, "energy"), (FITNESS, "energy")),
     # Every brand airs imagery: its own campaign photos, else its category's scene.
     category_scenes=True,
     # At a highway shop a can or a bottle means a tired driver or a thirsty one, not
@@ -732,8 +744,10 @@ CHILE = Catalog(
         ("evening", "snacks", "1.25"),
         ("evening", "candy", "1.15"),
         ("evening", "cola", "1.1"),
+        ("evening", "pastry", "1.2"),  # Pronto's counter: the completo after work
         ("night", "energy_drink", "1.4"),
         ("night", "coffee", "1.25"),
+        ("night", "pastry", "1.2"),  # the trucker's completo
         ("night", "dairy", "0.7"),
         ("night", "ice_cream", "0.6"),
     ),
@@ -745,7 +759,7 @@ CHILE = Catalog(
 # None = the core rate everywhere). The Postgres registry keeps a stored campaign's
 # budget, so a changed budget here applies to campaigns opened after it.
 MARKET_SHAPE: dict[str, tuple[int, str | None]] = {
-    "pronto-copec": (200_000, "3"),  # the house: always fills
+    "pronto-copec": (200_000, None),  # the house: its full rate on its own counter
     "coca-cola": (150_000, "3.5"),
     "red-bull": (120_000, "5.5"),  # premium leader
     "score": (90_000, None),  # the challenger bids its core rate everywhere

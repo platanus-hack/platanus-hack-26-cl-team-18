@@ -24,7 +24,10 @@ affiliation. Never AI-drawn or redrawn (CLAUDE.md invariant 4).
 | `soprole.svg` | File:Soprole.png |
 | `watts.svg` | File:Watt's-logo.png |
 | `bresler.svg` | File:Bresler logo 2022.png |
+| `score.svg` | Brand site: scoreenergydrink.com (logosscore-02.svg), on a black plate |
+| `colun.svg` | Brand site: colun.cl footer logo, cropped above its copyright line |
+| `ambrosoli.svg` | Brand site: ambrosoli.cl logo, on Ambrosoli red |
 
 Missing (a plain wordmark is drawn until the brand's press-kit file is dropped in as
-`<slug>.svg`, `.png` or `.webp`): `score`, `benedictino`, `marco-polo`,
-`super-8`, `ambrosoli`, `bilz-y-pap`, `colun`, `andina-del-valle`, `savory`.
+`<slug>.svg`, `.png` or `.webp`): `benedictino`, `marco-polo`, `super-8`,
+`bilz-y-pap`, `andina-del-valle`, `savory`.
