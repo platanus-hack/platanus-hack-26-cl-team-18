@@ -1,6 +1,19 @@
 import type { CreativeOffer } from "@/contract";
 import { describe, expect, it } from "vitest";
-import { priceDigits, splitOfferHeadline, withoutBrandPrefix } from "./offer-copy";
+import { copyFit, priceDigits, splitOfferHeadline, withoutBrandPrefix } from "./offer-copy";
+
+describe("copyFit", () => {
+    it.each([
+        ["Los dos, un café para cerrar el día.", "regular"],
+        ["Cuatro medialunas y cuatro néctares para seguir el viaje juntos.", "long"],
+        [
+            "Medialunas recién horneadas y leche chocolatada fría para los cuatro antes de volver a la ruta.",
+            "longest",
+        ],
+    ] as const)("sizes %j as %s", (copy, fit) => {
+        expect(copyFit(copy)).toBe(fit);
+    });
+});
 
 const OFFER: CreativeOffer = {
     label: "Trío post-entreno",

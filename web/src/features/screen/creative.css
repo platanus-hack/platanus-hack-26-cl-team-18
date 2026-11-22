@@ -355,3 +355,31 @@
 .creative-canvas[data-distance="far"] .creative-offer-line {
     display: none;
 }
+
+/*
+ * Long display lines step down (offer-copy.ts copyFit) so the logo lockup always stays on
+ * the canvas. The selectors outrank the distance rules above, so "far" never re-inflates a
+ * long line. The story column may shrink; it never pushes the baseline off screen.
+ */
+.creative-canvas .creative-hook[data-fit="long"] {
+    font-size: clamp(1.125rem, 5cqw, 6.5rem);
+}
+.creative-canvas .creative-hook[data-fit="longest"] {
+    font-size: clamp(1rem, 3.8cqw, 5rem);
+    line-height: 1.04;
+}
+.creative-canvas .creative-close-line[data-fit="long"] {
+    font-size: clamp(1.125rem, 4.4cqw, 5.5rem);
+}
+.creative-canvas .creative-close-line[data-fit="longest"] {
+    font-size: clamp(1rem, 3.4cqw, 4.5rem);
+    line-height: 1.04;
+}
+.creative-story {
+    min-height: 0;
+    overflow: clip;
+    overflow-clip-margin: 0.25em;
+}
+.creative-baseline {
+    flex-shrink: 0;
+}

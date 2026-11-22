@@ -4,7 +4,7 @@ import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } fr
 import { readableAccent } from "./accent";
 import { spirographPath, themeForHour, type AdTheme } from "./ad-theme";
 import "./creative.css";
-import { priceDigits, splitOfferHeadline, withoutBrandPrefix } from "./offer-copy";
+import { copyFit, priceDigits, splitOfferHeadline, withoutBrandPrefix } from "./offer-copy";
 import { useDwellStage, useViewingDistance, type AttentionSample } from "./stages";
 
 /** Reveal the actual mounted video only after it can play; overlays stay ready. */
@@ -113,7 +113,9 @@ export function CreativeView({
                         style={{ animation: "stage-in var(--duration-crossfade) ease-out both" }}
                     >
                         {stage.name === "teaser" && (
-                            <p className="creative-hook">{stage.copy_text}</p>
+                            <p className="creative-hook" data-fit={copyFit(stage.copy_text)}>
+                                {stage.copy_text}
+                            </p>
                         )}
                         {stage.name === "offer" && (
                             <>
@@ -216,9 +218,12 @@ function Baseline({
 function LegacyStory({ spec }: { spec: CreativeSpec }) {
     const [lead, ...rest] = spec.slots;
     if (lead === undefined) return null;
+    const hook = withoutBrandPrefix(lead.copy_text, lead.brand_name);
     return (
         <div className="creative-story">
-            <p className="creative-hook">{withoutBrandPrefix(lead.copy_text, lead.brand_name)}</p>
+            <p className="creative-hook" data-fit={copyFit(hook)}>
+                {hook}
+            </p>
             {rest.map((slot) => (
                 <p key={slot.brand_id} className="creative-offer-line">
                     {withoutBrandPrefix(slot.copy_text, slot.brand_name)}
@@ -259,7 +264,9 @@ function OfferPrice({ spec, hero = false }: { spec: CreativeSpec; hero?: boolean
 function CloseCall({ spec, copy }: { spec: CreativeSpec; copy: string }) {
     return (
         <div className="creative-close">
-            <p className="creative-close-line">{copy}</p>
+            <p className="creative-close-line" data-fit={copyFit(copy)}>
+                {copy}
+            </p>
             <OfferPrice spec={spec} />
             {spec.qr_url === null ? (
                 <span className="creative-close-note">El QR se emite al activar la campaña.</span>

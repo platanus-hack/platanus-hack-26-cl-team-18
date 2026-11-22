@@ -33,3 +33,19 @@ export function withoutBrandPrefix(copy: string, brand: string): string {
     const rest = copy.startsWith(prefix) ? copy.slice(prefix.length).trim() : copy;
     return rest.length > 0 ? rest : copy;
 }
+
+/** How much a display line must shrink to stay on a 16:9 canvas above the logo lockup. */
+export type CopyFit = "regular" | "long" | "longest";
+
+/**
+ * Display lines (hook, close) are set huge for 2–4 m. The copy guard caps them by words,
+ * not by glyph width, and kit lines or a warm upgrade can run long: at the regular size
+ * ~60 characters already fill the column, and more pushed the brand logos off the TV
+ * (seen at 1920×1080 in headless Chromium).
+ */
+export function copyFit(copy: string): CopyFit {
+    const length = copy.trim().length;
+    if (length <= 56) return "regular";
+    if (length <= 90) return "long";
+    return "longest";
+}
