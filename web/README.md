@@ -107,9 +107,19 @@ semantic roles → Tailwind utilities (`bg-surface`, `text-muted`, `text-kpi`,
   or z-index values. If you need a new value, add a token. Viewport-relative
   layout sizes (`h-[14vh]`) are the only exception.
 - There are exactly two elevations: `shadow-resting` and `shadow-overlay`.
-- **Reuse Relvo's design system.** Tokens and primitives are ported from
-  `relvo/frontend` (Puchworks palette, `--state-*` families, Instrument Sans +
-  Geist Mono). Add a variant to a primitive before styling a one-off.
+- **Colors come from the ADverse design system**
+  (https://claude.ai/artifact/EeZ77bPntDUWb7c8sEteng): warm Tinta/Crema
+  neutrals, and Coral (`bg-primary`, `bg-moment`) for the one live or primary
+  thing per view. Selection and info are Marea, never coral; the two brands of
+  a bundle are `slot-a` (Marea) and `slot-b` (Ámbar). Use the ADverse
+  `--palette-*` names in new code; the old Relvo names (`--palette-verde`,
+  `--palette-naranjo`, ...) are aliases kept for existing code.
+- **Primitives are ported from Relvo's design system** (`relvo/frontend`:
+  `--state-*` families, Instrument Sans + Geist Mono). Add a variant to a
+  primitive before styling a one-off.
+- **Logo files** live in `public/brand/`: `adverse-mark-on-dark.svg` on dark
+  grounds, `adverse-mark-small-*` below 24 px (favicon). Never redraw or
+  recolor the mark.
 - **Never show status by color alone.** `Badge` always carries a label.
 - **Copy follows Relvo's `docs/ui-wording.md`:** Spanish (tú), sentence case,
   verb-first buttons of 1–3 words, no slogans, no filler intros, no raw enum

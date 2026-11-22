@@ -43,10 +43,18 @@ export function AppShell({
                 <div className="mx-auto flex h-14 max-w-7xl items-center gap-6 px-4 sm:px-6">
                     <a
                         href="/"
+                        aria-label="ADverse"
                         className="flex shrink-0 items-center gap-2 text-body font-semibold tracking-tight"
                     >
-                        <span aria-hidden className="size-2 rounded-full bg-primary" />
-                        advisor
+                        <img
+                            src="/brand/adverse-mark-on-dark.svg"
+                            alt=""
+                            aria-hidden
+                            className="h-5 w-auto"
+                        />
+                        <span aria-hidden>
+                            ADverse<span className="text-moment">.</span>
+                        </span>
                     </a>
                     <nav
                         aria-label="Principal"

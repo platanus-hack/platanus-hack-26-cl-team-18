@@ -38,8 +38,12 @@
 }
 
 /*
- * Design tokens: Relvo's brand in its dark expression (Puchworks Round 3
- * palette on the brand's night canvas, as in the brand deck's dark mockups).
+ * Design tokens: the ADverse design system, dark theme (the TV and the console).
+ * Source of truth: https://claude.ai/artifact/EeZ77bPntDUWb7c8sEteng
+ * Warm Tinta/Crema neutrals build the structure; Coral is the moment (the logo
+ * dot, the LIVE pulse, the attention meter, the one primary action) and appears
+ * once per view. Selection is Marea, never coral. Every text pair here holds
+ * 4.5:1 and every control edge or focus ring 3:1 on the surfaces it sits on.
  * The scale is closed: every color, radius, shadow, duration and z-index comes
  * from a token here. If a need has no token, add one; never an inline value
  * (`text-[13px]`, `#hex`).
@@ -47,83 +51,112 @@
  * Three layers: raw palette -> semantic roles (--ui-*, --state-*) ->
  * Tailwind utilities generated from @theme (bg-surface, text-muted, ...).
  * `ink` stays the brand black (video frames, labels on bright chips); `fg` is
- * the text color. The one primary action is fluor on black (`bg-primary`).
+ * the text color. The one primary action is Tinta on Coral (`bg-primary`).
  * The player (/screen) keeps its own creative look in creative.css.
  */
 
 :root {
     color-scheme: dark;
-    /* Puchworks Round 3 */
-    --palette-negro: #13131e;
-    --palette-noche-profunda: #0c0c13;
+    /* ADverse palette: core */
+    --palette-tinta: #161412;
+    --palette-crema: #ede8e0;
+    --palette-coral: #f4845f;
+    /* neutrals */
+    --palette-carbon: #0e0d0c;
+    --palette-grafito: #1e1b19;
+    --palette-humo: #282421;
+    --palette-ceniza: #7a7268;
+    --palette-piedra: #a39b90;
     --palette-blanco: #ffffff;
-    --palette-gris: #e8e8e8;
-    --palette-gris-oscuro: #ababb7;
-    --palette-naranjo: #ff9566;
-    --palette-morado: #633bf2;
-    --palette-morado-claro: #a48cff;
-    --palette-verde: #72ddaa;
-    --palette-menta: #dff4eb;
-    --palette-lila: #e3c0f2;
-    --palette-salmon: #f4b08e;
-    --palette-verde-oscuro: #186666;
-    --palette-noche: #3f28b2;
-    --palette-mezcla: #aa5639;
-    --palette-fluor: #d0ff0b;
+    /* coral family */
+    --palette-arcilla: #d95a30;
+    --palette-ladrillo: #ae421c;
+    --palette-durazno: #f7a283;
+    /* accents: selection/slot A, warning/slot B, success, danger, chart-only */
+    --palette-marea: #5ab4c2;
+    --palette-ambar: #f0b44c;
+    --palette-salvia: #7fc79e;
+    --palette-granate: #ff6f8a;
+    --palette-lavanda: #a99cf0;
+    --palette-rosa: #e58fb0;
+
+    /*
+     * Legacy Relvo names, kept as aliases so existing feature code keeps working.
+     * New code uses the ADverse names above.
+     */
+    --palette-negro: var(--palette-tinta);
+    --palette-noche-profunda: var(--palette-carbon);
+    --palette-gris: var(--palette-crema);
+    --palette-gris-oscuro: var(--palette-piedra);
+    --palette-naranjo: var(--palette-coral);
+    --palette-morado: var(--palette-marea);
+    --palette-morado-claro: var(--palette-marea);
+    --palette-verde: var(--palette-salvia);
+    --palette-menta: #ebf6ef;
+    --palette-lila: var(--palette-lavanda);
+    --palette-salmon: var(--palette-ambar);
+    --palette-verde-oscuro: #2b7049;
+    --palette-noche: #5b48c7;
+    --palette-mezcla: var(--palette-ladrillo);
     /* The player's dark creative theme (creative.css) reads these; keep them. */
-    --palette-ink-950: var(--palette-negro);
-    --palette-ink-300: #c9c9d2;
+    --palette-ink-950: var(--palette-tinta);
+    --palette-ink-300: #cfc8be;
     --palette-ink-50: var(--palette-blanco);
-    --palette-mint: var(--palette-verde);
+    --palette-mint: var(--palette-salvia);
 
-    /* Semantic roles (relvo --ui-*) */
-    --ui-selected: var(--palette-morado-claro);
-    --ui-selected-soft: color-mix(in srgb, var(--palette-morado) 22%, var(--palette-negro));
-    --ui-selected-text: var(--palette-lila);
-    --ui-neutral-text: #8c8c9a;
+    /* Semantic roles (--ui-*): selection is Marea, so "chosen" never looks like "live" */
+    --ui-selected: var(--palette-marea);
+    --ui-selected-soft: #202a2b;
+    --ui-selected-text: var(--palette-marea);
+    --ui-neutral-text: #8f877c;
 
-    /* Status families: edge, fill, ink (relvo --state-*), tuned for a dark canvas */
-    --state-success-edge: color-mix(in srgb, var(--palette-verde) 45%, var(--palette-negro));
-    --state-success-fill: color-mix(in srgb, var(--palette-verde) 12%, var(--palette-negro));
-    --state-success-ink: var(--palette-verde);
-    --state-warning-edge: color-mix(in srgb, var(--palette-salmon) 45%, var(--palette-negro));
-    --state-warning-fill: color-mix(in srgb, var(--palette-salmon) 12%, var(--palette-negro));
-    --state-warning-ink: var(--palette-salmon);
-    --state-danger-edge: color-mix(in srgb, #ff6b5e 50%, var(--palette-negro));
-    --state-danger-fill: color-mix(in srgb, #ff6b5e 13%, var(--palette-negro));
-    --state-danger-ink: #ff8a7f;
-    --state-info-edge: color-mix(in srgb, var(--palette-morado-claro) 45%, var(--palette-negro));
-    --state-info-fill: color-mix(in srgb, var(--palette-morado) 18%, var(--palette-negro));
-    --state-info-ink: var(--palette-morado-claro);
-    --state-neutral-edge: #34344a;
-    --state-neutral-fill: #1d1d2a;
-    --state-neutral-ink: #b4b4c2;
+    /* Status families: edge, fill, ink (--state-*). Each status also carries a word or icon. */
+    --state-success-edge: color-mix(in srgb, var(--palette-salvia) 45%, var(--palette-tinta));
+    --state-success-fill: #252d26;
+    --state-success-ink: var(--palette-salvia);
+    --state-warning-edge: color-mix(in srgb, var(--palette-ambar) 45%, var(--palette-tinta));
+    --state-warning-fill: #352a1a;
+    --state-warning-ink: var(--palette-ambar);
+    /* Danger is Granate, pushed toward pink so an error never reads as the brand's coral. */
+    --state-danger-edge: color-mix(in srgb, var(--palette-granate) 50%, var(--palette-tinta));
+    --state-danger-fill: #372123;
+    --state-danger-ink: var(--palette-granate);
+    --state-info-edge: color-mix(in srgb, var(--palette-marea) 45%, var(--palette-tinta));
+    --state-info-fill: #202a2b;
+    --state-info-ink: var(--palette-marea);
+    --state-neutral-edge: #3a3530;
+    --state-neutral-fill: #221f1c;
+    --state-neutral-ink: #b5aca0;
 
-    --control-edge: #3a3a50;
+    /* Control edges hold 3:1 on surface and surface-raised (WCAG 1.4.11). */
+    --control-edge: var(--palette-ceniza);
     --target-min: 1.5rem;
 }
 
 @theme {
-    --color-canvas: var(--palette-noche-profunda);
-    --color-surface: var(--palette-negro);
-    --color-surface-raised: #181826;
-    --color-surface-sunken: #0f0f18;
-    --color-surface-hover: #1c1c2b;
-    --color-surface-pressed: #222233;
-    --color-border: #262636;
-    --color-border-subtle: #1f1f2e;
-    --color-border-strong: #2c2c3f;
+    --color-canvas: var(--palette-carbon);
+    --color-surface: var(--palette-tinta);
+    --color-surface-raised: var(--palette-grafito);
+    --color-surface-sunken: #110f0e;
+    --color-surface-hover: #221f1c;
+    --color-surface-pressed: var(--palette-humo);
+    --color-border: #2e2a26;
+    --color-border-subtle: #25211e;
+    --color-border-strong: #3a3530;
     --color-control-edge: var(--control-edge);
-    --color-fg: #ededf2;
-    --color-ink: var(--palette-negro);
-    --color-muted: #9a9aab;
+    --color-fg: var(--palette-crema);
+    --color-ink: var(--palette-tinta);
+    --color-muted: var(--palette-piedra);
     --color-subtle: var(--ui-neutral-text);
-    --color-ring: var(--palette-fluor);
+    --color-ring: var(--palette-coral);
 
-    --color-primary: var(--palette-fluor);
-    --color-primary-hover: color-mix(in srgb, var(--palette-fluor) 86%, white);
-    --color-on-primary: var(--palette-negro);
-    --color-accent: var(--palette-morado-claro);
+    --color-primary: var(--palette-coral);
+    --color-primary-hover: var(--palette-durazno);
+    --color-on-primary: var(--palette-tinta);
+    --color-moment: var(--palette-coral);
+    --color-slot-a: var(--palette-marea);
+    --color-slot-b: var(--palette-ambar);
+    --color-accent: var(--palette-marea);
     --color-accent-soft: var(--ui-selected-soft);
     --color-rule: var(--color-border);
     --color-success: var(--state-success-ink);
@@ -228,7 +261,7 @@ input[type="range"] {
     accent-color: var(--color-primary);
 }
 ::selection {
-    background: color-mix(in srgb, var(--palette-morado) 55%, transparent);
+    background: color-mix(in srgb, var(--palette-marea) 45%, transparent);
     color: var(--color-fg);
 }
 

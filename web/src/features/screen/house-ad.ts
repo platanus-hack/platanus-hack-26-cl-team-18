@@ -7,7 +7,8 @@ import type { Playable } from "./player-machine";
 const HOUSE_LOGO =
     "data:image/svg+xml;utf8," +
     encodeURIComponent(
-        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 80"><rect width="240" height="80" rx="16" fill="#13131e"/><circle cx="50" cy="40" r="7" fill="#d0ff0b"/><text x="132" y="51" font-family="Instrument Sans,system-ui,sans-serif" font-size="32" font-weight="600" fill="#ededf2" text-anchor="middle">advisor</text></svg>`,
+        // The ADverse mark alone (public/brand/adverse-mark-on-dark.svg); the player sets brand_name beside it.
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-500 -100 1000 1000"><path d="M-500 900L-97.13 174.83A200 200 0 0 0 -43.39 195.24L-200 900Z" fill="#ede8e0"/><path d="M500 900L97.13 174.83A200 200 0 0 1 43.39 195.24L200 900Z" fill="#ede8e0"/><circle r="100" fill="#f4845f"/></svg>`,
     );
 
 export const HOUSE_AD: Playable = {
@@ -19,10 +20,10 @@ export const HOUSE_AD: Playable = {
         slots: [
             {
                 brand_id: "house",
-                brand_name: "advisor",
+                brand_name: "ADverse",
                 logo_url: HOUSE_LOGO,
                 copy_text: "Acércate. Hay una oferta para tu grupo.",
-                accent_color: "#d0ff0b",
+                accent_color: "#f4845f",
                 hero_image_url: null,
             },
         ],

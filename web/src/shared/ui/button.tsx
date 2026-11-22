@@ -8,7 +8,7 @@ import { Spinner } from "./spinner";
  * Relvo's button (shared/ui/button.base.tsx): one shape, Instrument Sans 500,
  * sentence case.
  *
- * - `primary`: fluor fill, black text. The one main action of a page.
+ * - `primary`: coral fill, Tinta text. The one main action of a page.
  * - `outline` (default): 1px control edge on the surface. Everything else.
  * - `ghost`: flat, hover fill only. `destructive`: outline in danger ink.
  * - `link`: the selection hue, underline on hover.

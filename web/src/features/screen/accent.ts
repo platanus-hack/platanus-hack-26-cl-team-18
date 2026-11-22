@@ -1,5 +1,5 @@
 /** The ad canvas (--palette-ink-950); accents are judged against it. */
-const CANVAS = "#13131e";
+const CANVAS = "#161412";
 /** The price is large but carries the sale: hold it to body-text contrast. */
 const MIN_CONTRAST = 4.5;
 
