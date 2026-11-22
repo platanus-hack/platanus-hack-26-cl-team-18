@@ -16,6 +16,19 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 _LOOPBACK_HOSTS = {"localhost", "0.0.0.0", "::"}
 # app/api/demo_access.py and device_auth.py refuse shorter secrets in prod.
 _PROD_MIN_SECRET_LENGTH = 24
+# What a fresh `terraform apply` stores in every secret (terraform/modules/render-app/
+# main.tf `secret_placeholder`) until someone sets the real value in the dashboard.
+SECRET_PLACEHOLDER = "set-in-render-dashboard"
+_SECRET_FIELDS = (
+    "database_url",
+    "anthropic_api_key",
+    "demo_key",
+    "agent_token",
+    "screen_token",
+    "console_token",
+    "elevenlabs_api_key",
+    "fal_key",
+)
 
 
 def _is_loopback(host: str) -> bool:
@@ -86,6 +99,16 @@ class AppSettings(BaseSettings):
     # Demo only: the console's camera panel shows a face-blurred, downscaled camera
     # view under the boxes (in memory, never stored). Always off in prod.
     demo_camera_preview: bool = True
+
+    @field_validator(*_SECRET_FIELDS)
+    @classmethod
+    def _placeholder_is_unset(cls, value: SecretStr | None) -> SecretStr | None:
+        # The Render placeholder is not a key: treat it (and blank) as unset, so a
+        # fresh apply never reads as a configured provider or token.
+        if value is None:
+            return None
+        secret = value.get_secret_value().strip()
+        return None if not secret or secret == SECRET_PLACEHOLDER else value
 
     @field_validator("log_level")
     @classmethod
