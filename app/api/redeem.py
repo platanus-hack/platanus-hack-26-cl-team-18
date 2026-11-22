@@ -18,7 +18,11 @@ from pydantic import BaseModel, Field
 
 from app.bootstrap.container import Container
 from app.bootstrap.demo import VENUE_TZ, DemoControls
-from app.modules.delivery.domain.redemption import ExpiredRedemptionCode, UnknownRedemptionCode
+from app.modules.delivery.domain.redemption import (
+    ExpiredRedemptionCode,
+    RedemptionLimitReached,
+    UnknownRedemptionCode,
+)
 
 router = APIRouter(tags=["redeem"])
 _CODE = re.compile(r"^[A-Za-z0-9]{4,12}$")
@@ -87,6 +91,8 @@ async def redeem(
         raise HTTPException(status_code=404, detail=exc.msg) from exc
     except ExpiredRedemptionCode as exc:
         raise HTTPException(status_code=410, detail=exc.msg) from exc
+    except RedemptionLimitReached as exc:
+        raise HTTPException(status_code=409, detail=exc.msg) from exc
     return {"redeemed": True, "new": created, "brands": message.brands, "code": message.code}
 
 
@@ -136,6 +142,7 @@ button[disabled]{opacity:.55}
       body:JSON.stringify({nonce:nonce})}).then(function(r){
         if(r.status===410){say("Esta oferta expiró.",true);return}
         if(r.status===404){say("Esta oferta no existe.",true);return}
+        if(r.status===409){say("Esta oferta ya se canjeó en todos los teléfonos que permite.",true);return}
         if(!r.ok){say("No se pudo canjear. Muéstralo en caja.",true);go.disabled=false;return}
         return r.json().then(function(body){go.hidden=true;say(body.new===false
           ?"Ya canjeaste esta oferta en este teléfono. Muéstrala en caja."

@@ -10,11 +10,13 @@ from typing import Protocol
 from app.modules.campaigns.domain.book import CampaignId
 from app.modules.common.application.id_generator import IdGenerator
 from app.modules.delivery.domain.redemption import (
+    MAX_REDEMPTIONS_PER_CODE,
     REDEMPTION_TTL,
     BasketOffer,
     ExpiredRedemptionCode,
     Redemption,
     RedemptionId,
+    RedemptionLimitReached,
     UnknownRedemptionCode,
     code_for,
     nonce_fingerprint,
@@ -30,13 +32,29 @@ class RedemptionLedger(Protocol):
 
 
 class RedemptionDesk:
-    def __init__(self, *, ids: IdGenerator, ledger: RedemptionLedger) -> None:
+    """Issues codes and redeems them: idempotent per (code, device nonce), and at most
+    `max_per_code` distinct devices per code (a randomized nonce is not a new sale).
+
+    Everything is bounded by the offers remembered: when an offer is forgotten, so are
+    its redemptions (its code is long expired by then, so nothing new can be sold).
+    """
+
+    def __init__(
+        self,
+        *,
+        ids: IdGenerator,
+        ledger: RedemptionLedger,
+        max_per_code: int = MAX_REDEMPTIONS_PER_CODE,
+    ) -> None:
         self._ids = ids
         self._ledger = ledger
+        self._max_per_code = max_per_code
         self._lock = Lock()
         self._offers: dict[str, BasketOffer] = {}
         self._redeemed: dict[tuple[str, str], Redemption] = {}
         self._pending: dict[tuple[str, str], Redemption] = {}
+        # Per code, the nonce hashes redeemed (or pending) for it: the per-code cap.
+        self._devices: dict[str, set[str]] = {}
 
     def issue(
         self,
@@ -63,8 +81,14 @@ class RedemptionDesk:
         with self._lock:
             self._offers[offer.code] = offer
             while len(self._offers) > MAX_OFFERS_REMEMBERED:
-                self._offers.pop(next(iter(self._offers)))
+                self._forget(next(iter(self._offers)))
         return offer
+
+    def _forget(self, code: str) -> None:
+        self._offers.pop(code, None)
+        for nonce_hash in self._devices.pop(code, ()):
+            self._redeemed.pop((code, nonce_hash), None)
+            self._pending.pop((code, nonce_hash), None)
 
     def offer(self, code: str) -> BasketOffer | None:
         with self._lock:
@@ -83,6 +107,10 @@ class RedemptionDesk:
                     raise UnknownRedemptionCode()
                 if not offer.is_open(at):
                     raise ExpiredRedemptionCode()
+                devices = self._devices.setdefault(offer.code, set())
+                if len(devices) >= self._max_per_code:
+                    raise RedemptionLimitReached()
+                devices.add(key[1])
                 redemption = Redemption(
                     redemption_id=RedemptionId.create(self._ids.new_uuid7()),
                     code=offer.code,

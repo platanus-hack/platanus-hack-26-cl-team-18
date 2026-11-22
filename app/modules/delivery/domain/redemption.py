@@ -21,6 +21,10 @@ from app.modules.common.domain.primitives.typed_id import TypedId
 
 REDEMPTION_TTL = timedelta(minutes=10)
 CODE_LENGTH = 8
+# One basket offer is addressed to the group in front of the screen. The device nonce
+# is client-chosen, so without a cap one phone could forge sales by randomizing it.
+# No group the demo addresses is larger than this ("Trío", a queue of a few people).
+MAX_REDEMPTIONS_PER_CODE = 6
 
 
 class RedemptionId(TypedId):
@@ -35,6 +39,14 @@ class UnknownRedemptionCode(DomainError):
 class ExpiredRedemptionCode(DomainError):
     def __init__(self, **_: Any) -> None:
         super().__init__(code="delivery.expired_code", msg="This offer has expired.")
+
+
+class RedemptionLimitReached(DomainError):
+    def __init__(self, **_: Any) -> None:
+        super().__init__(
+            code="delivery.redemption_limit",
+            msg="This offer was already redeemed by as many phones as it allows.",
+        )
 
 
 def code_for(seed: UUID) -> str:

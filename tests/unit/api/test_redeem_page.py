@@ -84,3 +84,20 @@ def test_an_already_redeemed_offer_says_ya_canjeado_on_the_phone(client: TestCli
     page = client.get("/r/ABCDEFGH").text
     # The page reads `new` from the redeem response: a repeat scan is not a new sale.
     assert "r.json()" in page and "Ya canjeaste esta oferta" in page
+
+
+def test_a_code_redeemed_by_too_many_phones_answers_409(tmp_path: Path) -> None:
+    from app.modules.delivery.domain.redemption import RedemptionLimitReached
+
+    settings = AppSettings(app_env="test", demo_simulator=True, media_dir=tmp_path)
+    container: Container = build_container(settings, clock=CLOCK)
+    assert container.demo is not None
+
+    def full(code: str, nonce: str) -> object:
+        raise RedemptionLimitReached()
+
+    container.demo = replace(container.demo, redeem=full)  # type: ignore[arg-type]
+    with TestClient(create_app(container=container)) as test_client:
+        answer = test_client.post("/r/ABCDEFGH/redeem", json={"nonce": "anonymous-phone"})
+    assert answer.status_code == 409
+    assert "redeemed" in answer.json()["detail"]

@@ -9,9 +9,12 @@ import pytest
 
 from app.modules.campaigns.domain.book import CampaignId
 from app.modules.common.application.id_generator import IdGenerator
+from app.modules.delivery.application import redemptions as redemptions_module
 from app.modules.delivery.application.redemptions import RedemptionDesk
 from app.modules.delivery.domain.redemption import (
+    MAX_REDEMPTIONS_PER_CODE,
     ExpiredRedemptionCode,
+    RedemptionLimitReached,
     UnknownRedemptionCode,
     code_for,
 )
@@ -79,3 +82,55 @@ def test_the_qr_is_a_self_contained_svg_of_the_url() -> None:
     assert url.startswith("data:image/svg+xml;base64,")
     svg = base64.b64decode(url.split(",", 1)[1]).decode()
     assert svg.startswith("<?xml") and "<svg" in svg and "#fff" in svg.lower()
+
+
+def test_randomized_nonces_cannot_forge_unlimited_sales_for_one_code() -> None:
+    redemptions, ledger, code = desk()
+    for n in range(MAX_REDEMPTIONS_PER_CODE):
+        _, created = redemptions.redeem(code, f"phone-{n:04d}", at=T0)
+        assert created
+    with pytest.raises(RedemptionLimitReached):
+        redemptions.redeem(code, "forged-nonce-9999", at=T0)
+    assert len(ledger.redemptions()) == MAX_REDEMPTIONS_PER_CODE
+    # A phone that already redeemed still gets its idempotent answer at the cap.
+    again, created = redemptions.redeem(code, "phone-0000", at=T0)
+    assert not created and again in ledger.redemptions()
+
+
+def test_the_cap_is_per_code_not_global() -> None:
+    redemptions, _, code = desk()
+    other = redemptions.issue(
+        auction_id="a2",
+        creative_id="c2",
+        screen_id="demo-01",
+        campaign_ids=CAMPAIGNS,
+        brand_names=("Voltio",),
+        offer_text=None,
+        at=T0,
+    )
+    for n in range(MAX_REDEMPTIONS_PER_CODE):
+        redemptions.redeem(code, f"phone-{n:04d}", at=T0)
+    _, created = redemptions.redeem(other.code, "phone-0000", at=T0)
+    assert created
+
+
+def test_forgotten_offers_take_their_redemptions_with_them(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(redemptions_module, "MAX_OFFERS_REMEMBERED", 2)
+    redemptions, _, code = desk()
+    redemptions.redeem(code, "device-aaaa", at=T0)
+    for n in range(2):
+        redemptions.issue(
+            auction_id=f"a{n}",
+            creative_id=f"c{n}",
+            screen_id="demo-01",
+            campaign_ids=CAMPAIGNS,
+            brand_names=("Voltio",),
+            offer_text=None,
+            at=T0,
+        )
+    assert redemptions.offer(code) is None
+    assert not redemptions._redeemed and not redemptions._devices.get(code)
+    with pytest.raises(UnknownRedemptionCode):  # never a new sale for a forgotten code
+        redemptions.redeem(code, "device-bbbb", at=T0)
