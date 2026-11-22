@@ -837,7 +837,7 @@ export function TagsPanel({ view }: { view: ScreenView }) {
                     {moment.held_products.map((product) => (
                         <span
                             key={`${product.brand_ref ?? ""}:${product.category}`}
-                            className="rounded-full border border-(--palette-ambar) px-2.5 py-0.5 text-warning"
+                            className="rounded-control border border-(--palette-ambar) px-2.5 py-1 leading-snug text-warning"
                         >
                             En mano:{" "}
                             {(product.brand_ref && DEMO_BRANDS[product.brand_ref]) ??
@@ -846,7 +846,7 @@ export function TagsPanel({ view }: { view: ScreenView }) {
                         </span>
                     ))}
                     {moment.minor_likely.value && (
-                        <span className="rounded-full border border-border-strong px-2.5 py-0.5">
+                        <span className="rounded-control border border-border-strong px-2.5 py-1 leading-snug">
                             Posible menor: categorías restringidas bloqueadas
                         </span>
                     )}
